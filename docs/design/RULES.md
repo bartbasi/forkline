@@ -2,11 +2,13 @@
 
 Approved by Bart at hard stop A, 2026-10-23. Owner: game designer.
 
+Phase 4 additions, 2026-10-23. No number changed. Added: the Puff's card line and the word "pop" (6.6), tower plurals (5.9), and the answers to the contract's open points: pausing on a size change (4.7), leaving and coming back (4.10), early calls in runs (4.9, 14.4), where released creatures appear (6.2, 6.3), Gateless Night (14.5) and Iron Gate (7.6, 14.6).
+
 Names follow docs/art/NAMES.md as the game designer reviewed it on 2026-10-23. Bart still has to see the final name list. The tables in 5.1, 5.3 to 5.8, 6.1, 6.3 and 12.1 give each tower, tier 3 path, creature, boss and region its id from that list, so the data files have one source. In each tower's tier table, the first tier 3 row is spec 0 and the second is spec 1.
 
 This file holds every game rule and number for version 1. The sim engineer, level designer, roguelite engineer, balance analyst and UI engineer build from it. If something here is unclear or seems to conflict with docs/ARCHITECTURE.md, ask the DM. Do not guess.
 
-The numbers are starting values. The balance bots tune them, and every change comes back into this file through the game designer. Section 17 answers the assumptions in the first draft of docs/ARCHITECTURE.md. Section 19 is written for Bart. It holds no rules, and nobody builds from it.
+The numbers are starting values. The balance bots tune them, and every change comes back into this file through the game designer. data/stats/ holds this file's tower, creature and core rule numbers, with the names, plurals and card lines, as data in the contract's units (milliseconds, and hundredths of a tile). This file and those files change together, in the same step. Section 17 answers the assumptions in the first draft of docs/ARCHITECTURE.md. Section 19 is written for Bart. It holds no rules, and nobody builds from it.
 
 ## Contents
 
@@ -44,7 +46,7 @@ These come from brief section 2. Each rule below serves at least one of them.
 | Short sessions | Levels take 5 to 10 minutes (12.5). Runs take 15 to 20 minutes (14.1). Pause at any moment (4.7) |
 | Path control without fiddly mazes | A few gates on hand-built forks (7) |
 | Roguelite runs drive replay | Short seeded runs with card drafts (14) and a daily run (15) |
-| Cozy and bright for everyone | Gentle names and one-line cards (5.9, 6.6). Creatures puff into sparkles. No blood |
+| Cozy and bright for everyone | Gentle names and one-line cards (5.9, 6.6). Defeated creatures pop into sparkles. No blood |
 
 ## 2. Words, units and rounding
 
@@ -206,6 +208,8 @@ All prices are multiples of 10, so 70% is always a whole number.
 - Calling the next wave works while paused. The wave starts on the same tick, so nothing moves until play resumes.
 - Gates stay locked if the game is paused during a wave.
 - Opening the Pause menu also pauses.
+- Leaving the app during a wave pauses it (4.10).
+- Any change of the window's size during a wave pauses the game: folding or unfolding the phone, split screen, or a pop-up window. Bart chose this for folding at hard stop A, and every other size change follows the same rule. The player resumes when ready. In a build phase nothing moves, so a size change there only changes the layout.
 
 ### 4.8 Speeds
 
@@ -221,6 +225,13 @@ All prices are multiples of 10, so 70% is always a whole number.
 - The call button shows the bonus and updates live. It shrinks as those creatures fall.
 - The called wave starts at once. Each wave still pays its own clear bonus.
 - Starting a wave from a build phase is not an early call and pays no bonus.
+- In a run, the next wave also cannot be called while a card draft is owed (14.4).
+
+### 4.10 Leaving and coming back
+
+- Leaving the app saves the game at that exact moment, even mid-wave (Bart, hard stop A). Coming back resumes it paused, on the Pause menu.
+- One game can be saved per mode: one campaign level or Twist, one roguelite run and one daily run. One never ends another. The Continue card resumes the most recent one. The saved level's card, the Roguelite button and the Daily button each resume their own.
+- Starting a different campaign level or Twist while one is saved first asks the player. If they confirm, the saved game ends as if it were abandoned from Pause, so nothing is recorded. If they cancel, nothing changes.
 
 ## 5. Towers
 
@@ -359,6 +370,8 @@ These lines appear on the info card the first time a tower is available, and on 
 | Grand Oven | Even faster towers around it. |
 | Spice Kitchen | Faster towers that also hit 2 harder. |
 
+Plurals, for the star 3 line "Build no ..." (10.3): Sling Posts, Pumpkin Catapults, Lullaby Bells, Longbow Lofts, Firework Towers, Bakeries.
+
 ### 5.10 Why no tower is best everywhere
 
 Method. These tables come from a rough model, not from the bots. They show useful damage per second for every 100 gold spent, against a steady stream of one creature type, with wasted damage on kills counted and no support towers. Creature spacing: Pips 0.3 s apart, Flitters 0.4 s, Skitters 0.8 s, Scamps 1.0 s, Bubblers and Menders 1.2 s, Shellbacks 1.5 s, Dusk Moths 2.0 s, Gatecrashers 3.0 s, Puffs in their threes. Boss columns use one huge target. The best value in each column is in bold. The balance bots on real maps have the final word.
@@ -453,6 +466,14 @@ Splits (Puffball):
 - Puffs belong to the Puffball's wave and use its strength. They follow the shortest open route from that spot.
 - A Puffball that reaches the base costs 2 lives and releases nothing.
 
+Releases (Puffs and boss batches):
+
+- A release is a Puffball's 3 Puffs, or one batch of creatures from a boss: Grumblesack's 2 Scamps, the Moon Moth's 3 Flitters or Old Tusk's 4 Dusk Moths (6.3).
+- Every creature in a release appears at the spot where the release began: where the Puffball fell, or where the boss stood when that batch began. The later ones appear at that same spot, even though the boss has moved on.
+- A release that has begun always finishes, even if the boss is defeated or gets through in the meantime.
+- A released walker first finishes the step its releaser was on, then takes the shortest open route from there (7.3). A released flyer flies straight from that spot to the base.
+- Released creatures belong to their releaser's wave and use its strength (6.4).
+
 Heals (Mender):
 
 - Every 2.0 s, starting 2.0 s after it appears, every other creature within 1.5 tiles of the Mender gains 8 health, scaled by strength, up to its max health.
@@ -477,8 +498,9 @@ Exact boss rules:
 - Grumblesack: 6.0 s after it appears, and every 6.0 s after that, 2 Scamps appear at its spot, the second 0.3 s after the first. They walk on from there.
 - Ironshell: the first time its health falls to 75% of its max or below, its speed goes up by 0.1. The same happens at 50% and at 25%. Its speed goes 0.4, 0.5, 0.6, 0.7.
 - Moon Moth: 6.0 s after it appears, and every 6.0 s after that, 3 Flitters appear at its spot, 0.3 s apart. They fly straight to the base from there.
-- Old Tusk: follows the Gatecrasher rules (7.7) but breaks a gate in 2.0 s. The first time its health falls to 50% or below, 4 Dusk Moths appear at its spot, 0.3 s apart, starting on the next tick.
+- Old Tusk: follows the Gatecrasher rules (7.7) but breaks a gate in 2.0 s. The first time its health falls to 50% or below, 4 Dusk Moths appear at its spot, 0.3 s apart, starting on the next tick. This happens even if the same hit defeats it.
 - Every creature a boss releases belongs to the boss's wave and uses its strength.
+- Where released creatures appear, and what happens when a boss falls in the middle of a batch, is in Releases (6.2).
 
 ### 6.4 Strength
 
@@ -493,7 +515,7 @@ Example: a Shellback at strength 150 has 135 health, armor 4, speed 0.7, and pay
 
 ### 6.5 Flyers, gates and anti air
 
-- A flyer appears at its entrance and flies in a straight line to the center of the base at its speed. A creature released by a boss starts from the boss's spot.
+- A flyer appears at its entrance and flies in a straight line to the center of the base at its speed. A flyer released by a boss starts from the spot where its release began (6.2).
 - Flyers ignore roads, gates and gate sockets. They never open or break a gate.
 - Only the Sling Post (every tier) and the Firework Tower (every tier) can hit flyers. The Pumpkin Catapult and Longbow Loft cannot. Bells slow flyers only as a Night Bell.
 - A flyer that reaches the base costs lives like a walker.
@@ -511,6 +533,7 @@ Example: a Shellback at strength 150 has 135 health, armor 4, speed 0.7, and pay
 | Shellback | Its shell blocks 4 damage from every hit. Big hits get through. |
 | Bubbler | Its bubble blocks one whole hit and returns in 2 seconds. Quick hits pop it. |
 | Puffball | Bursts into 3 Puffs when popped. Splash catches them. |
+| Puff | Three come out of every popped Puffball. Splash catches them. |
 | Mender | Heals the creatures near it every 2 seconds. Stop it first. |
 | Gatecrasher | Heads for your gates and breaks one open in 4 seconds. |
 | Dusk Moth | An armored flyer. Small hits barely scratch it. |
@@ -518,6 +541,8 @@ Example: a Shellback at strength 150 has 135 health, armor 4, speed 0.7, and pay
 | Ironshell | Armor 6. It gets faster each time it loses a quarter of its health. |
 | Moon Moth | A flying boss with armor 3. Every 6 seconds, 3 Flitters fly out. |
 | Old Tusk | Armor 4. Breaks gates in 2 seconds. At half health, 4 Dusk Moths fly out. |
+
+- Player-facing text says "pop" for a defeated creature, never "puff", because the Puff is a creature. That covers card lines, hints, messages, and Twist and card text.
 
 ## 7. Gates and routes
 
@@ -564,6 +589,7 @@ Players never need the tie break. The route line (7.5) always shows the result.
 
 - From the moment a wave starts until the next build phase begins, gates cannot be placed, moved or removed, even while paused. Tapping a gate then says "Gates are locked until the wave is over."
 - A gate broken by a Gatecrasher or Old Tusk is open to every walker until the next build phase begins. Then it mends by itself, closed, on the same socket.
+- In runs, the Iron Gate card locks placed gates for good each time a wave starts (14.6), and Gateless Night opens every gate from the start of its wave until the next build phase (14.5).
 
 ### 7.7 The Gatecrasher
 
@@ -1000,6 +1026,8 @@ All core rules (4 to 9) apply in runs: phases, pause, speeds, early calls, selli
 
 - After each of waves 1 to 17 is cleared, the player picks 1 card from 3. The draft opens in the next build phase.
 - If waves were called early, the drafts wait and come one after another, in wave order, at the next build phase. The next wave cannot start until every waiting draft is picked. A draft cannot be skipped.
+- That holds for early calls too. A wave cleared while another wave is still on the map owes its draft at once, and from then on the next wave cannot be called until the build phase, where the waiting drafts are picked first. Tapping the call button meanwhile says "Pick your card after this wave."
+- A draft opens only in a build phase. If wave 18 is called early and wave 17 is cleared after that, no build phase follows, so the draft for wave 17 never opens.
 - Card type weights: tower 30, tower perk 25, extra gate 10, economy 20, risk 15.
 - Drawing a draft: for each of the 3 slots, pick a type by weight among the types that still have an eligible card, then pick a card of that type evenly. No card appears twice in one draft.
 - While the run has fewer than 3 kinds of tower, the first slot is always a tower card, if one is eligible.
@@ -1055,6 +1083,8 @@ Risk (5). Each changes the next wave only.
 | Gateless Night | Your gates stand open. They block nothing and cannot be broken. | 120 gold |
 | Flock | 8 extra Flitters come from entrance A, 0.4 s apart, starting 2.0 s after the wave's last group starts. | 80 gold |
 
+- Gateless Night opens every gate from the moment its wave starts until the next build phase begins. Gates never close during a wave (7.8), so any other wave on the map in that time, including one called early, finds them open too. Gatecrashers and Old Tusk walk through without stopping. In the build phase before that wave, the route lines already show the roads with every gate open. When the next build phase begins, every gate stands closed again on its socket.
+
 ### 14.6 Unlockable cards
 
 - Playing unlocks new cards into the pool. Each one is a sidegrade: it changes how something works and carries a cost, so it adds variety, never raw power. Nothing is bought.
@@ -1071,17 +1101,18 @@ Risk (5). Each changes the next wave only.
 | Spice Rack | Tower perk, Bakery | Also adds 2 damage per hit to the towers it reaches, but its speed boost is 10 points smaller. 25% becomes 15%. Once. | Earn 24 stars |
 | Piggy Bank | Economy | At the start of each build phase, gain 10% of your unspent gold, rounded down, up to 50. Once. | Earn 36 stars |
 | Bargain | Economy | New towers cost 20 more. Upgrades cost 20 less. Once. | Earn 48 stars |
-| Iron Gate | Extra gate | Gain 2 gates, up to 3. From now on a placed gate can never be moved or removed. Once. | Clear any Twist |
+| Iron Gate | Extra gate | Gain 2 gates, up to 3. When a wave starts, placed gates lock for good. Once. | Clear any Twist |
 | Moonlit Wager | Risk | Next wave: creatures have twice the health. Reward: 250 gold. | Earn 60 stars |
 | Crasher Escort | Risk | Next wave: 2 Gatecrashers join from entrance A at the wave's start, 3.0 s apart. Reward: 150 gold. | Win a run after taking 3 or more risk cards in it |
 | Pip Parade | Risk | Next wave: a crowd of 24 Pips joins from entrance A, 0.3 s apart, starting 1.0 s after the wave starts. Reward: 100 gold. | Earn 72 stars |
 
 - Daily runs count as runs for these conditions.
 - Unlock progress is kept in these counters: `best_run_wave` (the highest wave reached in any run; it only goes up), `runs_won`, `runs_won_normal`, `dailies_finished` and `risky_wins` (runs won after taking 3 or more risk cards in them). Stars and Twist clears come from the level records (16).
+- Iron Gate locks nothing at the moment it is taken. In that build phase every gate can still be placed, moved and removed, so a mistaken drop can be fixed. From then on, each time a wave starts, every gate on a socket locks there for the rest of the run and can never be moved or removed again. That includes gates placed before the card was taken. Gates still in the tray stay free until they are placed and a wave starts. A locked gate can still be broken by a Gatecrasher or Old Tusk, and it mends on its socket as usual (7.6).
 
 ### 14.7 Leaving, losing and results
 
-- A run can be left at any time and resumed later from the Continue card. Whether it resumes at the exact moment or at the start of the current wave is the architect's proposal and Bart's decision (brief 3.10).
+- A run can be left at any time and resumed later at the exact moment it was left, from the Continue card or its own mode button (4.10).
 - A run ends when lives reach 0, or when the player abandons it from Pause after a confirm. An abandoned run counts as a loss at its current wave.
 - A run's result is: won or lost, waves cleared, and lives left.
 - Runs carry nothing over except progress toward unlocks (14.6).
@@ -1148,7 +1179,7 @@ The first draft of docs/ARCHITECTURE.md was written before this file and lists 1
 | 14 | Runs from one top, one middle and one bottom segment; waves made at the start; one draft per cleared wave | Agree. Segments are 4, 5 and 4 rows. Waves come from hand-built packs in six bands. The boss wave owes no draft. | 14.2 to 14.4 |
 | 15 | Daily uses the starting pool, counts for its start day, streak counts finished days | Rule chosen instead for the pool: the daily uses every card, unlocked or not. The other two parts: agree. | 15 |
 | 16 | 7 columns by 8 to 13 rows; entrances on the edge | Agree. | 3.1, 3.2 |
-| 17 | One saved session at a time; starting something new asks first | Not a game rule. Bart decides (contract question 3). If one session: an ended run counts as abandoned, and an ended daily counts as finished for the streak. | 14.7, 15 |
+| 17 | One saved session at a time; starting something new asks first | Not a game rule. Bart decides (contract question 3). If one session: an ended run counts as abandoned, and an ended daily counts as finished for the streak. Bart chose one saved game per mode at hard stop A (4.10). | 4.10, 14.7, 15 |
 | 18 | The difficulty choice is not remembered | Agree. Normal is preselected for every level and run. | 11 |
 | 19 | A tower counts as unlocked once a level offering it was played | Agree in effect. Each level offers every tower brought up to it, listed in its file, and runs offer every tower through cards. Nothing extra is saved. | 12.2, 14.3, 14.5 |
 
@@ -1214,7 +1245,7 @@ On the contract's open question 2, map width. Yes, 7 columns by up to 13 rows is
 | 3.9a Relaxed numbers; nothing else changes | 11, 12.3 |
 | 3.9a A Relaxed win earns one star; stars 2 and 3 need Normal | 10.4, 11 |
 | 3.9a The daily is always Normal | 11, 15 |
-| 3.10 Resuming after leaving | 14.7 points to the architect's proposal. Not a design item. |
+| 3.10 Resuming after leaving | 4.10, 14.7. Bart chose the exact moment at hard stop A. |
 | 3.11 Plain classes, fixed timestep, seeded randomness | 5.2, 8.1, 14.4, 15. No randomness in combat. |
 
 ## 19. For Bart at hard stop A
