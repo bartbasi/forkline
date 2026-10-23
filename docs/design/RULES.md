@@ -1,6 +1,8 @@
 # Forkline rules, version 1
 
-Draft for hard stop A, 2026-10-23. Owner: game designer.
+Approved by Bart at hard stop A, 2026-10-23. Owner: game designer.
+
+Names follow docs/art/NAMES.md as the game designer reviewed it on 2026-10-23. Bart still has to see the final name list. The tables in 5.1, 5.3 to 5.8, 6.1, 6.3 and 12.1 give each tower, tier 3 path, creature, boss and region its id from that list, so the data files have one source. In each tower's tier table, the first tier 3 row is spec 0 and the second is spec 1.
 
 This file holds every game rule and number for version 1. The sim engineer, level designer, roguelite engineer, balance analyst and UI engineer build from it. If something here is unclear or seems to conflict with docs/ARCHITECTURE.md, ask the DM. Do not guess.
 
@@ -224,14 +226,14 @@ All prices are multiples of 10, so 70% is always a whole number.
 
 ### 5.1 The six towers
 
-| Tower | Its one job | Hits | The right answer for | Weak against |
-|---|---|---|---|---|
-| Sling Post | Quick small hits on one target | Walkers and flyers | Bubblers, Skitters, early waves, a backup against flyers | Armor (Shellback, Dusk Moth, Ironshell), big crowds |
-| Pumpkin Catapult | Splash on groups | Walkers | Pips, Puffs, packed or drowsy groups | Flyers, Bubblers, fast spread-out walkers, single big targets |
-| Lullaby Bell | Slows walkers in its ring | Walkers (Night Bell: flyers too) | Skitters, Gatecrashers, bosses, making splash hit more | Flyers, builds with no splash. It never defeats anything alone |
-| Longbow Loft | Long range, heavy arrows that ignore armor | Walkers | Shellbacks, Gatecrashers, Menders, armored bosses, covering two roads from one spot | Bubblers, Pips and Puffs (wasted arrows), flyers |
-| Firework Tower | Anti air with splash | Flyers | Flitter flocks, Dusk Moths, the Moon Moth | Every walker. It cannot hit them |
-| Bakery | Makes the towers around it attack faster | Nothing | Tight clusters of spots, late waves, bosses | Spread-out spots, early waves when gold is short, Bells (it cannot boost them) |
+| Tower | Id | Its one job | Hits | The right answer for | Weak against |
+|---|---|---|---|---|---|
+| Sling Post | `sling_post` | Quick small hits on one target | Walkers and flyers | Bubblers, Skitters, early waves, a backup against flyers | Armor (Shellback, Dusk Moth, Ironshell), big crowds |
+| Pumpkin Catapult | `pumpkin_catapult` | Splash on groups | Walkers | Pips, Puffs, packed or drowsy groups | Flyers, Bubblers, fast spread-out walkers, single big targets |
+| Lullaby Bell | `lullaby_bell` | Slows walkers in its ring | Walkers (Night Bell: flyers too) | Skitters, Gatecrashers, bosses, making splash hit more | Flyers, builds with no splash. It never defeats anything alone |
+| Longbow Loft | `longbow_loft` | Long range, heavy arrows that ignore armor | Walkers | Shellbacks, Gatecrashers, Menders, armored bosses, covering two roads from one spot | Bubblers, Pips and Puffs (wasted arrows), flyers |
+| Firework Tower | `firework_tower` | Anti air with splash | Flyers | Flitter flocks, Dusk Moths, the Moon Moth | Every walker. It cannot hit them |
+| Bakery | `bakery` | Makes the towers around it attack faster | Nothing | Tight clusters of spots, late waves, bosses | Spread-out spots, early waves when gold is short, Bells (it cannot boost them) |
 
 ### 5.2 Rules for all towers
 
@@ -245,12 +247,12 @@ All prices are multiples of 10, so 70% is always a whole number.
 
 Quick pebbles at one target. Hits walkers and flyers.
 
-| Tier | Name | Price | Total spent | Damage | Reload (s) | Rate per s | Range | Damage per s |
-|---|---|---|---|---|---|---|---|---|
-| 1 | Sling Post | 100 | 100 | 6 | 0.5 | 2.0 | 2.5 | 12 |
-| 2 | Sling Post | 110 | 210 | 8 | 0.4 | 2.5 | 3.0 | 20 |
-| 3 | Quickshot | 200 | 410 | 8 | 0.2 | 5.0 | 3.0 | 40 |
-| 3 | Stone Sling | 200 | 410 | 20 | 0.5 | 2.0 | 3.0 | 40 |
+| Tier | Name | Id | Price | Total spent | Damage | Reload (s) | Rate per s | Range | Damage per s |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | Sling Post | `sling_post` | 100 | 100 | 6 | 0.5 | 2.0 | 2.5 | 12 |
+| 2 | Sling Post | `sling_post` | 110 | 210 | 8 | 0.4 | 2.5 | 3.0 | 20 |
+| 3 | Quickshot | `quickshot` | 200 | 410 | 8 | 0.2 | 5.0 | 3.0 | 40 |
+| 3 | Stone Sling | `stone_sling` | 200 | 410 | 20 | 0.5 | 2.0 | 3.0 | 40 |
 
 - Quickshot: many small hits. Best against bubbles and crowds of weak creatures. Armor blunts it badly.
 - Stone Sling: fewer, bigger hits that get through armor. Hits armored flyers too.
@@ -259,26 +261,26 @@ Quick pebbles at one target. Hits walkers and flyers.
 
 Lobs pumpkins that splash every walker near the target. Cannot hit flyers.
 
-| Tier | Name | Price | Total spent | Damage | Reload (s) | Rate per s | Range | Splash radius | Extra |
-|---|---|---|---|---|---|---|---|---|---|
-| 1 | Pumpkin Catapult | 120 | 120 | 14 | 2.0 | 0.5 | 3.0 | 0.75 | none |
-| 2 | Pumpkin Catapult | 130 | 250 | 24 | 2.0 | 0.5 | 3.0 | 0.75 | none |
-| 3 | Great Pumpkin | 230 | 480 | 50 | 2.5 | 0.4 | 3.5 | 1.25 | none |
-| 3 | Jam Pot | 230 | 480 | 24 | 1.5 | 0.7 | 3.0 | 1.0 | Every walker it damages is slowed 40% for 3.0 s |
+| Tier | Name | Id | Price | Total spent | Damage | Reload (s) | Rate per s | Range | Splash radius | Extra |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | Pumpkin Catapult | `pumpkin_catapult` | 120 | 120 | 14 | 2.0 | 0.5 | 3.0 | 0.75 | none |
+| 2 | Pumpkin Catapult | `pumpkin_catapult` | 130 | 250 | 24 | 2.0 | 0.5 | 3.0 | 0.75 | none |
+| 3 | Prize Pumpkin | `prize_pumpkin` | 230 | 480 | 50 | 2.5 | 0.4 | 3.5 | 1.25 | none |
+| 3 | Jam Pot | `jam_pot` | 230 | 480 | 24 | 1.5 | 0.7 | 3.0 | 1.0 | Every walker it damages is slowed 40% for 3.0 s |
 
-- Great Pumpkin: raw splash. Better against fast or spread-out groups and armored groups.
+- Prize Pumpkin: raw splash. Better against fast or spread-out groups and armored groups.
 - Jam Pot: control. Its slow makes every other tower in the area better. It fires often enough that every other shot gets past a Bubbler's bubble.
 
 ### 5.5 Lullaby Bell
 
 Makes walkers in its ring drowsy and slow. Deals no damage. Has no reload and no targeting.
 
-| Tier | Name | Price | Total spent | Slow | Range | Affects |
-|---|---|---|---|---|---|---|
-| 1 | Lullaby Bell | 90 | 90 | 35% | 2.0 | Walkers |
-| 2 | Lullaby Bell | 90 | 180 | 45% | 2.5 | Walkers |
-| 3 | Hush Bell | 170 | 350 | 60% | 2.5 | Walkers |
-| 3 | Night Bell | 170 | 350 | 45% | 3.0 | Walkers and flyers |
+| Tier | Name | Id | Price | Total spent | Slow | Range | Affects |
+|---|---|---|---|---|---|---|---|
+| 1 | Lullaby Bell | `lullaby_bell` | 90 | 90 | 35% | 2.0 | Walkers |
+| 2 | Lullaby Bell | `lullaby_bell` | 90 | 180 | 45% | 2.5 | Walkers |
+| 3 | Hush Bell | `hush_bell` | 170 | 350 | 60% | 2.5 | Walkers |
+| 3 | Night Bell | `night_bell` | 170 | 350 | 45% | 3.0 | Walkers and flyers |
 
 - The slow lingers 1.0 s after a creature leaves the ring (8.5).
 - A slowed Gatecrasher also breaks gates slower by the same percent (7.7).
@@ -289,46 +291,46 @@ Makes walkers in its ring drowsy and slow. Deals no damage. Has no reload and no
 
 Long range. Heavy arrows ignore armor. Slow to reload. Cannot hit flyers.
 
-| Tier | Name | Price | Total spent | Damage | Reload (s) | Rate per s | Range | Targets per shot | Damage per s |
-|---|---|---|---|---|---|---|---|---|---|
-| 1 | Longbow Loft | 150 | 150 | 40 | 2.5 | 0.4 | 4.0 | 1 | 16 |
-| 2 | Longbow Loft | 160 | 310 | 70 | 2.5 | 0.4 | 4.5 | 1 | 28 |
-| 3 | Great Bow | 280 | 590 | 180 | 3.0 | 0.3 | 5.0 | 1 | 60 |
-| 3 | Triple Bow | 280 | 590 | 70 | 2.5 | 0.4 | 4.5 | 3 | 28 per target |
+| Tier | Name | Id | Price | Total spent | Damage | Reload (s) | Rate per s | Range | Targets per shot | Damage per s |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | Longbow Loft | `longbow_loft` | 150 | 150 | 40 | 2.5 | 0.4 | 4.0 | 1 | 16 |
+| 2 | Longbow Loft | `longbow_loft` | 160 | 310 | 70 | 2.5 | 0.4 | 4.5 | 1 | 28 |
+| 3 | Giant Bow | `giant_bow` | 280 | 590 | 180 | 3.0 | 0.3 | 5.0 | 1 | 60 |
+| 3 | Triple Bow | `triple_bow` | 280 | 590 | 70 | 2.5 | 0.4 | 4.5 | 3 | 28 per target |
 
 - Every tier ignores armor.
-- Great Bow: one giant arrow. The boss killer.
+- Giant Bow: one giant arrow. The boss killer.
 - Triple Bow: three arrows at three different targets. Best against armored groups.
 
 ### 5.7 Firework Tower
 
 Bursts that hit every flyer near the target. Cannot hit walkers.
 
-| Tier | Name | Price | Total spent | Damage | Reload (s) | Rate per s | Range | Splash radius | Extra |
-|---|---|---|---|---|---|---|---|---|---|
-| 1 | Firework Tower | 110 | 110 | 12 | 1.0 | 1.0 | 3.0 | 0.75 | none |
-| 2 | Firework Tower | 120 | 230 | 20 | 1.0 | 1.0 | 3.5 | 0.75 | none |
-| 3 | Starburst | 210 | 440 | 30 | 1.0 | 1.0 | 3.5 | 1.25 | none |
-| 3 | Skyrocket | 210 | 440 | 90 | 1.5 | 0.7 | 4.0 | none | One target. Ignores armor |
+| Tier | Name | Id | Price | Total spent | Damage | Reload (s) | Rate per s | Range | Splash radius | Extra |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | Firework Tower | `firework_tower` | 110 | 110 | 12 | 1.0 | 1.0 | 3.0 | 0.75 | none |
+| 2 | Firework Tower | `firework_tower` | 120 | 230 | 20 | 1.0 | 1.0 | 3.5 | 0.75 | none |
+| 3 | Star Bloom | `star_bloom` | 210 | 440 | 30 | 1.0 | 1.0 | 3.5 | 1.25 | none |
+| 3 | Skyrocket | `skyrocket` | 210 | 440 | 90 | 1.5 | 0.7 | 4.0 | none | One target. Ignores armor |
 
 - Splash from a Firework Tower hits flyers only.
-- Starburst: huge bursts for big flocks.
+- Star Bloom: huge bursts for big flocks.
 - Skyrocket: one heavy rocket for armored flyers and the Moon Moth.
 
 ### 5.8 Bakery
 
 Bakes treats that make the towers around it attack faster. Does not attack. Has no targeting.
 
-| Tier | Name | Price | Total spent | Boost to towers it reaches | Reach |
-|---|---|---|---|---|---|
-| 1 | Bakery | 130 | 130 | Attack rate +15% | 1.5 |
-| 2 | Bakery | 140 | 270 | Attack rate +25% | 1.5 |
-| 3 | Grand Oven | 240 | 510 | Attack rate +40% | 1.5 |
-| 3 | Spice Kitchen | 240 | 510 | Attack rate +25% and +2 damage per hit | 1.5 |
+| Tier | Name | Id | Price | Total spent | Boost to towers it reaches | Reach |
+|---|---|---|---|---|---|---|
+| 1 | Bakery | `bakery` | 130 | 130 | Attack rate +15% | 1.5 |
+| 2 | Bakery | `bakery` | 140 | 270 | Attack rate +25% | 1.5 |
+| 3 | Grand Oven | `grand_oven` | 240 | 510 | Attack rate +40% | 1.5 |
+| 3 | Spice Kitchen | `spice_kitchen` | 240 | 510 | Attack rate +25% and +2 damage per hit | 1.5 |
 
 - Reach 1.5 covers the eight tiles around the Bakery, diagonals included. It boosts the attacking towers on those tiles.
 - It never boosts Bells, other Bakeries or itself.
-- Grand Oven: the most speed. Best next to big hitters such as Great Bows and Great Pumpkins.
+- Grand Oven: the most speed. Best next to big hitters such as Giant Bows and Prize Pumpkins.
 - Spice Kitchen: the +2 damage counts before armor, so it lets quick small hitters such as Quickshots chew through armor.
 - Boost rules are in 8.6.
 
@@ -346,13 +348,13 @@ These lines appear on the info card the first time a tower is available, and on 
 | Bakery | Towers around it attack faster. Doesn't attack. |
 | Quickshot | Fires twice as fast. |
 | Stone Sling | Big stones that get through armor. |
-| Great Pumpkin | Huge pumpkins, wider splash. |
+| Prize Pumpkin | Huge pumpkins, wider splash. |
 | Jam Pot | Sticky jam slows every walker it splashes. |
 | Hush Bell | Deeper sleep: the strongest slow. |
 | Night Bell | A wider ring that reaches flyers too. |
-| Great Bow | One giant arrow. Bosses beware. |
+| Giant Bow | One giant arrow. Bosses beware. |
 | Triple Bow | Three arrows at three targets. |
-| Starburst | Huge bursts for big flocks. |
+| Star Bloom | Huge bursts for big flocks. |
 | Skyrocket | One heavy rocket that ignores armor. |
 | Grand Oven | Even faster towers around it. |
 | Spice Kitchen | Faster towers that also hit 2 harder. |
@@ -376,11 +378,11 @@ Tier 3 at strength 220:
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | Quickshot | 9.8 | 7.9 | 8.9 | 8.9 | 4.8 | **8.6** | **7.9** | 8.5 | 7.3 | 3.7 | 2.4 | 6.1 | 4.9 |
 | Stone Sling | 8.6 | 6.3 | 8.0 | 8.0 | 7.4 | 6.7 | 6.3 | 8.3 | 8.6 | 7.2 | 6.8 | 8.3 | 7.8 |
-| Great Pumpkin | **11.0** | **15.2** | 2.8 | 0 | 9.9 | 0 | 6.5 | 9.6 | 3.7 | 0 | 3.7 | 0 | 3.8 |
+| Prize Pumpkin | **11.0** | **15.2** | 2.8 | 0 | 9.9 | 0 | 6.5 | 9.6 | 3.7 | 0 | 3.7 | 0 | 3.8 |
 | Jam Pot | 9.2 | 9.0 | 3.1 | 0 | 2.8 | 1.5 | 5.4 | 9.2 | 3.1 | 0 | 2.5 | 0 | 2.8 |
-| Great Bow | 5.0 | 1.5 | 3.7 | 0 | 5.6 | 0 | 1.5 | 8.7 | 9.9 | 0 | **10.2** | 0 | **10.2** |
+| Giant Bow | 5.0 | 1.5 | 3.7 | 0 | 5.6 | 0 | 1.5 | 8.7 | 9.9 | 0 | **10.2** | 0 | **10.2** |
 | Triple Bow | 8.9 | 5.3 | **13.4** | 0 | **13.4** | 0 | 5.3 | **10.4** | **11.9** | 0 | 4.7 | 0 | 4.7 |
-| Starburst | 0 | 0 | 0 | **25.0** | 0 | 0 | 0 | 0 | 0 | 5.5 | 0 | 6.1 | 0 |
+| Star Bloom | 0 | 0 | 0 | **25.0** | 0 | 0 | 0 | 0 | 0 | 5.5 | 0 | 6.1 | 0 |
 | Skyrocket | 0 | 0 | 0 | 10.0 | 0 | 0 | 0 | 0 | 0 | **13.3** | 0 | **13.6** | 0 |
 
 What the tables show:
@@ -388,14 +390,14 @@ What the tables show:
 - Every attacking tower is best against something, and none is best against everything.
 - The Sling Post is the strongest all-rounder at tier 1, and it is the only tower that hurts Bubblers well. It falls to about a third of its value against armor. It is the tower to watch in the bot reports.
 - The Stone Sling tops no column, but it is second best against the Dusk Moth and every armored boss, and it is the only tower that is good against both armored walkers and armored flyers. The Jam Pot's value is its slow, which the tables cannot show (see below).
-- Each tier 3 pair splits cleanly: Quickshot against bubbles and crowds, Stone Sling against armor; Great Pumpkin for damage, Jam Pot for control; Great Bow against bosses, Triple Bow against armored groups; Starburst against flocks, Skyrocket against armored flyers.
+- Each tier 3 pair splits cleanly: Quickshot against bubbles and crowds, Stone Sling against armor; Prize Pumpkin for damage, Jam Pot for control; Giant Bow against bosses, Triple Bow against armored groups; Star Bloom against flocks, Skyrocket against armored flyers.
 
 The support towers, from the same rough model, using a straight road past five spots in a row:
 
 - Bell with splash. Ten Shellbacks at strength 200. Five tier 2 Catapults let 7 through. Four tier 2 Catapults and a tier 2 Bell let 4 through. With a Hush Bell, 3. Drowsy walkers bunch up, so splash hits more of them.
 - Bell without splash. With five tier 2 Sling Posts, 7 Shellbacks got through, and swapping one Sling Post for a Bell did not help. Against 24 Scamps at strength 200, five tier 2 Sling Posts let none through. Four and a Hush Bell let 7 through. A Bell is a poor pick in a build of single-target towers.
 - Bakery. Sixteen Shellbacks at strength 200 past a cluster of four Quickshots. A fifth Quickshot let 9 through. A Grand Oven in the middle let 7 through. A Spice Kitchen let none through.
-- Jam Pot against Great Pumpkin, each at the point where one build starts to leak: against 30 Scamps the Jam Pot build let 0 through and the Great Pumpkin build 9. Against 12 Shellbacks, 1 against 4. Against 16 fast Skitters, 9 against 3. Against 40 Pips, 4 against 3.
+- Jam Pot against Prize Pumpkin, each at the point where one build starts to leak: against 30 Scamps the Jam Pot build let 0 through and the Prize Pumpkin build 9. Against 12 Shellbacks, 1 against 4. Against 16 fast Skitters, 9 against 3. Against 40 Pips, 4 against 3.
 
 ### 5.11 Pairs players can discover
 
@@ -406,7 +408,7 @@ These pairings are designed in. They are the moments the brief calls out.
 | Lullaby Bell and Pumpkin Catapult | Drowsy walkers bunch up, so each pumpkin hits more of them. |
 | Sling Post and Longbow Loft against Bubblers | Quick pebbles pop the bubble. The heavy arrow lands before it comes back. |
 | Spice Kitchen and Quickshots | The +2 damage counts before armor, so quick hits get through shells. |
-| Grand Oven and Great Bows | The biggest hits, more often. Bosses melt. |
+| Grand Oven and Giant Bows | The biggest hits, more often. Bosses melt. |
 | Gates and the Longbow Loft | A gate bends the road back past one long-range spot several times. |
 | Lullaby Bell and the Gatecrasher | A drowsy Gatecrasher breaks gates slower, which buys time to defeat it. |
 | Jam Pot and anything | Its slow lingers 3.0 s, so towers further down the road get more time. |
@@ -418,19 +420,19 @@ These pairings are designed in. They are the moments the brief calls out.
 
 Numbers at strength 100. Health, heal amounts and bounty scale with strength (6.4). Armor, speed and lives never do.
 
-| Creature | Health | Armor | Speed | Moves | Lives lost | Bounty | Special |
-|---|---|---|---|---|---|---|---|
-| Scamp | 40 | 0 | 1.0 | Walks | 1 | 5 | None. The basic creature. |
-| Pip | 12 | 0 | 1.2 | Walks | 1 | 2 | None. Comes in crowds. |
-| Skitter | 30 | 0 | 2.0 | Walks | 1 | 5 | None. Very fast. |
-| Flitter | 30 | 0 | 1.2 | Flies | 1 | 5 | Flies (6.5). |
-| Shellback | 90 | 4 | 0.7 | Walks | 2 | 12 | Armor. |
-| Bubbler | 50 | 0 | 0.9 | Walks | 1 | 7 | Bubble (6.2). |
-| Puffball | 60 | 0 | 0.8 | Walks | 2 | 5 | Splits into 3 Puffs (6.2). |
-| Puff | 12 | 0 | 1.3 | Walks | 1 | 2 | Only comes from a Puffball. |
-| Mender | 70 | 1 | 0.7 | Walks | 1 | 10 | Heals others (6.2). |
-| Gatecrasher | 160 | 2 | 0.8 | Walks | 3 | 25 | Breaks gates (7.7). |
-| Dusk Moth | 120 | 5 | 0.8 | Flies | 2 | 15 | Armored flyer. |
+| Creature | Id | Health | Armor | Speed | Moves | Lives lost | Bounty | Special |
+|---|---|---|---|---|---|---|---|---|
+| Scamp | `scamp` | 40 | 0 | 1.0 | Walks | 1 | 5 | None. The basic creature. |
+| Pip | `pip` | 12 | 0 | 1.2 | Walks | 1 | 2 | None. Comes in crowds. |
+| Skitter | `skitter` | 30 | 0 | 2.0 | Walks | 1 | 5 | None. Very fast. |
+| Flitter | `flitter` | 30 | 0 | 1.2 | Flies | 1 | 5 | Flies (6.5). |
+| Shellback | `shellback` | 90 | 4 | 0.7 | Walks | 2 | 12 | Armor. |
+| Bubbler | `bubbler` | 50 | 0 | 0.9 | Walks | 1 | 7 | Bubble (6.2). |
+| Puffball | `puffball` | 60 | 0 | 0.8 | Walks | 2 | 5 | Splits into 3 Puffs (6.2). |
+| Puff | `puff` | 12 | 0 | 1.3 | Walks | 1 | 2 | Only comes from a Puffball. |
+| Mender | `mender` | 70 | 1 | 0.7 | Walks | 1 | 10 | Heals others (6.2). |
+| Gatecrasher | `gatecrasher` | 160 | 2 | 0.8 | Walks | 3 | 25 | Breaks gates (7.7). |
+| Dusk Moth | `dusk_moth` | 120 | 5 | 0.8 | Flies | 2 | 15 | Armored flyer. |
 
 That is ten creature types, plus the Puff that only a Puffball makes, plus one boss per region (6.3).
 
@@ -463,12 +465,12 @@ Breaks gates (Gatecrasher): see 7.7.
 
 A boss always comes in the final wave of its level or run. A boss that reaches the base costs 20 lives, which loses any Normal game. Bosses can be slowed. The Moon Moth can be slowed only by a Night Bell.
 
-| Boss | Region | Health | Armor | Speed | Moves | Lives lost | Bounty | Special |
-|---|---|---|---|---|---|---|---|---|
-| Grumblesack | 1 | 2000 | 0 | 0.4 | Walks | 20 | 100 | Every 6.0 s it drops 2 Scamps. |
-| Ironshell | 2 | 2500 | 6 | 0.4, rising | Walks | 20 | 150 | Gets faster as it is hurt. |
-| Moon Moth | 3 | 1600 | 3 | 0.3 | Flies | 20 | 200 | Every 6.0 s, 3 Flitters fly out. |
-| Old Tusk | 4 | 3000 | 4 | 0.35 | Walks | 20 | 250 | Breaks gates in 2.0 s. At half health, 4 Dusk Moths fly out. |
+| Boss | Id | Region | Health | Armor | Speed | Moves | Lives lost | Bounty | Special |
+|---|---|---|---|---|---|---|---|---|---|
+| Grumblesack | `grumblesack` | 1 | 2000 | 0 | 0.4 | Walks | 20 | 100 | Every 6.0 s it drops 2 Scamps. |
+| Ironshell | `ironshell` | 2 | 2500 | 6 | 0.4, rising | Walks | 20 | 150 | Gets faster as it is hurt. |
+| Moon Moth | `moon_moth` | 3 | 1600 | 3 | 0.3 | Flies | 20 | 200 | Every 6.0 s, 3 Flitters fly out. |
+| Old Tusk | `old_tusk` | 4 | 3000 | 4 | 0.35 | Walks | 20 | 250 | Breaks gates in 2.0 s. At half health, 4 Dusk Moths fly out. |
 
 Exact boss rules:
 
@@ -763,12 +765,12 @@ Relaxed gives more lives and more starting gold. Nothing else changes: same maps
 
 ### 12.1 Regions
 
-| Region | Name | Setting | Towers it brings | Creatures it brings | Boss |
-|---|---|---|---|---|---|
-| 1 | Lantern Hill | The village meadow at dusk | Sling Post, Pumpkin Catapult | Scamp, Pip, Flitter | Grumblesack |
-| 2 | Millbrook | River, mills and bridges | Lullaby Bell, Longbow Loft | Skitter, Shellback, Bubbler | Ironshell |
-| 3 | Willow Fen | Marsh boardwalks and reeds | Firework Tower | Puffball, Dusk Moth | Moon Moth |
-| 4 | Moonspire Keep | The old castle town on the hilltop | Bakery | Mender, Gatecrasher | Old Tusk |
+| Region | Name | Id | Setting | Towers it brings | Creatures it brings | Boss |
+|---|---|---|---|---|---|---|
+| 1 | Lantern Hill | `lantern_hill` | The village meadow at dusk | Sling Post, Pumpkin Catapult | Scamp, Pip, Flitter | Grumblesack |
+| 2 | Millbrook | `millbrook` | River, mills and bridges | Lullaby Bell, Longbow Loft | Skitter, Shellback, Bubbler | Ironshell |
+| 3 | Willow Fen | `willow_fen` | Marsh boardwalks and reeds | Firework Tower | Puffball, Dusk Moth | Moon Moth |
+| 4 | Moonspire Keep | `moonspire_keep` | The old castle town on the hilltop | Bakery | Mender, Gatecrasher | Old Tusk |
 
 ### 12.2 Unlock order
 
