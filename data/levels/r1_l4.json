@@ -1,0 +1,35 @@
+{
+  "format": 1,
+  "id": "r1_l4",
+  "name": "Pumpkin Patch",
+  "grid": [
+    ".....1.",
+    ".....#.",
+    ".#####.",
+    ".#.o.G.",
+    ".##G##.",
+    "....o#.",
+    ".#####.",
+    ".#oGo..",
+    ".###...",
+    "...#.o.",
+    "...B..."
+  ],
+  "start_gold": 300,
+  "gates": 1,
+  "strength": 100,
+  "towers": ["sling_post", "pumpkin_catapult"],
+  "star3": {"kind": "gates_at_most", "value": 0},
+  "hint": {"text": "Pips come in crowds. Catapults hit the whole crowd.", "cell": [4, 5]},
+  "waves": [
+    {"groups": [{"enemy": "scamp", "count": 3, "entrance": 1, "at_ms": 0, "every_ms": 1500}, {"enemy": "scamp", "count": 3, "entrance": 1, "at_ms": 9000, "every_ms": 1500}]},
+    {"groups": [{"enemy": "scamp", "count": 4, "entrance": 1, "at_ms": 0, "every_ms": 1200}, {"enemy": "scamp", "count": 4, "entrance": 1, "at_ms": 10000, "every_ms": 600}]},
+    {"groups": [{"enemy": "pip", "count": 5, "entrance": 1, "at_ms": 0, "every_ms": 400}]},
+    {"groups": [{"enemy": "pip", "count": 12, "entrance": 1, "at_ms": 0, "every_ms": 300}, {"enemy": "pip", "count": 12, "entrance": 1, "at_ms": 10000, "every_ms": 300}]},
+    {"groups": [{"enemy": "scamp", "count": 7, "entrance": 1, "at_ms": 0, "every_ms": 1000}, {"enemy": "pip", "count": 16, "entrance": 1, "at_ms": 10000, "every_ms": 300}]},
+    {"groups": [{"enemy": "pip", "count": 18, "entrance": 1, "at_ms": 0, "every_ms": 250}, {"enemy": "pip", "count": 18, "entrance": 1, "at_ms": 10000, "every_ms": 250}, {"enemy": "scamp", "count": 4, "entrance": 1, "at_ms": 20000, "every_ms": 1000}]},
+    {"groups": [{"enemy": "scamp", "count": 6, "entrance": 1, "at_ms": 0, "every_ms": 1000}, {"enemy": "pip", "count": 20, "entrance": 1, "at_ms": 8000, "every_ms": 300}, {"enemy": "scamp", "count": 6, "entrance": 1, "at_ms": 16000, "every_ms": 800}]},
+    {"groups": [{"enemy": "pip", "count": 24, "entrance": 1, "at_ms": 0, "every_ms": 250}, {"enemy": "scamp", "count": 10, "entrance": 1, "at_ms": 8000, "every_ms": 600}, {"enemy": "pip", "count": 16, "entrance": 1, "at_ms": 18000, "every_ms": 250}]},
+    {"groups": [{"enemy": "scamp", "count": 7, "entrance": 1, "at_ms": 0, "every_ms": 800}, {"enemy": "pip", "count": 30, "entrance": 1, "at_ms": 8000, "every_ms": 250}, {"enemy": "scamp", "count": 7, "entrance": 1, "at_ms": 18000, "every_ms": 600}, {"enemy": "pip", "count": 10, "entrance": 1, "at_ms": 24000, "every_ms": 250}]}
+  ]
+}
