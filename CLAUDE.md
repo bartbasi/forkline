@@ -16,7 +16,7 @@ Forkline is an original tower defense game for Android phones, built in Godot 4.
   `# Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.`
 - Network: none. No network code anywhere. Release builds request no Android permissions, not even INTERNET. No ads, analytics, tracking, accounts, leaderboards, purchases or real money. Everything is earned by playing.
 - The only exits from the app hand a fixed constant address to another app on the phone: Buy me a coffee (`https://buymeacoffee.com/playinc`, browser), the source code link in About (browser), and Send feedback in About (email app, to bartbasi@gmail.com). The app itself sends nothing. Tests replace the opener so nothing real opens.
-- Assets: every visual, effect, sound and piece of music is made in code. No image, audio or asset store files. Generated outputs (launcher icons, store graphics) are drawn by tool scripts and committed. Approved third party files: the GPL text, and the Outfit font with its OFL.txt only if Bart picks it at hard stop A. Anything else: ask first. Every asset is logged in docs/ASSETS.md.
+- Assets: every visual, effect, sound and piece of music is made in code. No image, audio or asset store files. Generated outputs (launcher icons, store graphics) are drawn by tool scripts and committed. Approved third party files: the GPL text, and the Outfit font with its OFL.txt (picked at hard stop A). Anything else: ask first. Every asset is logged in docs/ASSETS.md.
 - No other game's name appears anywhere players can see: UI, listing, marketing. The look copies no existing game's characters, layouts, palettes or tower designs.
 - Content stays non-gory so the rating stays Everyone. Store target audience 13 and over.
 - Models: Claude Opus 5.5 (`claude-opus-5-5`) and Claude Sonnet 5.5 (`claude-sonnet-5-5`) only. Effort levels high and max only. Each agent's model and effort are set in its file in .claude/agents/.
@@ -61,9 +61,18 @@ Autoload and input map entries in project.godot are added by the DM during integ
 - 2026-10-23: Owners for the open paths, from the architect's proposal: data/stats/ to the game designer; data/runs/ to the roguelite engineer; tools/icon/, icons/ and tests/theme/ to the art director; tests/render/ and tests/audio/ to those areas; the app glue to the ui-engineer. One change by the DM: src/save/ and tests/save/ go to the sim engineer (Opus), not the roguelite engineer, because saves are the most security sensitive code and the sim engineer already owns sim state saving. docs/ASSETS.md stays with the DM.
 - 2026-10-23: The architect gets WebSearch and WebFetch, for research only (Android large-screen behavior). The game itself has no network code.
 - 2026-10-23: Bart approved the kickoff and told the DM to go ahead with what it thinks best. Where the brief is silent, follow the playbook.
-- Open until hard stop A: the font (Outfit, the system font, or both depending on where it shows).
-- Open until the architect proposes it: whether resuming after the app is killed returns to the exact moment or to the start of the current wave (brief 3.10). Bart decides.
-- Open until the game designer proposes it: a limited mid-wave gate switch for later levels (brief 3.4). Bart decides.
+- 2026-10-23, hard stop A: Bart approved everything as the DM recommended:
+  - The look: the cozy storybook theme slice (docs/art/THEME.md), judged from the screenshots. Bart still sees it on his Fold5 when the phone is connected.
+  - Font: Outfit everywhere (SIL Open Font License 1.1). `Outfit[wght].ttf` and its `OFL.txt` ship unmodified, side by side, and are credited in NOTICE, README and About.
+  - Names: the slice and RULES.md named towers and creatures differently. In phase 4 the game designer and art director agree on one set, keeping the jobs in RULES.md, and match the silhouettes to it. Bart sees the final list before any code uses it.
+  - Rules: docs/design/RULES.md is approved as written, including section 19.1: level 1-1 opens with two towers so the brief's "no single tower earns three stars alone" check can pass on every level; the roguelite and daily open at 12 stars and use every tower and creature, with an info card the first time each appears; star rules, Relaxed numbers (40 lives, 1.5 times starting gold), the Twist list, the campaign plan, the economy (70% refund for anything not bought in the current build phase), the Gatecrasher rules, route lines shown through the whole build phase, every level starting at 1x, attacks that land instantly, and at most 2 waves on the map at once.
+  - No mid-wave gate switch. Speed is not remembered between levels. No "damage dealt" readout in version 1.
+  - Resume: killing the app and reopening returns to the exact moment (brief 3.10).
+  - Maps are at most 7 columns by 8 to 13 rows, so map cells stay 48 dp on the Fold5 cover screen.
+  - Saved games: one per mode (campaign level, roguelite run, daily), so one never ends another. The Continue card resumes the most recent.
+  - No rotation on the unfolded phone: the portrait lock stays, and the landscape layout comes from the window shape.
+  - Folding or unfolding mid-wave pauses the game.
+  - The level card does not remember Relaxed. Normal is always the default.
 
 ## Rules for every session and agent
 
@@ -79,7 +88,7 @@ Autoload and input map entries in project.godot are added by the DM during integ
 - Every outbound address is a constant, written once, never built from input.
 - Color is never the only signal. Text meets 4.5:1 contrast, checked by a script. Touch targets at least 48 dp. Respect safe areas. 60 fps on the Fold5.
 - The DM runs at most four agents at once and works phase by phase. Never launch the whole team together. If a max effort agent stalls, sprawls or adds unrequested features, the DM drops it to high for that task and tells Bart.
-- Hard stops: A, Bart approves the rules and the look and picks the font. B, Bart playtests region 1 on his phone before more content. C, ask before creating the GitHub repo and the first push. Ask first before GitHub Pages, any signing, any Play Console work, and anything outside the brief. Play Console waits for Play, Inc.'s DUNS number.
+- Hard stops: A is cleared (2026-10-23). B, Bart playtests region 1 on his phone before more content. C, ask before creating the GitHub repo and the first push. Ask first before GitHub Pages, any signing, any Play Console work, and anything outside the brief. Play Console waits for Play, Inc.'s DUNS number.
 - Before the first push, remind Bart to search "Forkline" in Google Play on his phone and run a quick trademark search.
 - End every phase with a short status for Bart: done, verified, next, blocking.
 - Every agent ends with a short report: files changed, how it was proven (command and result, test names, screenshot path), open questions, contract change requests.

@@ -61,3 +61,6 @@ Annotations (JetBrains s.r.o. and contributors), the JSpecify annotations
 under the Apache License, version 2.0, and LLVM libc++ (The LLVM Project
 contributors), under the Apache License, version 2.0, with LLVM exceptions.
 The About screen lists them with the license text.
+
+Forkline uses the Outfit font, under the SIL Open Font License, version 1.1.
+The license is in src/theme/fonts/OFL.txt and in the About screen.

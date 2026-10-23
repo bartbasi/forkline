@@ -10,7 +10,7 @@ Copyright 2026 Play, Inc. Designed and written by Bart Basi, with assistance fro
 
 ## Engine
 
-Built with Godot 4.7.2 stable (`4.7.2.stable.official.ed1daf0bf`), the standard build, not .NET. GDScript, statically typed, with the Compatibility renderer. Android first. Every visual, effect, sound and piece of music is made in code in this repo.
+Built with Godot 4.7.2 stable (`4.7.2.stable.official.ed1daf0bf`), the standard build, not .NET. GDScript, statically typed, with the Compatibility renderer. Android first. Every visual, effect, sound and piece of music is made in code in this repo. The only files made by others are the GPL text and the Outfit font with its license.
 
 ## Running the tests
 
@@ -67,3 +67,4 @@ Parts made by others have their own licenses:
 
 - The Godot Engine is under the MIT license. The About screen shows the engine's license and the notices for the parts it includes.
 - On Android, the Godot build adds the AndroidX libraries, the Kotlin standard library, kotlinx.coroutines, the JetBrains Java Annotations, the JSpecify annotations and Guava's ListenableFuture, all under the Apache License, version 2.0, and LLVM libc++, under the Apache License, version 2.0, with LLVM exceptions.
+- The Outfit font is under the SIL Open Font License, version 1.1. Its license is in src/theme/fonts/OFL.txt.
