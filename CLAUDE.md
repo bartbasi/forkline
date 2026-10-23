@@ -29,21 +29,21 @@ Each agent edits only what it owns, plus any path its task brief from the DM exp
 | Path | Owner |
 |---|---|
 | CLAUDE.md, docs/BRIEF.md, docs/ASSETS.md, .claude/agents/, project.godot, scenes/main.tscn, LICENSE, NOTICE, README.md, .gitignore, .gitattributes, docs/.gdignore, tests/run_tests.gd, tests/base_test.gd, tests/project/, git | DM |
-| docs/design/ | game-designer |
+| docs/design/, data/stats/ | game-designer |
 | docs/ARCHITECTURE.md | architect |
-| docs/art/, src/theme/, prototypes/theme/ | art-director |
-| src/sim/, tests/sim/ | sim-engineer |
+| docs/art/, src/theme/, prototypes/theme/, tools/icon/, icons/, tests/theme/ | art-director |
+| src/sim/, tests/sim/, src/save/, tests/save/ | sim-engineer |
 | data/levels/, data/segments/, tests/levels/ | level-designer |
 | tools/balance/, docs/balance/ | balance-analyst |
-| src/run/, data/cards/, tests/run/ | roguelite-engineer |
-| src/ui/, scenes/ui/, tests/ui/ | ui-engineer |
-| src/render/, shaders/ | render-engineer |
-| src/audio/ | audio-engineer |
+| src/run/, data/cards/, data/runs/, tests/run/ | roguelite-engineer |
+| src/ui/ (including the app glue in src/ui/app.gd), scenes/ui/, tests/ui/ | ui-engineer |
+| src/render/, shaders/, tests/render/ | render-engineer |
+| src/audio/, tests/audio/ | audio-engineer |
 | scripts/, export_presets.cfg, tools/store/, docs/store/, docs/release.md | release-engineer |
 | docs/reviews/qa-*.md | qa-reviewer |
 | docs/reviews/security-*.md | security-reviewer |
 
-Autoload and input map entries in project.godot are added by the DM during integration, so two agents never edit that file at once.
+Autoload and input map entries in project.godot are added by the DM during integration, so two agents never edit that file at once. The contract plans no autoloads. scenes/main.tscn only instances scenes/ui/app.tscn.
 
 ## Decisions from Bart
 
@@ -58,6 +58,7 @@ Autoload and input map entries in project.godot are added by the DM during integ
 - 2026-10-23: Models are Claude Opus 5.5 and Claude Sonnet 5.5 only, at effort high or max only, as in the brief's section 7.1 table.
 - 2026-10-23: Everything else follows the playbook defaults: Godot 4.7.2, GDScript statically typed, Android first, assets made in code, GPL v3 with the Play, Inc. terms.
 - 2026-10-23: Paths the brief gives no owner (the main scene and app glue, save file reading and writing for progress and settings, docs/ASSETS.md, the launcher icon tool, tower and enemy stat data) stay with the DM until the architect names an owner in the contract. The DM then records them in the ownership table.
+- 2026-10-23: Owners for the open paths, from the architect's proposal: data/stats/ to the game designer; data/runs/ to the roguelite engineer; tools/icon/, icons/ and tests/theme/ to the art director; tests/render/ and tests/audio/ to those areas; the app glue to the ui-engineer. One change by the DM: src/save/ and tests/save/ go to the sim engineer (Opus), not the roguelite engineer, because saves are the most security sensitive code and the sim engineer already owns sim state saving. docs/ASSETS.md stays with the DM.
 - 2026-10-23: The architect gets WebSearch and WebFetch, for research only (Android large-screen behavior). The game itself has no network code.
 - 2026-10-23: Bart approved the kickoff and told the DM to go ahead with what it thinks best. Where the brief is silent, follow the playbook.
 - Open until hard stop A: the font (Outfit, the system font, or both depending on where it shows).

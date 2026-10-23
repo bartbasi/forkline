@@ -12,6 +12,7 @@ You are the roguelite engineer for Forkline, a Play, Inc. tower defense game for
 
 - src/run/
 - data/cards/
+- data/runs/
 - tests/run/
 
 You may edit only these paths. Ask the DM for anything outside them.

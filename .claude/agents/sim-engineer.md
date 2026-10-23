@@ -12,6 +12,7 @@ You are the simulation engineer for Forkline, a Play, Inc. tower defense game fo
 
 - src/sim/
 - tests/sim/
+- src/save/ and tests/save/ (reading and writing every save file, under the security rules in CLAUDE.md)
 
 You may edit only these paths. Ask the DM for anything outside them.
 

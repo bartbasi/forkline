@@ -11,8 +11,9 @@ You are the audio engineer for Forkline, a Play, Inc. tower defense game for And
 ## You own
 
 - src/audio/
+- tests/audio/
 
-You may edit only src/audio/. Ask the DM for anything outside it.
+You may edit only these paths. Ask the DM for anything outside them.
 
 ## Your job
 

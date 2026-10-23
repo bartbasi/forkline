@@ -12,6 +12,7 @@ You are the render engineer for Forkline, a Play, Inc. tower defense game for An
 
 - src/render/
 - shaders/
+- tests/render/
 
 You may edit only these paths. Ask the DM for anything outside them.
 

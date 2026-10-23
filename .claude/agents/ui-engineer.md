@@ -14,6 +14,8 @@ You are the UI engineer for Forkline, a Play, Inc. tower defense game for Androi
 - scenes/ui/
 - tests/ui/
 
+The app glue (boot, screen switching, lifecycle saves, the back button) lives in src/ui/app.gd and scenes/ui/app.tscn.
+
 You may edit only these paths. Ask the DM for anything outside them.
 
 ## Your job
