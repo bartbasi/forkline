@@ -868,36 +868,58 @@ static func from_data(data: Variant) -> DailyRecord
 class_name App extends Control                         # src/ui/app.gd, root of scenes/ui/app.tscn
 ## Creates GameData, SaveStore, Settings, Progress, the saved games and AudioService once and passes them down with setup().
 ## Routes between screens, saves on lifecycle notifications, handles the back button.
+signal sound_changed(on: bool)                         # the Settings toggle
+signal continue_requested()                            # the mode screen's taps; the battle flow answers them
+signal campaign_requested()
+signal roguelite_requested()
+signal daily_requested()
+func build() -> void                                   # the layers and the front door; _ready calls it, tests may call it first
+func apply_layout(window: Vector2, safe: Rect2) -> void   # lays out every screen and modal; called on every resize
+func handle_back() -> StringName                       # &"modal", &"page", or &"quit" when nothing is left (the caller quits)
+func push_screen(screen: ScreenFrame) -> void          # only the top screen shows
+func pop_screen() -> void                              # the front door is never removed
+func current_screen() -> ScreenFrame
+func open_modal(modal: Modal) -> void                  # above every screen; the App frees it when it closes
+func top_modal() -> Modal                              # null for none
+func open_mode() -> void
+func open_info() -> void
+func open_settings() -> void
 
-class_name Layout extends RefCounted                   # src/ui/layout.gd (section 7)
+class_name Layout extends RefCounted                   # src/ui/layout.gd (section 7); logical px of the 1080 wide base
 const LANDSCAPE_BELOW: float = 1.5
-const MIN_TOUCH: float = 160.0                         # logical px: at least 48 dp on every screen in 7.4
+const MIN_TOUCH: float = 160.0                         # at least 48 dp on every screen in 7.4
+const PAD: float = 36.0                                # outer padding of every screen, inside the safe area
+const CONTENT_MAX: float = 1100.0                      # text pages never get wider
 static func is_landscape(window_size: Vector2) -> bool # height < 1.5 x width
 static func safe_rect(viewport: Viewport) -> Rect2     # the display safe area in viewport coordinates
+static func safe_in_viewport(full: Vector2, window_px: Vector2, window_pos: Vector2, safe_screen: Rect2) -> Rect2   # the pure part of safe_rect, for tests
+static func content_width(window_width: float, safe: Rect2) -> float   # the safe width less padding, capped at CONTENT_MAX
 
-class_name BattleClock extends RefCounted              # src/ui/battle_clock.gd: real time to whole ticks
+class_name BattleClock extends RefCounted              # src/ui/battle_clock.gd: real time to whole ticks, counted in whole microseconds
 var speed: int = 1                                     # 1, 2 or 3; every level and run starts at 1 (RULES 4.8)
 var paused: bool = false
-const MAX_FRAME_SECONDS: float = 0.25                  # a long frame or a return from the background never bursts
+const TICK_US: int = 50000                             # one tick, Sim.MS_PER_TICK
+const MAX_FRAME_US: int = 250000                       # a long frame or a return from the background never bursts
 const MAX_TICKS_PER_FRAME: int = 6
 func advance(delta: float) -> int                      # whole ticks to run now; 0 while paused
 func alpha() -> float                                  # 0 to 1: how far between the last tick and the next
 func reset() -> void                                   # drops the leftover time
 
-class_name BattleScreen extends Control                # src/ui/battle_screen.gd: map, HUD, panels, input
+class_name BattleScreen extends ScreenFrame            # src/ui/battle_screen.gd: map, HUD, panels, input
 signal save_requested()                                # a build phase began, a card was picked, or Pause opened
 signal ended(result: Dictionary)                       # won, lost, or abandoned from Pause after a confirm (then won is false)
-signal left()                                          # the player went to the menu; the game stays saved
+signal left()                                          # "Back to menu" in Pause; the game stays saved
 func setup(battle: Battle, audio: AudioService, progress: Progress) -> void
 func set_run(run: RunSession) -> void                  # phase 7
-func apply_layout(window_size: Vector2) -> void        # also a test hook (7.5)
+func apply_layout(window: Vector2, safe: Rect2) -> void   # from ScreenFrame; the App calls it on every resize (7.5)
 func pause() -> void                                   # freezes the clock and opens Pause
 func is_paused() -> bool
 
 class_name Links extends RefCounted                    # src/ui/links.gd (section 8)
 ```
 
-The other screens are used only inside src/ui/, so their signals can change without a contract change: FrontDoor, ModeScreen (the Continue card, Campaign, Roguelite, Daily), LevelSelect, LevelCard (RULES 10.5: name, waves, gates, the three star lines, stars earned, the hint, Normal or Relaxed with Normal always preselected, the Twist once open), WavePreview, InfoCard (first sight), PausePanel (Resume, Info, Settings, leave to the menu, abandon with a confirm, the quiet coffee row), SettingsPanel (sound, About), InfoScreen, AboutScreen, EndPanel, ConfirmDialog, and in phase 7 RunCard and DraftPanel.
+- ScreenFrame (every full screen) and Modal (Settings, Pause, the confirm dialog) are the base classes in src/ui/. BattleScreen opens PausePanel with `App.open_modal()`, and Info and Settings with `open_info()` and `open_settings()`. Other App members are internal.
+- The other screens are used only inside src/ui/, so their signals can change without a contract change: FrontDoor, ModeScreen (the Continue card, Campaign, Roguelite, Daily), LevelSelect, LevelCard (RULES 10.5: name, waves, gates, the three star lines, stars earned, the hint, Normal or Relaxed with Normal always preselected, the Twist once open), WavePreview, InfoCard (first sight), PausePanel (Resume, Info, Settings, "Back to menu" with the game kept saved, "Abandon" after a confirm, the quiet coffee row), SettingsPanel (sound, About), InfoScreen, AboutScreen, EndPanel, ConfirmDialog, and in phase 7 RunCard and DraftPanel.
 
 App flow:
 
@@ -906,8 +928,8 @@ App flow:
 3. **Battle.** A campaign level: `Battle.create(level, catalog, relaxed, effects)`, where `effects` is the level's `twist_effects` when playing its Twist and empty otherwise. A run or the daily (phase 7): `RunSession.start(...)`. Then `BattleScreen.setup()`. Every battle starts at 1x. A resumed game opens paused, on the Pause menu.
 4. **Saving.** On `save_requested` the App saves that mode's game. On `NOTIFICATION_APPLICATION_PAUSED`, `NOTIFICATION_APPLICATION_FOCUS_OUT` and `NOTIFICATION_WM_CLOSE_REQUEST` while a battle is open, it calls `battle_screen.pause()` if a wave is running, then saves. Settings and progress save when they change.
 5. **End.** On `ended`: record the stars (`Progress.record_level`, or `record_twist` for a won Twist), the counters for a run or daily and the daily record for a daily (phase 7), delete that mode's saved game, save, and show EndPanel. An abandoned campaign level records nothing. An abandoned run or daily counts as lost at its current wave (RULES 14.7).
-6. **Back button.** Close the top panel or dialog first. In a battle, open Pause. On the front door, quit; everything is already saved.
-7. **Resize.** The App connects `get_tree().root.size_changed` and calls `apply_layout()` on the live screen (7.5).
+6. **Back button.** `handle_back()`: close or answer the top modal first, then go back one screen. In a battle, open Pause. On the front door, quit; everything is already saved.
+7. **Resize.** The App connects its viewport's `size_changed` and calls `apply_layout(window, safe)` with `Layout.safe_rect()`, which lays out every screen and modal (7.5).
 8. **Debug builds** (`OS.is_debug_build()`) add a `PerfProbe` (3.7). Release builds never do.
 
 First sight (RULES 9.2, 9.6): a tower's card opens at the start of the first level that offers it, a creature's card in the build phase before the first wave that brings it, and a level's hint at its first start. Each opens by itself once, then its id goes into `Progress.seen`.
@@ -1238,8 +1260,8 @@ Bart approved 7 columns by 8 to 13 rows at hard stop A, so map cells stay at 48 
 ### 7.5 Folding and unfolding mid-wave
 
 1. Android resizes the window. Godot keeps running (7.2).
-2. The App gets `size_changed` and calls `BattleScreen.apply_layout(size)`.
-3. If a wave is running and the game is not paused, `apply_layout` first calls `pause()`. Bart chose this at hard stop A. Any size change during a wave pauses, so split screen and pop-up windows behave the same as a fold.
+2. The App gets `size_changed` and calls `apply_layout(window, safe)` on every screen, BattleScreen included.
+3. If a wave is running and the game is not paused, BattleScreen's `apply_layout` first calls `pause()`. Bart chose this at hard stop A. Any size change during a wave pauses, so split screen and pop-up windows behave the same as a fold.
 4. `apply_layout` picks the layout, moves the HUD parts into the portrait or landscape container and calls `map_view.fit(map_rect)`. It never frees a node that holds state and never touches the Battle. The selection, an open panel and the speed stay. A touch in progress (a gate drag, a held button) is cancelled.
 5. If the fold comes with a focus loss (Samsung can ask whether to continue on the cover screen), the game also saves, as for any focus loss.
 6. If Android ever recreates the activity anyway, the engine restarts and the exact moment save resumes the battle (section 6).
@@ -1257,7 +1279,7 @@ export_presets.cfg (release-engineer):
 
 - `include_filter="LICENSE, NOTICE, data/*, src/theme/fonts/OFL.txt"`. LICENSE, NOTICE and the font license ship as plain files that About reads, and every data JSON ships.
 - `exclude_filter="tools/*, tests/*, docs/*, prototypes/*, scripts/*"`.
-- The font ships through Godot's font import: the imported FontFile keeps the TTF's bytes unchanged, next to OFL.txt in src/theme/fonts/.
+- The font ships as Godot's imported font resource, which keeps the TTF's bytes unchanged, with OFL.txt beside it as a plain file. The raw .ttf is not added a second time (DM, 2026-10-23, recorded in CLAUDE.md, as in SumUp).
 - Launcher icons from the art director's committed PNGs:
   - `launcher_icons/main_192x192="res://icons/icon_192.png"`
   - `launcher_icons/adaptive_foreground_432x432="res://icons/icon_foreground_432.png"`
@@ -1296,7 +1318,8 @@ const SOURCE_SHOWN: String = "github.com/bartbasi/forkline"   # how About writes
 const FEEDBACK_EMAIL: String = "bartbasi@gmail.com"
 ## Who opens a link. Empty means the phone (OS.shell_open). Tests put a recorder here.
 static var opener: Callable = Callable()
-static func open(url: String) -> void                  # the opener if set, else OS.shell_open; a failure shows nothing
+static func open(url: String) -> void                  # only when is_ours(url): the opener if set, else OS.shell_open; a failure shows nothing
+static func is_ours(url: String) -> bool               # COFFEE_URL, SOURCE_URL, or a draft starting "mailto:bartbasi@gmail.com?"
 static func open_coffee() -> void                      # open(COFFEE_URL)
 static func open_source() -> void                      # open(SOURCE_URL)
 static func send_feedback() -> void                    # open(feedback_url(version(), device_text()))
@@ -1306,6 +1329,7 @@ static func feedback_url(version: String, device: String) -> String
 ```
 
 - Each address is a constant written once. Nothing is ever added to the coffee or source address. The feedback address is a constant too; only the subject and body of the draft carry the version and device.
+- `open()` refuses every address for which `is_ours()` is false, so no other address can ever leave the app, whoever calls it.
 - `feedback_url` returns `"mailto:%s?subject=%s&body=%s" % [FEEDBACK_EMAIL, subject.uri_encode(), body.uri_encode()]`, with subject `"Forkline feedback (version %s)" % version` and body `"\n\n\nSent from Forkline %s on %s" % [version, device]`, so the player writes above that line. `uri_encode` turns `&`, `?`, `#`, `=` and line breaks into escapes, so a strange model name cannot add a recipient or a header. The player sees and can edit everything before sending; the app sends nothing.
 - Phone model: `OS.get_model_name()` (Build.MODEL, for example SM-F946B). Android version: `OS.get_version_alias()`, which on Android gives the marketing version plus the SDK and build; `OS.get_version()` gives only the SDK number and build.
 - The coffee tap rules (look, deadzone, one hand-off per tap, coming back) are the playbook's section 5, applied by the ui-engineer.
@@ -1367,7 +1391,7 @@ General rules (CLAUDE.md "Writing tests" applies):
 | tests/save/ | sim-engineer | Atomic write; a failed rename keeps the newest save in `.tmp`; `.tmp` wins on load; the `.bak` fallback; a locked file is never overwritten; a newer format is left alone; hostile files (empty, truncated, huge, NUL, high bytes, wrong types, out of range, deep nesting, numbers past ceilings); defaults per field; counters saturate; the three saved games stay separate and `load_games` orders them; saved game round trip; an invalid saved game is deleted; the unlock rules of RULES 16. |
 | tests/levels/ | level-designer | Every file in data/levels/ (and data/segments/ in phase 7) loads through `GameData` with no problems and is listed; RULES 12: heights by region, gates, waves, strengths and starting gold as in 12.3, towers as in 12.2, only towers and creatures brought by then, a new creature's first wave holds only it, never two new things in one wave, a boss only in a final wave, no group of `puff`, star 3 as in 12.4 and leaving two kinds of attacking tower usable; the spawn bound; ASCII only; Twists (phase 7). |
 | tests/run/ | roguelite-engineer (phase 7) | Card, pack and run plan checks; the pool and unlocks; the same seed gives the same map, waves and offers; every top segment can be finished into a valid map; derived seeds pinned; the daily seed from a date; streak and best rules; an owed draft blocks the next wave; run save and restore. |
-| tests/ui/ | ui-engineer | The `Layout.is_landscape` table (7.4); a resize mid-wave pauses, keeps `battle.to_data()` identical and every state node alive; `BattleClock` tick counts at 1x, 2x, 3x, paused and at the burst cap; each link button hands its constant to the opener exactly once; feedback URL encoding (a model name with `&cc=` stays in the body); touch targets at least `MIN_TOUCH` in both layouts at the Fold5 sizes; focus loss pauses and saves; back button order; the Continue card resumes the most recent saved game; star sentences built from data (2.7). |
+| tests/ui/ | ui-engineer | The `Layout.is_landscape` table (7.4); a resize mid-wave pauses, keeps `battle.to_data()` identical and every state node alive; `BattleClock` tick counts at 1x, 2x, 3x, paused and at the burst cap; each link button hands its constant to the opener exactly once, and `open()` refuses any other address; feedback URL encoding (a model name with `&cc=` stays in the body); touch targets at least `MIN_TOUCH` in both layouts at the Fold5 sizes; focus loss pauses and saves; back button order; the Continue card resumes the most recent saved game; star sentences built from data (2.7). |
 | tests/render/ | render-engineer | MapView sets up for every real level headless; `cell_at` and `fit` round trip at several sizes; `sync` adds and frees nodes as creatures spawn and go, with no leak after a full wave. |
 | tests/audio/ | audio-engineer | Every sound renders, is not silent and never clips; voice caps hold; disabled means silent; every event kind in 3.1 has a sound or a deliberate silence. |
 | tests/theme/ | art-director | Contrast: every text pair 4.5:1 and graphic pair 3:1, including every text color the UI theme puts on a background; Outfit everywhere and the font files unmodified; every tower tier and path and every creature draws inside its box, in one color when asked, and each silhouette stays distinct from the others; the catalog ids have silhouettes in spec order, and `FLYERS` matches `flying`; route points and gate looks; the launcher icons exist at their sizes with the right transparency. |
@@ -1415,4 +1439,4 @@ The roguelite-engineer builds nothing for region 1. Its first task is phase 7: s
 
 ## 12. Open questions
 
-1. **The font file in the APK (DM).** CLAUDE.md says Outfit[wght].ttf and OFL.txt ship unmodified, side by side. With Godot's font import, the APK holds the imported font (the TTF's bytes unchanged, inside Godot's resource) and OFL.txt as a plain file, but not the raw .ttf file. Is that enough? If the raw file must ship too, the art director sets the font's import to "Keep File" and loads it with `FontFile.load_dynamic_font()`, and 7.6 adds it to the include filter.
+None at the moment.
