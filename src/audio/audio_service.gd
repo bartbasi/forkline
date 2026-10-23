@@ -55,6 +55,12 @@ const GAIN_DB: Dictionary[StringName, float] = {
 	&"wave_cleared": -6.0, &"build_started": -9.0, &"built": -7.0, &"upgraded": -7.0,
 	&"sold": -8.0, &"gate_placed": -7.0, &"gate_removed": -8.0, &"won": -4.0,
 	&"lost": -5.0, &"tap": -8.0, &"refuse": -8.0, &"star": -6.0,
+	&"shot_quickshot": -14.0, &"shot_stone_sling": -13.0,
+	&"shot_pumpkin_catapult": -12.0, &"shot_prize_pumpkin": -11.0, &"shot_jam_pot": -12.0,
+	&"shot_lullaby_bell": -14.0, &"shot_hush_bell": -14.0, &"shot_night_bell": -14.0,
+	&"shot_longbow_loft": -13.0, &"shot_giant_bow": -12.0, &"shot_triple_bow": -14.0,
+	&"shot_firework_tower": -14.0, &"shot_star_bloom": -14.0, &"shot_skyrocket": -14.0,
+	&"shot_bakery": -16.0,
 }
 ## The least time between two starts of the same sound, in ms. Events in the
 ## same frame therefore make one sound, not a stack.
@@ -64,12 +70,41 @@ const GAP_MS: Dictionary[StringName, int] = {
 	&"wave_cleared": 300, &"build_started": 300, &"built": 80, &"upgraded": 80,
 	&"sold": 80, &"gate_placed": 80, &"gate_removed": 80, &"won": 500,
 	&"lost": 500, &"tap": 60, &"refuse": 120, &"star": 80,
+	&"shot_quickshot": 55, &"shot_stone_sling": 55,
+	&"shot_pumpkin_catapult": 70, &"shot_prize_pumpkin": 70, &"shot_jam_pot": 70,
+	&"shot_lullaby_bell": 90, &"shot_hush_bell": 90, &"shot_night_bell": 90,
+	&"shot_longbow_loft": 60, &"shot_giant_bow": 60, &"shot_triple_bow": 60,
+	&"shot_firework_tower": 70, &"shot_star_bloom": 70, &"shot_skyrocket": 70,
+	&"shot_bakery": 90,
 }
-## Frequent sounds. When all voices are busy they give way to every other sound.
-const COMMON: Array[StringName] = [&"spawned", &"fired", &"popped", &"defeated", &"healed"]
+## Shot sounds by tower id: the tower's plain shot, then its tier 3 path 0 and
+## path 1 (the order of architecture 2.2). Unknown towers use &"fired".
+const SHOT_SOUNDS: Dictionary[StringName, Array] = {
+	&"sling_post": [&"fired", &"shot_quickshot", &"shot_stone_sling"],
+	&"pumpkin_catapult": [&"shot_pumpkin_catapult", &"shot_prize_pumpkin", &"shot_jam_pot"],
+	&"lullaby_bell": [&"shot_lullaby_bell", &"shot_hush_bell", &"shot_night_bell"],
+	&"longbow_loft": [&"shot_longbow_loft", &"shot_giant_bow", &"shot_triple_bow"],
+	&"firework_tower": [&"shot_firework_tower", &"shot_star_bloom", &"shot_skyrocket"],
+	&"bakery": [&"shot_bakery", &"shot_bakery", &"shot_bakery"],
+}
+## Every shot sound.
+const SHOT_IDS: Dictionary[StringName, bool] = {
+	&"fired": true,
+	&"shot_quickshot": true, &"shot_stone_sling": true,
+	&"shot_pumpkin_catapult": true, &"shot_prize_pumpkin": true, &"shot_jam_pot": true,
+	&"shot_lullaby_bell": true, &"shot_hush_bell": true, &"shot_night_bell": true,
+	&"shot_longbow_loft": true, &"shot_giant_bow": true, &"shot_triple_bow": true,
+	&"shot_firework_tower": true, &"shot_star_bloom": true, &"shot_skyrocket": true,
+	&"shot_bakery": true,
+}
+## Most shot sounds of any kind at once, so a big wave never turns into a rattle.
+const MAX_SHOTS: int = 4
+## Frequent sounds: every shot, plus these. When all voices are busy they give
+## way to every other sound.
+const OTHER_COMMON: Array[StringName] = [&"spawned", &"popped", &"defeated", &"healed"]
 
-## Tower shots take one of five pitches by tower cell, and puffs one of three
-## by creature id, so a big wave sounds like a music box, not a machine.
+## Shots take one of five pitches by tower cell, and puffs one of three by
+## creature id, so a big wave sounds like a music box, not a machine.
 const SHOT_PITCHES: PackedFloat32Array = [0.84, 0.94, 1.05, 1.25, 1.4]
 const PUFF_PITCHES: PackedFloat32Array = [0.9, 1.0, 1.12]
 
@@ -151,10 +186,7 @@ func play_events(events: Array[Dictionary]) -> void:
 	if not _enabled or _voices.is_empty():
 		return
 	for event: Dictionary in events:
-		var kind: Variant = event.get("kind", &"")
-		if typeof(kind) != TYPE_STRING_NAME and typeof(kind) != TYPE_STRING:
-			continue
-		var sound: StringName = EVENT_SOUNDS.get(StringName(kind), &"")
+		var sound: StringName = sound_for(event)
 		if sound == &"":
 			continue
 		_play(sound, _pitch_for(sound, event))
@@ -216,9 +248,31 @@ func wait_until_ready() -> void:
 		_start_music()
 
 
+## The sound an event makes, or &"" for an unknown or malformed event. A
+## `fired` event picks its shot by `tower` and `spec` (architecture 3.1).
+static func sound_for(event: Dictionary) -> StringName:
+	var kind: Variant = event.get("kind", &"")
+	if typeof(kind) != TYPE_STRING_NAME and typeof(kind) != TYPE_STRING:
+		return &""
+	var sound: StringName = EVENT_SOUNDS.get(StringName(kind), &"")
+	if sound != &"fired":
+		return sound
+	var tower: Variant = event.get("tower")
+	if typeof(tower) != TYPE_STRING_NAME and typeof(tower) != TYPE_STRING:
+		return sound
+	var row: Array = SHOT_SOUNDS.get(StringName(tower), [])
+	if row.is_empty():
+		return sound
+	var spec: Variant = event.get("spec", -1)
+	var index: int = 0
+	if typeof(spec) == TYPE_INT and int(spec) >= 0 and int(spec) <= 1:
+		index = int(spec) + 1
+	return row[index]
+
+
 func _pitch_for(sound: StringName, event: Dictionary) -> float:
-	if sound == &"fired":
-		var cell: Variant = event.get("tower")
+	if SHOT_IDS.has(sound):
+		var cell: Variant = event.get("cell")
 		if cell is Vector2i:
 			var c: Vector2i = cell
 			return SHOT_PITCHES[absi(c.x * 3 + c.y * 5) % SHOT_PITCHES.size()]
@@ -246,7 +300,9 @@ func _play(sound: StringName, pitch: float) -> void:
 	var now: int = Time.get_ticks_msec()
 	if now - int(_last_start.get(sound, -1000000)) < int(GAP_MS.get(sound, 60)):
 		return
-	var common: bool = COMMON.has(sound)
+	var shot: bool = SHOT_IDS.has(sound)
+	var common: bool = shot or OTHER_COMMON.has(sound)
+	var shots: int = 0
 	var free: int = -1
 	var same: int = 0
 	var oldest_same: int = -1
@@ -263,9 +319,14 @@ func _play(sound: StringName, pitch: float) -> void:
 			same += 1
 			if oldest_same < 0 or _voice_end[i] < _voice_end[oldest_same]:
 				oldest_same = i
-		if COMMON.has(_voice_sound[i]):
+		var other: StringName = _voice_sound[i]
+		if SHOT_IDS.has(other):
+			shots += 1
+		if SHOT_IDS.has(other) or OTHER_COMMON.has(other):
 			if oldest_common < 0 or _voice_end[i] < _voice_end[oldest_common]:
 				oldest_common = i
+	if shot and shots >= MAX_SHOTS:
+		return
 	var slot: int = free
 	if same >= MAX_SAME:
 		if common:

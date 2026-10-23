@@ -26,8 +26,18 @@ func after_each() -> void:
 	service = null
 
 
+## An event shaped like the sim's (architecture 3.1). Fields a kind does not
+## use are harmless extras.
 func _event(kind: StringName) -> Dictionary:
-	return {"kind": kind, "id": 7, "tower": Vector2i(2, 3), "cell": Vector2i(1, 1)}
+	if kind == &"fired":
+		return _shot(&"sling_post", -1, Vector2i(2, 3))
+	return {"kind": kind, "id": 7, "cell": Vector2i(1, 1), "tower": &"sling_post", "tier": 1, "spec": -1, "gold": 10}
+
+
+func _shot(tower: StringName, spec: int, cell: Vector2i) -> Dictionary:
+	var targets: Array[int] = [4]
+	var at: Array[Vector2i] = [Vector2i(30000, 50000)]
+	return {"kind": &"fired", "cell": cell, "tower": tower, "spec": spec, "targets": targets, "at": at}
 
 
 func _events(kind: StringName, count: int) -> Array[Dictionary]:
@@ -71,11 +81,17 @@ func test_every_ui_sound_starts_a_voice() -> void:
 func test_unknown_events_and_ui_sounds_are_ignored() -> void:
 	var hostile: Array[Dictionary] = [
 		{}, {"kind": 5}, {"kind": &"no_such_kind"}, {"kind": "also_nothing"},
-		{"kind": &"fired"}, {"kind": &"fired", "tower": "x"}, {"kind": &"defeated", "id": "x"},
+		{"kind": &"fired"}, {"kind": &"fired", "tower": 5, "spec": "x", "cell": "x"},
+		{"kind": &"fired", "tower": &"no_such_tower", "spec": 99}, {"kind": &"defeated", "id": "x"},
 	]
 	service.play_events(hostile)
 	# Only the fired and defeated events are real kinds, so at most two sounds start.
 	assert_true(service.voice_count() <= 2)
+	assert_eq(service.voice_count(&"star"), 0)
+	assert_eq(AudioService.sound_for({"kind": &"fired", "tower": 5}), &"fired")
+	assert_eq(AudioService.sound_for({"kind": &"fired", "tower": &"no_such_tower", "spec": 99}), &"fired")
+	assert_eq(AudioService.sound_for({"kind": &"fired", "tower": &"sling_post", "spec": 99}), &"fired")
+	assert_eq(AudioService.sound_for({"kind": 5}), &"")
 	service.play_ui(&"no_such_ui")
 	service.play_ui(&"fired")
 	assert_eq(service.voice_count(&"star"), 0)
@@ -212,3 +228,62 @@ func test_mixer_buses_exist_and_the_sfx_bus_has_a_limiter() -> void:
 	assert_true(sfx >= 0)
 	assert_true(AudioServer.get_bus_index(AudioService.MUSIC_BUS) >= 0)
 	assert_true(AudioServer.get_bus_effect(sfx, 0) is AudioEffectLimiter)
+
+
+func test_fired_picks_the_shot_by_tower_and_path() -> void:
+	var catapult: StringName = AudioService.sound_for(_shot(&"pumpkin_catapult", -1, Vector2i(1, 1)))
+	var sling: StringName = AudioService.sound_for(_shot(&"sling_post", -1, Vector2i(1, 1)))
+	assert_eq(catapult, &"shot_pumpkin_catapult")
+	assert_eq(sling, &"fired")
+	assert_eq(AudioService.sound_for(_shot(&"sling_post", 0, Vector2i(1, 1))), &"shot_quickshot")
+	assert_eq(AudioService.sound_for(_shot(&"sling_post", 1, Vector2i(1, 1))), &"shot_stone_sling")
+	assert_eq(AudioService.sound_for(_shot(&"pumpkin_catapult", 1, Vector2i(1, 1))), &"shot_jam_pot")
+	service.play_events([_shot(&"pumpkin_catapult", -1, Vector2i(1, 1))] as Array[Dictionary])
+	assert_eq(service.voice_count(&"shot_pumpkin_catapult"), 1)
+	assert_eq(service.voice_count(&"fired"), 0)
+
+
+func test_two_towers_fired_events_pick_different_streams() -> void:
+	var a: StringName = AudioService.sound_for(_shot(&"sling_post", -1, Vector2i(0, 0)))
+	var b: StringName = AudioService.sound_for(_shot(&"pumpkin_catapult", -1, Vector2i(0, 0)))
+	assert_ne(a, b)
+	assert_ne(service._bank.stream(a).data, service._bank.stream(b).data)
+
+
+func test_every_tower_and_path_has_a_shot_stream() -> void:
+	var seen: Dictionary[StringName, bool] = {}
+	for tower: StringName in [&"sling_post", &"pumpkin_catapult", &"lullaby_bell", &"longbow_loft", &"firework_tower", &"bakery"]:
+		for spec: int in [-1, 0, 1]:
+			var sound: StringName = AudioService.sound_for(_shot(tower, spec, Vector2i(2, 2)))
+			assert_not_null(service._bank.stream(sound), "%s %d has no stream" % [tower, spec])
+			assert_true(AudioService.SHOT_IDS.has(sound), "%s %d: %s is not a shot" % [tower, spec, sound])
+			seen[sound] = true
+	# Five towers with three sounds each, and one shared Bakery sound.
+	assert_eq(seen.size(), 16)
+	assert_eq(AudioService.SHOT_IDS.size(), 16)
+
+
+func test_shot_pitch_spread_comes_from_the_cell() -> void:
+	var pitches: Dictionary[float, bool] = {}
+	for x: int in 7:
+		pitches[service._pitch_for(&"fired", _shot(&"sling_post", -1, Vector2i(x, 0)))] = true
+	assert_true(pitches.size() >= 4, "the spread is too narrow: %d" % pitches.size())
+	assert_eq(service._pitch_for(&"fired", {"kind": &"fired", "tower": &"sling_post"}), 1.0)
+
+
+func test_shots_of_every_tower_in_one_frame_stay_under_the_shot_cap() -> void:
+	var all: Array[Dictionary] = []
+	for tower: StringName in [&"sling_post", &"pumpkin_catapult", &"lullaby_bell", &"longbow_loft", &"firework_tower", &"bakery"]:
+		for spec: int in [-1, 0, 1]:
+			all.append(_shot(tower, spec, Vector2i(spec + 1, 2)))
+	var most: int = 0
+	for round_index: int in 6:
+		service.play_events(all)
+		var shots: int = 0
+		for sound: StringName in AudioService.SHOT_IDS:
+			shots += service.voice_count(sound)
+		most = maxi(most, shots)
+		assert_true(shots <= AudioService.MAX_SHOTS, "%d shots at once" % shots)
+		assert_true(service.voice_count() <= AudioService.VOICES)
+		OS.delay_msec(70)
+	assert_eq(most, AudioService.MAX_SHOTS, "the shot cap was never reached")

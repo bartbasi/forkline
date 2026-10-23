@@ -144,3 +144,11 @@ func test_threaded_bank_matches_the_static_recipes() -> void:
 	for track: StringName in SoundBank.TRACKS:
 		assert_eq(bank.stream(track).data, _track(track).data, track)
 	assert_null(bank.stream(&"no_such_sound"))
+
+
+func test_shot_sounds_differ_from_each_other() -> void:
+	var seen: Dictionary[PackedByteArray, StringName] = {}
+	for sound: StringName in AudioService.SHOT_IDS:
+		var data: PackedByteArray = SoundBank.render_effect(sound).data
+		assert_false(seen.has(data), "%s sounds the same as %s" % [sound, seen.get(data, &"")])
+		seen[data] = sound
