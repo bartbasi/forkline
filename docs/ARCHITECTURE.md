@@ -673,13 +673,13 @@ The UI turns every other refusal into plain feedback of its own.
 
 #### Events
 
-Each event is a Dictionary with `"kind"` and the fields below. Commands add events too, so render and audio handle everything in one place. Wave numbers are 0 based.
+Each event is a Dictionary with `"kind"` and the fields below. Commands add events too, so render and audio handle everything in one place. Wave numbers are 0 based. Events that render or audio must tell apart carry the ids they need: `fired` carries the tower id and its tier 3 path, because the paths fire different things (pebbles or a boulder, one rocket or a burst) and audio has no Battle to look them up.
 
 | kind | Fields |
 |---|---|
 | `&"wave_started"` | `wave: int`, `early: bool` |
 | `&"spawned"` | `id: int`, `enemy: StringName`, `pos: Vector2i` |
-| `&"fired"` | `tower: Vector2i`, `targets: Array[int]`, `at: Array[Vector2i]` (each target's position when hit) |
+| `&"fired"` | `cell: Vector2i` (the tower's cell), `tower: StringName` (the tower id), `spec: int` (-1 below tier 3), `targets: Array[int]`, `at: Array[Vector2i]` (each target's position when hit) |
 | `&"popped"` | `id: int` (a bubble popped) |
 | `&"defeated"` | `id: int`, `enemy: StringName`, `pos: Vector2i`, `gold: int` |
 | `&"healed"` | `id: int` (the Mender), `ids: Array[int]` |
@@ -901,7 +901,7 @@ The other screens are used only inside src/ui/, so their signals can change with
 
 App flow:
 
-1. **Launch.** `GameData.load_from()`. If it has problems, show the damaged message and stop. Load settings, progress and the saved games (an invalid one is deleted), and in phase 7 the daily record. Apply `UiTheme.build()`. Show the front door. Set `get_tree().quit_on_go_back = false`.
+1. **Launch.** `GameData.load_from()`. If it has problems, show the damaged message and stop. Load settings, progress and the saved games (an invalid one is deleted), and in phase 7 the daily record. Create the AudioService (3.8). Apply `UiTheme.build()`. Show the front door. Set `get_tree().quit_on_go_back = false`.
 2. **Play** opens ModeScreen. When any game is saved, the Continue card on top resumes the most recent one in one tap. A saved game also resumes from its own way in: the Roguelite or Daily button, or the saved level's card. Playing a different campaign level while one is saved asks first, then ends the saved level with nothing recorded. Roguelite and Daily stay locked until `runs_open()`, and in phase 5 they stay locked.
 3. **Battle.** A campaign level: `Battle.create(level, catalog, relaxed, effects)`, where `effects` is the level's `twist_effects` when playing its Twist and empty otherwise. A run or the daily (phase 7): `RunSession.start(...)`. Then `BattleScreen.setup()`. Every battle starts at 1x. A resumed game opens paused, on the Pause menu.
 4. **Saving.** On `save_requested` the App saves that mode's game. On `NOTIFICATION_APPLICATION_PAUSED`, `NOTIFICATION_APPLICATION_FOCUS_OUT` and `NOTIFICATION_WM_CLOSE_REQUEST` while a battle is open, it calls `battle_screen.pause()` if a wave is running, then saves. Settings and progress save when they change.
@@ -944,6 +944,10 @@ func play_events(events: Array[Dictionary]) -> void    # battle events to sounds
 func play_ui(sound: StringName) -> void                # &"tap", &"refuse" (RULES 7.4) or &"star"
 func set_music(track: StringName) -> void              # &"menu", &"battle", or &"" for silence
 ```
+
+- The App creates the service with `AudioService.new()`, adds it as its own child (no autoload), and calls `set_enabled(settings.sound_on)` once at boot, then again whenever the setting changes. It passes the service down with `setup()`.
+- AudioService makes its Sfx and Music buses at run time, so project.godot and the bus layout need nothing.
+- A shot's sound comes from the `fired` event's `tower` and `spec` (3.1).
 
 ### 3.9 Theme: src/theme/ (art-director)
 
