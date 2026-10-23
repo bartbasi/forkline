@@ -9,11 +9,20 @@
 # inside it, and the permissions in its manifest. It then checks that:
 #   1. the APK requests no permissions at all;
 #   2. only arm64-v8a native code is inside;
-#   3. LICENSE and NOTICE are inside, and tools, tests, docs, prototypes and
-#      scripts are not;
-#   4. every bundled third party part is credited in NOTICE and README.md.
+#   3. LICENSE, NOTICE and the font license (src/theme/fonts/OFL.txt) are
+#      inside, every file under data/ is inside (a note while data/ is empty),
+#      and tools, tests, docs, prototypes and scripts are not;
+#   4. the manifest has targetSdkVersion 36, portrait, resizeable, the
+#      configChanges that ARCHITECTURE 7.6 lists, appCategory game and
+#      allowBackup false;
+#   5. the launcher icons are Forkline's, not Godot's stock icon (each icon
+#      file differs from the one in Godot's export template);
+#   6. every bundled third party part is credited in NOTICE and README.md.
 # Exit code 0 means every check passed. 1 means a permission, a missing or
-# wrong file, or a missing tool. 2 means a bundled part is not credited.
+# wrong file or manifest value, or a missing tool. 2 means a bundled part is
+# not credited.
+# The Outfit font ships as Godot's imported font resource (assets/.godot/
+# imported/*.fontdata), not as a raw .ttf. That is expected.
 #
 # Needs aapt2 and dexdump from the Android SDK build-tools (C:\Android\Sdk, or
 # set ANDROID_SDK), and unzip.
@@ -75,14 +84,35 @@ if [ -n "$leaked" ]; then
 else
 	echo "None of tools/, tests/, docs/, prototypes/, scripts/ is inside."
 fi
-for f in assets/LICENSE assets/NOTICE; do
-	if printf '%s\n' "$entries" | grep -qx "$f"; then
+for f in assets/LICENSE assets/NOTICE assets/src/theme/fonts/OFL.txt; do
+	if printf '%s\n' "$entries" | grep -qxF "$f"; then
 		echo "$f is inside."
 	else
 		echo "FAIL: $f is missing from the APK."
 		failed=1
 	fi
 done
+
+echo
+echo "== Files under data/ =="
+data_files="$(cd "$root" 2> /dev/null && find data -type f ! -name '*.uid' 2> /dev/null | sort || true)"
+if [ -z "$data_files" ]; then
+	echo "Note: data/ has no files yet, so there is nothing to check. This check runs once it has."
+else
+	data_count=0
+	data_missing=0
+	while IFS= read -r f; do
+		[ -n "$f" ] || continue
+		data_count=$((data_count + 1))
+		if ! printf '%s\n' "$entries" | grep -qxF "assets/$f"; then
+			echo "FAIL: assets/$f is missing from the APK."
+			data_missing=1
+			failed=1
+		fi
+	done <<< "$data_files"
+	echo "$data_count file(s) under data/ checked."
+	[ "$data_missing" -eq 0 ] && echo "Every file under data/ is inside."
+fi
 
 echo
 echo "== Permissions in the manifest =="
@@ -100,6 +130,82 @@ elif [ -n "$perm_lines" ] || [ -n "$manifest_perms" ]; then
 	failed=1
 else
 	echo "None. The APK requests no permissions."
+fi
+
+echo
+echo "== Manifest values (ARCHITECTURE 7.6) =="
+manifest="$("$aapt2" dump xmltree --file AndroidManifest.xml "$apk" 2> /dev/null | tr -d '\r')"
+if [ -z "$manifest" ]; then
+	echo "FAIL: aapt2 could not read the manifest."
+	failed=1
+else
+	printf '%s\n' "$manifest" | grep -E 'android:(icon|appCategory|isGame|allowBackup|targetSdkVersion|screenOrientation|resizeableActivity|configChanges)\(' | sed 's/^ *//; s|http://schemas.android.com/apk/res/android:||'
+	# Prints the value of the first manifest attribute with this name.
+	manifest_value() {
+		printf '%s\n' "$manifest" | grep -m1 -E "android:$1\(" | sed 's/.*)=//; s/ (Raw:.*//'
+	}
+	expect_value() { # attribute, expected value, meaning
+		local got
+		got="$(manifest_value "$1")"
+		if [ "$got" = "$2" ]; then
+			echo "OK: $1 is $got ($3)."
+		else
+			echo "FAIL: $1 is '$got', expected $2 ($3)."
+			failed=1
+		fi
+	}
+	expect_value targetSdkVersion 36 "target API 36"
+	expect_value screenOrientation 1 "portrait"
+	expect_value resizeableActivity true "resizable"
+	expect_value appCategory 0 "game"
+	expect_value allowBackup false "no backup of saves"
+	changes="$(manifest_value configChanges)"
+	if [ -n "$changes" ] && [ $(( changes & 0x1d80 )) -eq $(( 0x1d80 )) ]; then
+		echo "OK: configChanges is $changes, it includes 0x1d80 (orientation, screenLayout, screenSize, smallestScreenSize, density)."
+	else
+		echo "FAIL: configChanges is '$changes', it must include 0x1d80."
+		failed=1
+	fi
+fi
+
+echo
+echo "== Launcher icons are Forkline's, not Godot's stock icon =="
+tpl_dir="${APPDATA:-}/Godot/export_templates/4.7.2.stable"
+command -v cygpath > /dev/null 2>&1 && tpl_dir="$(cygpath -u "$tpl_dir")"
+tpl="$tpl_dir/android_debug.apk"
+if [ ! -f "$tpl" ]; then
+	echo "FAIL: Godot's export template was not found at $tpl, so the icons cannot be compared."
+	failed=1
+else
+	icon_files="$(unzip -Z1 "$tpl" | grep -E '^res/mipmap-[a-z0-9-]+/icon(_background|_foreground|_monochrome)?\.webp$' || true)"
+	icon_count=0
+	icon_bad=0
+	while IFS= read -r f; do
+		[ -n "$f" ] || continue
+		icon_count=$((icon_count + 1))
+		mine="$(unzip -p "$apk" "$f" 2> /dev/null | md5sum | cut -d' ' -f1)"
+		stock="$(unzip -p "$tpl" "$f" | md5sum | cut -d' ' -f1)"
+		if ! printf '%s\n' "$entries" | grep -qxF "$f"; then
+			echo "FAIL: $f is missing from the APK."
+			icon_bad=1
+		elif [ "$mine" = "$stock" ]; then
+			echo "FAIL: $f is Godot's stock icon (md5 $stock)."
+			icon_bad=1
+		fi
+	done <<< "$icon_files"
+	if ! printf '%s\n' "$entries" | grep -qx 'res/mipmap-anydpi-v26/icon.xml'; then
+		echo "FAIL: res/mipmap-anydpi-v26/icon.xml (the adaptive icon) is missing."
+		icon_bad=1
+	fi
+	if [ "$icon_count" -eq 0 ]; then
+		echo "FAIL: no stock icon files were found in the template, so nothing was compared."
+		icon_bad=1
+	fi
+	if [ "$icon_bad" -eq 0 ]; then
+		echo "OK: all $icon_count launcher icon files differ from Godot's template, and the adaptive icon is present."
+	else
+		failed=1
+	fi
 fi
 
 echo
@@ -177,4 +283,4 @@ if [ "$uncredited" -ne 0 ]; then
 	echo "RESULT: a bundled part is not credited in NOTICE and README.md (see the table). Ask the DM to update NOTICE, README and About."
 	exit 2
 fi
-echo "RESULT: OK. No permissions, arm64-v8a only, every bundled part is credited."
+echo "RESULT: OK. No permissions, arm64-v8a only, manifest and launcher icons as expected, every bundled part is credited."
