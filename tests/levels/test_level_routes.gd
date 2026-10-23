@@ -1,0 +1,146 @@
+# Forkline. Copyright 2026 Play, Inc.
+# Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.
+extends "res://tests/base_test.gd"
+## Routes on the real maps (RULES 3.3, 7; docs/ARCHITECTURE.md 2.3, 4). Every entrance
+## reaches the base with no gates placed, and the walker route with no gate and with
+## each single gate is pinned, so a map edit that changes a route is noticed.
+
+const Files: GDScript = preload("res://tests/levels/fixtures/level_files.gd")
+
+## Per level: [gate socket or "none", steps, the walker route from entrance 1 to the base].
+## Steps are cells walked, so the route holds steps + 1 cells.
+const ROUTES: Dictionary = {
+	"r1_l1": [
+		["none", 16, "3,0 3,1 3,2 2,2 1,2 1,3 1,4 1,5 2,5 3,5 4,5 5,5 5,6 5,7 4,7 3,7 3,8"],
+	],
+	"r1_l2": [
+		["none", 9, "3,0 3,1 3,2 3,3 3,4 3,5 3,6 3,7 3,8 3,9"],
+		["3,3", 15, "3,0 3,1 3,2 4,2 5,2 6,2 6,3 6,4 6,5 6,6 6,7 6,8 5,8 4,8 3,8 3,9"],
+		["6,5", 9, "3,0 3,1 3,2 3,3 3,4 3,5 3,6 3,7 3,8 3,9"],
+	],
+	"r1_l3": [
+		["none", 9, "3,0 3,1 3,2 3,3 3,4 3,5 3,6 3,7 3,8 3,9"],
+		["3,2", 13, "3,0 3,1 2,1 1,1 1,2 1,3 1,4 2,4 3,4 3,5 3,6 3,7 3,8 3,9"],
+		["3,6", 15, "3,0 3,1 3,2 3,3 3,4 3,5 4,5 5,5 6,5 6,6 6,7 6,8 5,8 4,8 3,8 3,9"],
+	],
+	"r1_l4": [
+		["none", 12, "5,0 5,1 5,2 5,3 5,4 5,5 5,6 4,6 3,6 3,7 3,8 3,9 3,10"],
+		["5,3", 20, "5,0 5,1 5,2 4,2 3,2 2,2 1,2 1,3 1,4 2,4 3,4 4,4 5,4 5,5 5,6 4,6 3,6 3,7 3,8 3,9 3,10"],
+		["3,4", 12, "5,0 5,1 5,2 5,3 5,4 5,5 5,6 4,6 3,6 3,7 3,8 3,9 3,10"],
+		["3,7", 16, "5,0 5,1 5,2 5,3 5,4 5,5 5,6 4,6 3,6 2,6 1,6 1,7 1,8 2,8 3,8 3,9 3,10"],
+	],
+	"r1_l5": [
+		["none", 14, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 1,7 1,8 2,8 3,8 4,8 5,8 5,9 5,10"],
+		["1,3", 14, "1,0 1,1 2,1 3,1 3,2 3,3 3,4 3,5 4,5 5,5 5,6 5,7 5,8 5,9 5,10"],
+		["1,7", 14, "1,0 1,1 1,2 1,3 1,4 1,5 2,5 3,5 4,5 5,5 5,6 5,7 5,8 5,9 5,10"],
+		["5,7", 14, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 1,7 1,8 2,8 3,8 4,8 5,8 5,9 5,10"],
+	],
+	"r1_l6": [
+		["none", 13, "0,0 1,0 1,1 1,2 1,3 1,4 2,4 3,4 3,5 3,6 3,7 3,8 3,9 3,10"],
+		["1,2", 17, "0,0 1,0 2,0 3,0 4,0 5,0 5,1 5,2 5,3 5,4 4,4 3,4 3,5 3,6 3,7 3,8 3,9 3,10"],
+		["3,8", 17, "0,0 1,0 1,1 1,2 1,3 1,4 2,4 3,4 3,5 3,6 2,6 1,6 1,7 1,8 1,9 2,9 3,9 3,10"],
+		["5,8", 13, "0,0 1,0 1,1 1,2 1,3 1,4 2,4 3,4 3,5 3,6 3,7 3,8 3,9 3,10"],
+	],
+}
+
+var catalog: Catalog = null
+
+
+func before_each() -> void:
+	catalog = Files.catalog()
+
+
+func _levels() -> Array[LevelData]:
+	var out: Array[LevelData] = []
+	for id: String in Files.level_file_ids():
+		var level: LevelData = Files.level(id, catalog)
+		if level == null:
+			fail("%s does not load" % id)
+			continue
+		out.append(level)
+	return out
+
+
+func _socket_text(cell: Vector2i) -> String:
+	return "%d,%d" % [cell.x, cell.y]
+
+
+func test_every_level_has_pinned_routes() -> void:
+	var ids: Array = ROUTES.keys()
+	ids.sort()
+	assert_eq(PackedStringArray(ids), Files.level_file_ids(), "levels with pinned routes")
+
+
+func test_every_entrance_reaches_the_base_with_no_gates() -> void:
+	for level: LevelData in _levels():
+		var map: RoadMap = RoadMap.new(level)
+		var none: Array[Vector2i] = []
+		var dist: PackedInt32Array = map.distances(none)
+		assert_false(map.seals(none), "%s: no gate seals nothing" % level.id)
+		for i: int in level.entrances.size():
+			var path: Array[Vector2i] = map.route(level.entrances[i], dist)
+			assert_true(path.size() >= 2, "%s: entrance %d has an open route" % [level.id, i + 1])
+			if path.size() >= 2:
+				assert_eq(path[0], level.entrances[i], "%s: route starts at entrance %d" % [level.id, i + 1])
+				assert_eq(path[path.size() - 1], level.base, "%s: route from entrance %d ends at the base" % [level.id, i + 1])
+
+
+func test_routes_match_the_pinned_lines() -> void:
+	for level: LevelData in _levels():
+		var pinned: Array = ROUTES.get(String(level.id), [])
+		var map: RoadMap = RoadMap.new(level)
+		var expected_gates: Array[String] = ["none"]
+		for socket: Vector2i in level.sockets:
+			expected_gates.append(_socket_text(socket))
+		var pinned_gates: Array[String] = []
+		for row: Array in pinned:
+			pinned_gates.append(str(row[0]))
+		assert_eq(pinned_gates, expected_gates, "%s: pinned rows are no gate, then each socket in cell order" % level.id)
+		for row: Array in pinned:
+			var closed: Array[Vector2i] = []
+			var gate: String = str(row[0])
+			if gate != "none":
+				var parts: PackedStringArray = gate.split(",")
+				closed.append(Vector2i(int(parts[0]), int(parts[1])))
+			assert_false(map.seals(closed), "%s: gate %s seals no entrance" % [level.id, gate])
+			var path: Array[Vector2i] = map.route(level.entrances[0], map.distances(closed))
+			assert_eq(path.size() - 1, int(row[1]), "%s: steps with gate %s" % [level.id, gate])
+			assert_eq(Files.cells_text(path), str(row[2]), "%s: route with gate %s" % [level.id, gate])
+
+
+func test_battle_route_lines_show_the_same_routes() -> void:
+	for level: LevelData in _levels():
+		var battle: Battle = Battle.create(level, catalog, false, [])
+		assert_not_null(battle, "%s: battle" % level.id)
+		if battle == null:
+			continue
+		var map: RoadMap = RoadMap.new(level)
+		var sets: Array[Array] = []
+		var none: Array[Vector2i] = []
+		sets.append(none)
+		for socket: Vector2i in level.sockets:
+			var one: Array[Vector2i] = [socket]
+			sets.append(one)
+		for closed: Array[Vector2i] in sets:
+			var lines: Array[Dictionary] = battle.routes(closed)
+			assert_eq(lines.size(), level.entrances.size(), "%s: one route line per entrance" % level.id)
+			for i: int in mini(lines.size(), level.entrances.size()):
+				var walk: Array[Vector2i] = []
+				walk.assign(lines[i]["walk"])
+				var expected: Array[Vector2i] = map.route(level.entrances[i], map.distances(closed))
+				assert_eq(Files.cells_text(walk), Files.cells_text(expected), "%s: route line for entrance %d with %s closed" % [level.id, i + 1, closed])
+
+
+func test_every_gate_level_has_a_socket_that_changes_the_route() -> void:
+	for level: LevelData in _levels():
+		if level.gates == 0:
+			continue
+		var map: RoadMap = RoadMap.new(level)
+		var none: Array[Vector2i] = []
+		var open_route: String = Files.cells_text(map.route(level.entrances[0], map.distances(none)))
+		var changes: int = 0
+		for socket: Vector2i in level.sockets:
+			var closed: Array[Vector2i] = [socket]
+			if Files.cells_text(map.route(level.entrances[0], map.distances(closed))) != open_route:
+				changes += 1
+		assert_true(changes >= 1, "%s: some socket moves the route, so the gate is a real choice" % level.id)
