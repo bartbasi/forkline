@@ -252,7 +252,7 @@ Every number comes from RULES 4 to 6. Unknown keys are errors (they catch typos)
 | break_ms | A gate breaker (4.5) | 7.7 |
 | summon | `{"enemy", "count", "every_ms", "gap_ms"}`: the first time `every_ms` after it appears, then every `every_ms`, `count` creatures `gap_ms` apart | 6.3 |
 | speed_up | `{"at_pct": [75, 50, 25], "add": 10}`: the first time health falls to each percent, speed rises by `add` from the next tick | 6.3 |
-| release | `{"at_pct": 50, "enemy", "count", "gap_ms"}`: once, starting on the next tick | 6.3 |
+| release | `{"at_pct": 50, "enemy", "count", "gap_ms"}`: once, starting on the next tick, even if the same hit defeats it | 6.3 |
 
 `rules.json`, every key required:
 
@@ -333,7 +333,7 @@ Uses: **Twist** effects last the whole level. **card** effects last the rest of 
 | `refund_pct` | pct | card | Replaces rules.json `refund_pct` | 14.5 |
 | `cost_add` | build, upgrade | card | Added to every build price and every upgrade price, never below 10 | 14.6 |
 | `interest` | pct, max | card | At the start of each build phase, gain pct of unspent gold, rounded down, at most max | 14.6 |
-| `gates_stay` | none | card | Placed gates can no longer be moved or removed | 14.6 |
+| `gates_stay` | none | card | Each time a wave starts, every placed gate becomes fixed (RULES 14.6) | 14.6 |
 | `add_gates` | count | card, instant | Gain gates, never more than `max_gates` in all | 14.5, 14.6 |
 | `add_gold` | amount, per_wave | card, instant | Gain amount plus per_wave for each wave cleared so far | 14.5 |
 | `add_lives` | amount | card, instant | Gain lives | 14.5 |
@@ -432,7 +432,7 @@ Combat never uses randomness (RULES 8.1). A Battle has no random generator, and 
 
 - Towers act in spot order: row, then column (RULES 3.4). Creatures update in id order, which is spawn order. Any other tie goes to the lower id or the earlier cell. No rule iterates a Dictionary unless its keys were inserted in one of these orders.
 - Each tick runs RULES 8.1 in order: 1 spawns (groups in wave data order, waves in start order, then due Puffs and boss releases; each creature gets the next id), 2 timers (bubbles, slows, heals, break timers; a gate whose timer ends breaks now and distances are worked out again), 3 Bells, 4 movement (a creature at the base center is removed and costs its lives; at 0 lives the battle is lost and the tick ends), 5 towers (reload, targets, fire; hits land at once), 6 defeats (bounties, queued Puffs, boss health events for the next tick), 7 wave checks (clear bonus, win, or the next build phase). Then `tick += 1`.
-- A released creature (a Puff or a boss release) appears at the spot where its release began. A released walker finishes the step its releaser was on, then follows its own route.
+- A released creature (a Puff or a boss release) appears at the spot where its release began. A released walker finishes the step its releaser was on, then takes the shortest open route from there. A release that has begun always finishes, even if its releaser is defeated or gets through (RULES 6.2).
 
 #### Classes
 
@@ -673,7 +673,7 @@ The UI turns every other refusal into plain feedback of its own.
 
 #### Events
 
-Each event is a Dictionary with `"kind"` and the fields below. Commands add events too, so render and audio handle everything in one place. Wave numbers are 0 based. Events that render or audio must tell apart carry the ids they need: `fired` carries the tower id and its tier 3 path, because the paths fire different things (pebbles or a boulder, one rocket or a burst) and audio has no Battle to look them up.
+Each event is a Dictionary with `"kind"` and the fields below. Commands add events too, so render and audio handle everything in one place. Wave numbers are 0 based. Events that render or audio must tell apart carry the ids they need: `fired` carries the tower id and its tier 3 path, because the paths fire different things (pebbles or a boulder, one rocket or a burst) and audio has no Battle to look them up. Only attacking towers emit `fired`, once per shot. The Lullaby Bell and the Bakery never fire (RULES 5.1), and no other event stands in for them: in battle they make no sound of their own beyond `built`, `upgraded` and `sold`.
 
 | kind | Fields |
 |---|---|
@@ -748,7 +748,7 @@ Seeds:
 - Every other generator is seeded with `RunSeeds.derive(run_seed, tag, index)`, which is `("%d:%s:%d" % [run_seed, tag, index]).hash()`. Tags and indexes: `"map"` 0, `"boss"` 0, `"pack"` the band (1 to 6), `"draft"` the wave just cleared (1 to 17). A test pins a few values, so an engine change to `String.hash()` is caught. Only `randi()` and `randi_range()` are called on these generators.
 - So the map, the waves and each draft's random numbers depend only on the run seed (RULES 14.4). Picks change which cards are eligible, never the numbers drawn.
 
-Drafts (RULES 14.4): each of waves 1 to 17 owes a draft when it is cleared. Owed drafts open one at a time, in wave order, in the next build phase. While a draft is owed, the next wave cannot start: `RunSession.start_next_wave()` refuses with `&"draft_waiting"` in either phase. The pool is fixed at run start: the base cards plus the unlocked ones for a normal run, every card for the daily (RULES 15).
+Drafts (RULES 14.4): each of waves 1 to 17 owes a draft when it is cleared. Owed drafts open one at a time, in wave order, in the next build phase; a draft with no build phase after it never opens. While a draft is owed, the next wave cannot start: `RunSession.start_next_wave()` refuses with `&"draft_waiting"` in either phase, and the UI says "Pick your card after this wave." The pool is fixed at run start: the base cards plus the unlocked ones for a normal run, every card for the daily (RULES 15).
 
 ```gdscript
 class_name RunSeeds extends RefCounted                 # src/run/run_seeds.gd
@@ -902,7 +902,7 @@ The other screens are used only inside src/ui/, so their signals can change with
 App flow:
 
 1. **Launch.** `GameData.load_from()`. If it has problems, show the damaged message and stop. Load settings, progress and the saved games (an invalid one is deleted), and in phase 7 the daily record. Create the AudioService (3.8). Apply `UiTheme.build()`. Show the front door. Set `get_tree().quit_on_go_back = false`.
-2. **Play** opens ModeScreen. When any game is saved, the Continue card on top resumes the most recent one in one tap. A saved game also resumes from its own way in: the Roguelite or Daily button, or the saved level's card. Playing a different campaign level while one is saved asks first, then ends the saved level with nothing recorded. Roguelite and Daily stay locked until `runs_open()`, and in phase 5 they stay locked.
+2. **Play** opens ModeScreen. When any game is saved, the Continue card on top resumes the most recent one in one tap. A saved game also resumes from its own way in: the Roguelite or Daily button, or the saved level's card. Playing a different campaign level or Twist while one is saved asks first; a level and its own Twist count as different, since `SavedGame` has a `twist` flag. If the player confirms, the saved game ends as if abandoned from Pause, and nothing is recorded (RULES 4.10). Roguelite and Daily stay locked until `runs_open()`, and in phase 5 they stay locked.
 3. **Battle.** A campaign level: `Battle.create(level, catalog, relaxed, effects)`, where `effects` is the level's `twist_effects` when playing its Twist and empty otherwise. A run or the daily (phase 7): `RunSession.start(...)`. Then `BattleScreen.setup()`. Every battle starts at 1x. A resumed game opens paused, on the Pause menu.
 4. **Saving.** On `save_requested` the App saves that mode's game. On `NOTIFICATION_APPLICATION_PAUSED`, `NOTIFICATION_APPLICATION_FOCUS_OUT` and `NOTIFICATION_WM_CLOSE_REQUEST` while a battle is open, it calls `battle_screen.pause()` if a wave is running, then saves. Settings and progress save when they change.
 5. **End.** On `ended`: record the stars (`Progress.record_level`, or `record_twist` for a won Twist), the counters for a run or daily and the daily record for a daily (phase 7), delete that mode's saved game, save, and show EndPanel. An abandoned campaign level records nothing. An abandoned run or daily counts as lost at its current wave (RULES 14.7).
@@ -1040,7 +1040,7 @@ Nodes are road cells (`#`, `G`, `1` to `4`, `B`). Edges join orthogonal neighbor
 
 ### 4.6 Flyers
 
-A flyer flies straight from its entrance's cell center, or from where a boss released it, to the base's cell center. Its line length comes from `Sim.isqrt` once at spawn. Its position is `fly_from + (fly_to - fly_from) * flown / fly_length`, in integers.
+A flyer flies straight from its entrance's cell center, or from the spot where its release began (RULES 6.5), to the base's cell center. Its line length comes from `Sim.isqrt` once at spawn. Its position is `fly_from + (fly_to - fly_from) * flown / fly_length`, in integers.
 
 ### 4.7 Distance to the base, for targeting
 
@@ -1061,7 +1061,7 @@ First picks the smallest, Last the largest, and Strong the highest max health wi
  "fly": bool}                  # the next wave has flyers from this entrance
 ```
 
-- "The next wave" includes the Twist and a waiting risk card. With `gates_open` waiting, the `walk` lines ignore every gate, because that is where walkers will go.
+- "The next wave" includes the Twist and a waiting risk card. With `gates_open` waiting, the lines show every gate open: `walk` ignores the gates and `cracks` is empty (RULES 14.5).
 - The lines show during every build phase and hide during waves. The UI shows `routes(closed_cells())`. While a gate is dragged over a socket, it shows `routes()` for the would-be closed set; over a socket where `seals()` is true, it calls `MapView.show_refused()` instead.
 - The render draws `walk` solid, `break` dashed with a crack on each gate in `cracks`, and `fly` as a dotted straight line from the entrance to the base (`MapArt.Route`).
 
@@ -1415,5 +1415,4 @@ The roguelite-engineer builds nothing for region 1. Its first task is phase 7: s
 
 ## 12. Open questions
 
-1. **Iron Gate (game designer, phase 7).** RULES 14.6 says "From now on a placed gate can never be moved or removed." The contract's `gates_stay` also locks the gates already placed when the card is taken. Is that the rule, or does it lock only gates placed afterwards?
-2. **The font file in the APK (DM).** CLAUDE.md says Outfit[wght].ttf and OFL.txt ship unmodified, side by side. With Godot's font import, the APK holds the imported font (the TTF's bytes unchanged, inside Godot's resource) and OFL.txt as a plain file, but not the raw .ttf file. Is that enough? If the raw file must ship too, the art director sets the font's import to "Keep File" and loads it with `FontFile.load_dynamic_font()`, and 7.6 adds it to the include filter.
+1. **The font file in the APK (DM).** CLAUDE.md says Outfit[wght].ttf and OFL.txt ship unmodified, side by side. With Godot's font import, the APK holds the imported font (the TTF's bytes unchanged, inside Godot's resource) and OFL.txt as a plain file, but not the raw .ttf file. Is that enough? If the raw file must ship too, the art director sets the font's import to "Keep File" and loads it with `FontFile.load_dynamic_font()`, and 7.6 adds it to the include filter.
