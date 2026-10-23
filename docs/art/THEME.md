@@ -1,192 +1,265 @@
 # Forkline theme: the dusk storybook
 
-Art director, 2026-10-23. Phase 3, for hard stop A. The slice code in `prototypes/theme/` is thrown away after hard stop A. The look, the tokens and the lessons on this page carry forward into `src/theme/` in phase 4.
+Art director. Phase 3 slice approved at hard stop A (2026-10-23). This page now describes the design system in `src/theme/`, built in phase 4. Names are in [NAMES.md](NAMES.md); code uses only ids until Bart has seen that list.
 
 ## The idea
 
-A hillside village at dusk, drawn like a picture book: flat shapes, soft dusk colors, and one dark ink outline around everything. The sky fades from deep indigo to apricot. Lanterns are the warm points of light. The night creatures come out of a dark thicket at the top of the hill, cool colored with glowing eyes, and walk the sandy road down to the hearth hall at the bottom. When one is beaten it puffs into a little cloud and sparkles. Nothing bleeds and nothing dies on screen.
-
-The road forks below the thicket and joins again above the village. That fork is the game, so the map shows it plainly: two sandy roads on dark grass, a moonlit dashed route line with arrows on the road the creatures will take, and a glowing ring where the gate can go. When the gate closes, the route line flashes and redraws down the other road.
+A hillside village at dusk, drawn like a picture book: flat shapes, soft dusk colors, and one dark ink outline around everything. The sky fades from deep indigo to apricot. Lanterns are the warm points of light. The night creatures come out of a dark thicket at the edge of the map, cool colored with glowing eyes, and walk the sandy road to the hearth hall. When one is beaten it puffs into sparkles. Nothing bleeds and nothing dies on screen.
 
 Three rules hold the look together:
 
-1. **Warm is ours, cool is theirs.** Towers, lanterns, the village and the HUD's gold and honey accents are warm. Creatures are periwinkle, mint, slate and lilac. A player can tell sides apart at a glance, and the shape tells the rest.
-2. **Ink outlines on everything that matters.** Towers, creatures and the gate all have a dark ink line (`INK_LINE`). That outline is what keeps a periwinkle creature readable on a sandy road (9.79:1), so contrast never depends on the fill color.
-3. **Shape before color.** Every tower and creature has one signature shape that survives being filled with a single flat color (see the silhouette sheet).
+1. **Warm is ours, cool is theirs.** Towers, lanterns, the village and the HUD's honey accents are warm. Creatures are periwinkle, mint, slate, lilac and teal.
+2. **Ink outlines on everything that matters.** Towers, creatures and gates have one `INK_LINE` outline, so contrast never depends on a fill color.
+3. **Shape before color.** Every tower and creature has one signature shape that survives being filled with one flat color. A test checks it.
 
-## Run the slice
+## The files
 
-- Phone build: the DM sets `run/main_scene="res://prototypes/theme/slice.tscn"` (see the report for the export filter change it also needs).
-- Windows: `godot --path . res://prototypes/theme/slice.tscn`. Resize the window to see the layout switch.
-- Screenshots: `bash prototypes/theme/screenshots.sh` writes every image on this page.
-- Contrast check: `godot --headless --path . --script res://prototypes/theme/contrast.gd` (exit 0 means every pair passes).
-
-What you can do in the slice: tap the glowing ring on the short road to drop the gate (and tap again to lift it), pick a tower card and tap an empty stone to build, tap a tower to see its range and job, start waves, pause, change speed, and cycle the font button. Gates lock while a wave runs. The four waves loop with tougher creatures.
-
-## Layout: portrait and landscape by window shape
-
-| Portrait (phones, Fold5 cover screen) | Fold5 inner screen shape | Wide window |
+| File | Class | What it gives |
 |---|---|---|
-| ![portrait](slice_portrait.png) | ![fold inner](slice_fold_inner.png) | ![wide](slice_wide.png) |
-| 540 x 1200 window | 906 x 1088 window | 1280 x 720 window |
+| src/theme/palette.gd | `Palette` | Color tokens, the text and graphic pairs, `contrast()` |
+| src/theme/ui_theme.gd | `UiTheme` | `build() -> Theme`, `font(weight)`, font sizes |
+| src/theme/silhouettes.gd | `Silhouettes` | `draw_tower`, `draw_enemy`, `enemy_size`, status marks, HUD glyphs, the id lists |
+| src/theme/map_art.gd | `MapArt` | Meadow, roads, spots, sockets, gates, the base, entrances, route lines, highlights |
+| src/theme/wordmark.gd | `Wordmark` | The wordmark as a Control, and `draw_into()` for any canvas |
+| src/theme/icon_art.gd | `IconArt` | The launcher and store icon: `paint()`, and `draw()` / `draw_layer()` as Images |
+| src/theme/ink_pen.gd | `InkPen` | The drawing helper behind all of the above. Internal to src/theme/ |
+| src/theme/fonts/ | | `Outfit[wght].ttf` and `OFL.txt`, unmodified |
+| tools/icon/make_icon.gd | | Writes the launcher PNGs into icons/ |
+| tools/icon/art_review.gd | | Writes every review image on this page |
+| tests/theme/ | | Contrast, silhouettes, map helpers, UI theme and font, launcher icons |
 
-- The slice reads only the window size. Width divided by height of 0.8 or more uses the landscape layout. The Fold5 inner screen held upright is about 0.83, so it gets landscape on its own, with no setting. Normal phones are about 0.45.
-- Portrait: the read-only numbers (lives, gold, wave) sit at the top. Everything the thumb presses sits at the bottom: the hint line, six tower cards, then Pause, Speed and Start wave.
-- Landscape: one column on the right holds the same parts, with Start wave at the bottom right under the thumb.
-- The map is defined once in map units. Portrait always flows down. Landscape flows down or across, whichever draws the map bigger (across on a 16:9 window). Buildings always stand upright, so only positions move. Because the game state is in map units, a layout change mid-wave loses nothing.
-- Touch targets: 150 viewport units, and never less than 50 dp (the slice measures dp from the screen's dpi and prints it). On the Fold5 cover screen 150 units is about 50 dp; on the inner screen about 58 dp.
-
-The build phase, with the Watch post card picked (pads glow honey) and the gate ring glowing on the short road:
-
-![build phase](slice_portrait_build.png)
+Everything is drawn with Godot's canvas calls. There are no image, texture or shader files. src/theme/ uses nothing outside Godot's core types.
 
 ## Palette tokens
 
-All colors live in `prototypes/theme/palette.gd`. Values are original, picked for this page.
+All tokens are constants on `Palette`. Values are original, picked for Forkline.
 
-| Token | Hex | Use |
-|---|---|---|
-| SKY_TOP | `#1e1a3c` | night sky, caption band |
-| SKY_MID | `#4b3767` | dusk plum |
-| SKY_LOW | `#b8676d` | rose near the hills |
-| SKY_GLOW | `#f0ad7c` | apricot horizon |
-| MOON / STAR | `#fff1c9` / `#fff6e0` | moon, stars, wave icon |
-| HILL_FAR / HILL_MID / HILL_NEAR | `#4a4775` / `#35506b` / `#253e45` | far hills and the ground off the map |
-| MEADOW / MEADOW_LIGHT / MEADOW_DARK | `#3f644b` / `#52775a` / `#33543f` | map grass, patches, tufts |
-| ROAD / ROAD_EDGE / ROAD_DOT | `#e2c18e` / `#8a6548` / `#cba774` | sandy road, its border, cobbles |
-| ROUTE | `#fff4cc` | route line core (inside an ink casing) |
-| PAD / PAD_EDGE | `#d0c6b3` / `#8c8274` | stone build pads |
-| LANTERN / LANTERN_CORE / GLOW | `#ffc65c` / `#fff3c2` / `#ffa94a` | lantern light, windows, glows |
-| PLASTER / PLASTER_SHADE / TIMBER / WOOD | `#f1e2c4` / `#cdb796` / `#6a4836` / `#94633f` | cottage walls and beams |
-| ROOF_CLAY / ROOF_SLATE / ROOF_MOSS / ROOF_PLUM | `#b9573f` / `#50607f` / `#71844a` / `#7c4b73` | roofs |
-| STONE / STONE_DARK | `#aaa192` / `#7a7266` | Lookout, chimneys |
-| TREE / TREE_DARK | `#3d6450` / `#2a4a3e` | trees, thicket |
-| INK_LINE | `#211a2e` | every outline, text outlines |
-| CREATURE_BASIC / FAST / ARMOR / ARMOR_SHELL / SWARM | `#8a93d8` / `#62c8b3` / `#8d97a8` / `#5f6880` / `#bf96e8` | night creatures |
-| EYE / SPARKLE / SPARKLE_LILAC / FLOUR / SMOKE | `#f4fff6` / `#fff6d6` / `#d5c2ff` / `#e8f0ff` / `#c9c0dc` | eyes, puffs, slow effect |
-| PANEL / PANEL_RAISED / PANEL_EDGE | `#2a2140` / `#3d3159` / `#6a5a8c` | HUD panels and buttons |
-| CARD / CARD_DIM | `#f4e6cb` / `#cfc3ad` | tower cards (dim when gold is short) |
-| TEXT_LIGHT / TEXT_DARK / TEXT_MUTED | `#f7ebd3` / `#2a2033` / `#5a4760` | text |
-| HONEY / HEART / COIN | `#f2b544` / `#e8697d` / `#ffd166` | primary button, lives, gold |
-| HP_BACK / HP_FILL | `#2a2140` / `#a6e39a` | creature health bar |
+| Group | Tokens |
+|---|---|
+| Sky | `SKY_TOP #1e1a3c`, `SKY_MID #4b3767`, `SKY_LOW #b8676d`, `SKY_GLOW #f0ad7c`, `MOON #fff1c9`, `STAR #fff6e0`, `HILL_FAR #4a4775`, `HILL_MID #35506b`, `HILL_NEAR #253e45` |
+| Map | `MEADOW #3f644b`, `MEADOW_LIGHT #52775a`, `MEADOW_DARK #33543f`, `ROAD #e2c18e`, `ROAD_EDGE #8a6548`, `ROAD_DOT #cba774`, `ROUTE #fff4cc`, `PAD #d0c6b3`, `PAD_EDGE #8c8274`, `THICKET #16122a` |
+| Buildings | `LANTERN #ffc65c`, `LANTERN_CORE #fff3c2`, `GLOW #ffa94a`, `PLASTER #f1e2c4`, `PLASTER_SHADE #cdb796`, `TIMBER #6a4836`, `WOOD #94633f`, `ROOF_CLAY #b9573f`, `ROOF_SLATE #50607f`, `ROOF_MOSS #71844a`, `ROOF_PLUM #7c4b73`, `STONE #aaa192`, `STONE_DARK #7a7266`, `IRON #4b4f63`, `PUMPKIN #e8873a`, `JAM #a8325a`, `TREE #3d6450`, `TREE_DARK #2a4a3e`, `INK_LINE #211a2e`, `SMOKE #c9c0dc`, `SHADOW` (ink at 28%) |
+| Creatures | `CREATURE_BASIC #8a93d8`, `CREATURE_FAST #62c8b3`, `CREATURE_ARMOR #8d97a8`, `CREATURE_ARMOR_SHELL #5f6880`, `CREATURE_SWARM #bf96e8`, `CREATURE_FLY #6fa8c9`, `CREATURE_BUBBLE #7fd3e3`, `CREATURE_PUFF #b9b4dc`, `CREATURE_MEND #7cbf9a`, `CREATURE_MEND_CAP #6b78c4`, `CREATURE_BRUTE #6d72b3`, `CREATURE_MOTH #8077ad`, `BOSS_SACK #9a8fcf`, `BOSS_SHELL #4c5470`, `BOSS_MOON #b9c6f4`, `BOSS_TUSK #7a80a8`, `BONE #efe6d2`, `EYE #f4fff6`, `SPARKLE #fff6d6`, `SPARKLE_LILAC #d5c2ff`, `FLOUR #e8f0ff`, `BUBBLE #dff6ff` |
+| Interface | `PANEL #2a2140`, `PANEL_RAISED #3d3159`, `PANEL_HOVER #4a3d6b`, `PANEL_EDGE #8a79ad`, `CARD #f4e6cb`, `CARD_DIM #cfc3ad`, `TEXT_LIGHT #f7ebd3`, `TEXT_SOFT #c9bcd9`, `TEXT_DARK #2a2033`, `TEXT_MUTED #5a4760`, `HONEY #f2b544`, `HONEY_PRESSED #d99a2b`, `HEART #e8697d`, `COIN #ffd166`, `HP_BACK #2a2140`, `HP_FILL #a6e39a` |
 
-### Contrast, checked by script
+Changed since the slice: `PANEL_EDGE` went from `#6a5a8c` to `#8a79ad`, because the panel border was only 2.48:1 against the panel. New tokens cover the new creatures, the pumpkin and jam, iron, the thicket, and the UI states the slice did not have.
 
-`prototypes/theme/contrast.gd` uses the WCAG 2 formula. Text pairs need 4.5:1. Graphic pairs (icons, outlines, the route line, pads) need 3:1. Output on 2026-10-23:
+### Contrast, checked by test
+
+tests/theme/test_contrast.gd replaces the slice's contrast script. It uses the WCAG 2 formula and fails the build if any text pair is under 4.5:1 or any graphic pair under 3:1. It checks the listed pairs in `Palette.text_pairs()` and `Palette.graphic_pairs()`, and it also checks every text color the UI theme really uses: each button variation in each state against its stylebox, and each label variation against every background it may sit on. Output on 2026-10-23:
 
 ```
 Text pairs (need 4.5:1)
-  ok    12.79:1  TEXT_LIGHT on PANEL          #f7ebd3 on #2a2140  (HUD numbers, hint line, toasts)
-  ok     9.98:1  TEXT_LIGHT on PANEL_RAISED   #f7ebd3 on #3d3159  (pause, speed and font buttons)
-  ok     8.48:1  TEXT_DARK on HONEY           #2a2033 on #f2b544  (Start wave button)
-  ok    12.59:1  TEXT_DARK on CARD            #2a2033 on #f4e6cb  (tower card names)
-  ok     6.80:1  TEXT_MUTED on CARD           #5a4760 on #f4e6cb  (tower card costs)
-  ok     8.92:1  TEXT_DARK on CARD_DIM        #2a2033 on #cfc3ad  (card name when gold is short)
-  ok     4.82:1  TEXT_MUTED on CARD_DIM       #5a4760 on #cfc3ad  (card cost when gold is short)
-  ok    14.02:1  TEXT_LIGHT on SKY_TOP        #f7ebd3 on #1e1a3c  (titles on the night sky)
-  ok    11.63:1  COIN on INK_LINE             #ffd166 on #211a2e  (floating +gold, drawn with an ink outline)
-  ok    14.20:1  TEXT_LIGHT on INK_LINE       #f7ebd3 on #211a2e  (map labels with an ink outline)
+  12.79:1  TEXT_LIGHT on PANEL         HUD numbers, hints, panels, toasts
+   8.40:1  TEXT_SOFT on PANEL          secondary text on panels
+   9.98:1  TEXT_LIGHT on PANEL_RAISED  buttons
+   8.19:1  TEXT_LIGHT on PANEL_HOVER   a button while pressed or hovered
+   6.55:1  TEXT_SOFT on PANEL_RAISED   secondary text on buttons, a disabled button
+   8.48:1  TEXT_DARK on HONEY          the primary button (Start wave, Play)
+   6.36:1  TEXT_DARK on HONEY_PRESSED  the primary button while pressed
+  12.59:1  TEXT_DARK on CARD           tower cards, info cards
+   6.80:1  TEXT_MUTED on CARD          costs and small lines on cards
+   8.92:1  TEXT_DARK on CARD_DIM       a card when gold is short
+   4.82:1  TEXT_MUTED on CARD_DIM      a cost when gold is short
+  14.02:1  TEXT_LIGHT on SKY_TOP       titles on the night sky
+  14.20:1  TEXT_LIGHT on INK_LINE      map labels with an ink outline
+  11.63:1  COIN on INK_LINE            floating gold with an ink outline
+   8.25:1  HONEY on PANEL              highlighted numbers on panels
+  13.60:1  CARD on INK_LINE            the wordmark letters in their ink outline
 Graphic pairs (need 3.0:1)
-  ok     3.91:1  ROAD on MEADOW               #e2c18e on #3f644b  (road against grass)
-  ok     9.79:1  INK_LINE on ROAD             #211a2e on #e2c18e  (creature and gate outlines on the road)
-  ok     9.91:1  INK_LINE on PAD              #211a2e on #d0c6b3  (tower outlines on their build pad)
-  ok     5.23:1  PLASTER on MEADOW            #f1e2c4 on #3f644b  (cottage walls against grass)
-  ok     3.31:1  INK_LINE on MEADOW_LIGHT     #211a2e on #52775a  (outlines on the lightest grass)
-  ok    15.23:1  ROUTE on INK_LINE            #fff4cc on #211a2e  (route dash core inside its ink casing)
-  ok     3.96:1  PAD on MEADOW                #d0c6b3 on #3f644b  (empty build pad on grass)
-  ok     4.85:1  HEART on PANEL               #e8697d on #2a2140  (lives icon)
-  ok    10.48:1  COIN on PANEL                #ffd166 on #2a2140  (gold icon)
-  ok    13.44:1  MOON on PANEL                #fff1c9 on #2a2140  (wave icon)
-  ok     8.25:1  HONEY on PANEL               #f2b544 on #2a2140  (Start wave button edge)
-  ok    12.25:1  CARD on PANEL                #f4e6cb on #2a2140  (tower card edge)
-  ok    10.77:1  LANTERN on INK_LINE          #ffc65c on #211a2e  (lantern windows in their frames)
-  ok    10.13:1  HP_FILL on HP_BACK           #a6e39a on #2a2140  (creature health bar)
-0 failing pairs.
+   3.91:1  ROAD on MEADOW              road against grass
+   3.04:1  ROAD_EDGE on ROAD           the road's border
+   9.79:1  INK_LINE on ROAD            creature and gate outlines on the road
+   9.91:1  INK_LINE on PAD             tower outlines on their build spot
+   3.31:1  INK_LINE on MEADOW_LIGHT    outlines on the lightest grass
+   3.96:1  PAD on MEADOW               an empty build spot on grass
+   5.23:1  PLASTER on MEADOW           cottage walls against grass
+  15.23:1  ROUTE on INK_LINE           route line core inside its ink casing
+   6.08:1  ROUTE on MEADOW             a flyer's dotted line over grass
+   4.85:1  HEART on PANEL              lives icon
+  10.48:1  COIN on PANEL               gold icon
+  13.44:1  MOON on PANEL               wave icon
+   8.25:1  HONEY on PANEL              primary button edge, selection ring
+  12.25:1  CARD on PANEL               tower card edge
+   3.90:1  PANEL_EDGE on PANEL         panel border
+   9.16:1  INK_LINE on HONEY           primary button border
+  10.77:1  LANTERN on INK_LINE         lantern windows in their frames
+  10.13:1  HP_FILL on HP_BACK          creature health bar
+  14.99:1  BUBBLE on INK_LINE          a Bubbler's bubble ring in its casing
+  14.65:1  FLOUR on INK_LINE           the drowsy mark in its casing
+   5.39:1  HEART on INK_LINE           the refused gate cross in its casing
+  16.36:1  EYE on INK_LINE             creature eyes
 ```
 
-Text always sits on an opaque panel or has an ink outline, so these pairs are the real ones. Two pairs failed on the first run (road and pads on a lighter meadow); the meadow was darkened and the road and pads lightened until they passed.
+Three more graphic pairs repeat ratios shown above: `INK_LINE on ROUTE` (15.23), `TEXT_LIGHT on PANEL_RAISED` for button icons (9.98) and `TEXT_DARK on CARD` for card silhouettes (12.59). Text always sits on an opaque panel or has an ink outline, so these pairs are the real ones. A test also checks that every panel stylebox is opaque.
 
-## Font: Outfit, System, or Both
+## Type and the UI theme
 
-The round button at the top right (bottom right in landscape) cycles three modes, so Bart can compare in his hand:
+Outfit everywhere, as Bart picked. `UiTheme.font(weight)` returns one shared `FontVariation` per weight: 450 for body text, 650 for numbers, buttons and titles, 800 for the wordmark. Sizes are logical pixels on the 1080 wide base; on the Fold5 cover one dp is about 3.1 of them.
 
-- **Outfit**: Outfit everywhere (numbers and buttons at weight 650, hints at 450).
-- **System**: the phone's own sans serif (Roboto on most Android phones) everywhere.
-- **Both**: Outfit for numbers, titles and buttons; the system font for hints and small labels.
-
-| Outfit | System | Both |
+| Constant | Size | About, on the cover |
 |---|---|---|
-| ![outfit](slice_portrait.png) | ![system](slice_font_system.png) | ![both](slice_font_both.png) |
+| `FONT_SMALL` | 40 | 13 dp |
+| `FONT_BODY` (theme default) | 46 | 15 dp |
+| `FONT_BUTTON` | 52 | 17 dp |
+| `FONT_TITLE` | 76 | 24 dp |
+| `FONT_HUGE` | 112 | 36 dp |
 
-Art director's lean: **Outfit**, or Both. Outfit's round, even strokes match the soft storybook shapes and make the numbers friendly; the system font reads a little office-like next to the art. The slice copies `Outfit[wght].ttf` and `OFL.txt` unmodified into `prototypes/theme/fonts/` (MD5 `e31a3aa5fce3366bcadb8e9027f26178` and `fc7bcc2f3d37195db3ea982ccfecd531`, matching the playbook's copies). If Bart picks System, those two files go away with the slice.
+`UiTheme.build()` returns a Theme with these type variations (set with `theme_type_variation`):
 
-## Silhouette sheet
+- `Button`: dark raised button, light text, honey border while pressed.
+- `PrimaryButton`: honey, dark text (Play, Start wave). `CardButton`: cream card, dark text (tower and mode cards). `QuietButton`: no fill, soft text (the quiet coffee row in Pause).
+- `PanelContainer` and `Panel`: the dark panel. `CardPanel`: the cream card.
+- `Label`: light text for dark panels. `TitleLabel`, `SoftLabel`, `CardLabel`, `CardMutedLabel`.
+- Touch only, so no focus ring after a tap. Disabled buttons keep readable text and also look flat (no shadow), so "disabled" is not shown by color alone. The theme cannot set button heights: the UI engineer keeps every touch target at `Layout.MIN_TOUCH`.
+
+## Silhouettes
 
 ![silhouettes](silhouettes.png)
 
-Each tower is a lantern-lit building with one signature shape. The bottom row of each pair is the same drawing in one flat color.
+Each tower is a lantern-lit building with one signature shape. Each creature has one body shape. The flat rows are the same drawings in one color.
 
-| Tower (tier 1) | Job | Signature shape |
+| Tower | Signature shape |
+|---|---|
+| `sling_post` | Plank cabin on X-braced stilts, steep peaked roof: a tall "A" |
+| `pumpkin_catapult` | Low gabled shed with a catapult arm rising to one side, a pumpkin in its cup |
+| `lullaby_bell` | Small chapel with an open round arch on top, a bell in it, a crescent moon on the peak |
+| `longbow_loft` | Stone column with battlements and a wide bow across the top: a "T" |
+| `firework_tower` | Low cottage with a fan of three finned rockets: a spiky crown |
+| `bakery` | Beehive dome oven with a tall chimney and a glowing mouth |
+
+| Creature | Signature shape |
+|---|---|
+| `scamp` | Round fuzzy ball with two pointed ears |
+| `pip` | Tiny bead with two antennae |
+| `skitter` | Long-eared runner mid-leap |
+| `flitter` | Round body with scalloped bat wings |
+| `shellback` | Wide dome shell with a small head |
+| `bubbler` | Squat body holding up a bubble wand (an open ring) |
+| `puffball` | Big scalloped cloud with a sprout and feet |
+| `puff` | Small round fluff with seven bumps, no sprout |
+| `mender` | Wide mushroom cap and a leafy staff |
+| `gatecrasher` | Stocky bruiser with two horns making a "U" above its head |
+| `dusk_moth` | Moth with wide plated wings and feathered antennae |
+| `grumblesack` | Huge sack tied at the top |
+| `ironshell` | Huge shell with three tall plates |
+| `moon_moth` | Huge pale moth with long tail streamers |
+| `old_tusk` | Big shaggy beast with two long tusks from its snout |
+
+### How each drawing sits
+
+- **Towers.** `center` is the cell center and `size` the cell side. The building's ground line is at `center.y + 0.30 * size`, on its build spot. It stays within 0.52 of the cell each side and reaches at most 0.85 of a cell above the center, so a tall tower covers the lower part of the cell above. Draw towers and creatures in row order (lower rows last), as the review images do.
+- **Creatures.** `center` is the creature's position, `size` its drawing box from `Silhouettes.enemy_size(type, cell)`. Walkers stand with their feet at `center.y + 0.36 * size`, facing right; flip the node to face left. `frame` steps a 4 frame walk or flap cycle.
+- **Flyers** (`flitter`, `dusk_moth`, `moon_moth`) hover above a separate shadow. Walkers' shadows touch their feet. So flying never shows by color alone.
+- **Sizes on the Fold5 cover** (cell about 49 dp): Pip and Puff 20 dp, Scamp 28 dp, Shellback 35 dp, Gatecrasher 37 dp, bosses 57 to 59 dp. That is 10 to 20 percent bigger than the slice, as its risk list asked.
+
+![at true size](cover_actual_size.png)
+
+At true size on the cover screen (one cell is 129 screen pixels). Every shape still reads, in color and flat.
+
+### Tiers and paths: one rule
+
+![tiers](tiers.png)
+
+- Tier 1 is the plain building.
+- Each tier above 1 adds one stone step under the building: tier 2 has one, tier 3 has two. The building stands higher and its base gets wider.
+- At tier 3 the path replaces the tower's signature piece: the roof, the catapult load, the bell top, the bow, the rockets or the chimney. The building below never changes, so a Quickshot is still clearly a Sling Post.
+- Path A is spec 0 and path B is spec 1, in the order RULES.md lists them.
+
+### Checked by test
+
+tests/theme/test_silhouettes.gd records each drawing headless and checks that:
+
+- every tower at tier 1, tier 2 and both paths, and every creature and boss in all 4 frames, draws and stays inside its box;
+- a flat drawing uses exactly one color;
+- tiers and paths change the shape;
+- no two towers, no two creatures and no two bosses overlap more than 0.8 by shape (intersection over union of coarse masks). The closest pairs today: Pumpkin Catapult and Bakery 0.72, Shellback and Gatecrasher 0.71, Grumblesack and Ironshell 0.71, Pip and Puff 0.61;
+- once data/stats/ exists, every tower, spec and creature id in it has a silhouette, with the specs in the same order.
+
+## Signals that never rely on color
+
+![map pieces](map_pieces.png)
+
+| Signal (RULES.md 9.7) | Shape |
+|---|---|
+| Walkers' route | Solid line with arrows (`MapArt.Route.WALK`) |
+| Gate breakers' route | Dashed line with arrows (`Route.BREAK`) |
+| Flyers' route | Dotted straight line (`Route.FLY`) |
+| Open socket | Dashed ring and a ghost gate, two stone post stubs on the road edges |
+| Closed gate | Wooden gate with two lantern posts and a plank across the road |
+| Fixed gate (twist) | Closed gate with a padlock |
+| Broken gate | Two halves hanging open, a zigzag crack |
+| Refused placement | Ghost gate crossed out with a big X |
+| Slowed creature | `draw_drowsy`: a "z z" mark |
+| Bubble up | `draw_bubble`: a ring around the Bubbler |
+| Boosted tower | `draw_boost`: a double chevron |
+| Hint, selection, free spot | `draw_highlight`: a honey ring |
+| Flying | A shadow apart from the body |
+| Unaffordable card | Flat card (no shadow) and dim; its cost stays readable |
+
+## The look on the grid
+
+The slice drew free curved roads. The contract puts maps on a 7 column grid with rounded roads through the cell centers. This is a 7 x 13 map with two forks, two gate sockets (one closed, one open) and eleven build spots, drawn only with src/theme/ code, at the Fold5 cover screen's logical size (1080 x 2767), shown at half size:
+
+| A wave | The build phase | Fold5 inner screen shape (1998 x 2400) |
 |---|---|---|
-| Watch post | rapid single target | small cabin up on splayed stilts with an X brace, steep roof and pennant: a tall "A" |
-| Bakehouse | splash | wide low beehive dome with an offset chimney; lobs glowing embers that burst |
-| Flour mill | slows | four turning sails: a big "X"; puffs of flour make creatures drowsy |
-| Lookout | long range, pierces armor | the tallest: a stone column with a wide bow on top: a "T"; the bow tilts toward its target |
-| Firework loft | anti air | low box cottage with a fan of three finned rockets: a spiky crown |
-| Lantern cottage | boosts neighbors | low gabled cottage beside a tall crook holding a big lantern: a "?" shape |
+| ![grid portrait](grid_portrait.png) | ![grid build](grid_portrait_build.png) | ![grid inner](grid_fold_inner.png) |
 
-| Creature | Kind | Signature shape |
-|---|---|---|
-| Nightling | basic | round fuzzy ball with two pointed ear tufts and big eyes |
-| Dasher | fast | long-eared runner stretched out mid-leap, with speed lines |
-| Shellback | armored | wide stone dome shell with a small head peeking out, moss on top |
-| Mites | swarm | tiny beads with glowing antennae that always come in clusters |
+The HUD in these pictures is a mock-up built from `UiTheme` controls to show the theme, not a layout proposal. The build phase shows all three route line styles at once only to show them; the rules show the dashed and dotted lines only when the next wave has a breaker or flyers.
 
-Signals that never rely on color alone:
+The slice (left) next to the grid version (right):
 
-- Slowed creatures get two drowsy swirls over their heads.
-- Boosted towers get a double up chevron beside them, plus a dotted light trail from the Lantern cottage.
-- A closed gate is a wooden gate with two lantern posts plus a plank across the road; an open socket is a dashed glowing ring with a faint ghost gate.
-- The route is a dashed line with arrows, not a tint.
-- An unaffordable card dims, and its cost stays readable (4.82:1).
+![grid vs slice](grid_vs_slice.png)
 
-## Store icon, 512 x 512
+At true size on the cover screen: [grid_cover_actual_size.png](grid_cover_actual_size.png).
 
-![icon](icon_512.png) ![icon at 48 px](icon_512_48.png)
+**Verdict: the look survives.** The palette, the ink outlines, the lantern-lit buildings, the cool creatures, the dark thicket and the hearth hall all carry over unchanged, and the map still reads as a sandy village road on a dusk meadow. What changed to make it work on the grid:
 
-The road comes out of the dark thicket (glowing eyes), forks around a big Watch post, and runs down both sides. A wooden gate closes the left branch. Night creatures walk the open right branch, and the tower's lantern shot puffs one into sparkles. Moon and dusk sky at the top. No text.
+1. **Roads.** Sandy bands half a cell wide with a darker border, through the cell centers. A turn is a quarter circle of half a cell, so no road has a sharp corner. Forks get a small round plaza. `MapArt.route_points()` follows the same curves, so route lines and creature paths sit on the road.
+2. **Fewer flourishes.** The slice's long S curves are gone; length now comes from switchbacks and stacked forks, which reads tidier but a little less organic. This is the one real loss, and it is small.
+3. **Everything fits a cell.** Towers fit one cell wide; build spots are round stone pads in the lower half of the cell. The hearth hall shrank to one cell, so spots can sit right beside the base. The thicket sits just outside the map edge at each entrance, with a lettered sign (A to D).
+4. **Bigger creatures, quieter ground.** Creatures are 10 to 20 percent bigger relative to the map than in the slice. Trees and bushes grow only on ground cells away from roads; next to roads there are only flowers and tufts, so creatures stay easy to see.
+5. **Route lines** are now solid for walkers (RULES.md 9.7), where the slice used dashes for everything.
 
-The stranger test: a tower in the middle, enemies on a road, a shot hitting one. Those three together say "tower defense". The fork and the gate say what is different. At 48 px (right) the tower, the sandy fork and the dusk sky still read; the creatures become small blue shapes. Keep the key content inside the middle 80 percent, since Play rounds the corners.
+## Wordmark
 
-## First store screenshot
+![wordmark](wordmark.png)
 
-![store screenshot](store_screenshot_1.png)
+"Forkline" in Outfit at weight 800, cream with a thick ink outline and a soft ink shadow. The dot of the "i" is a small lantern. Under the word, a sandy road runs from the left and forks in two. `Wordmark` is a Control that fills its rect; `Wordmark.draw_into(canvas, rect)` draws the same mark for store graphics.
 
-A 9:16 portrait frame (540 x 960 here; the real one would be 1080 x 1920) with a two line caption on the night sky, "Close a road. / Steer the night.", above live play: the gate closed on the short road, creatures on the long road, range ring and the tower cards along the bottom. A stranger sees a map, a road, towers, enemies, health bars and a row of tower cards: tower defense, at a glance.
+## Launcher icon
 
-## Sound
+![icon preview](icon_preview.png)
 
-All synthesized in `prototypes/theme/synth.gd` into `AudioStreamWAV` streams, no audio files.
+From left: the full icon at 512, the adaptive icon under a round and a squircle mask, the themed (monochrome) icon as Android tints it, and the icon at 48 pixels.
 
-- Music: a 15 second waltz lullaby loop in F major, 96 beats a minute: a music box melody, a soft bass with added harmonics so it carries on a phone speaker, quiet chord plucks, and a gentle echo wrapped around the loop so it never clicks. Built on a worker thread in about 0.6 s on the Windows PC, so play starts at once and music fades in after.
-- Effects: tower shot "pip" (pitched down for the Lookout and up for rockets), Bakehouse "thoomp", creature puff (a breath of noise and two rising chimes), gate closed (wooden knock and warm bell), gate lifted (lighter knock, lower bell), build (knock and two rising bells), a creature reaching the village (two falling notes), button tap.
+A road comes out of the night thicket and forks around a big lantern-lit Sling Post. A wooden gate closes the left branch. Two Scamps walk the right branch on a dashed route line, and the tower's shot puffs the first one into sparkles. Moon and dusk sky at the top. No text.
+
+The stranger test: a tower in the middle, enemies on a road, a shot hitting one. Those three together say "tower defense". The fork and the gate say what is different. At 48 pixels the tower, the sandy fork and the dusk sky still read.
+
+- `tools/icon/make_icon.gd` draws the icon with `IconArt` and writes icons/. Run it without `--headless`: `godot --path . --script res://tools/icon/make_icon.gd`.
+- The adaptive foreground keeps everything inside the middle 72 of 108 dp; the background layer is the sky and meadow, full bleed.
+- The monochrome layer is one flat color: the road becomes its outline, so the tower, gate and creatures stay separate shapes.
+
+| Export preset field | File |
+|---|---|
+| `launcher_icons/main_192x192` | `res://icons/icon_192.png` |
+| `launcher_icons/adaptive_foreground_432x432` | `res://icons/icon_foreground_432.png` |
+| `launcher_icons/adaptive_background_432x432` | `res://icons/icon_background_432.png` |
+| `launcher_icons/adaptive_monochrome_432x432` | `res://icons/icon_monochrome_432.png` |
+
+tools/store/ can use `await IconArt.draw(512)` for the 512 x 512 store icon.
+
+## Making the review images
+
+`godot --path . --script res://tools/icon/art_review.gd` writes every image on this page into docs/art/ (not `--headless`: it needs a display). The images are for review only and do not ship. The `slice_*.png` images and `store_screenshot_1.png` are from the phase 3 slice and stay as a record.
 
 ## Risks
 
-1. **Busy map at small sizes.** Flowers, tufts, fireflies and glows add charm but compete with the creatures. Creatures are about 0.06 of the map width; on the cover screen a Nightling is roughly 25 dp tall. Phase 4 should keep the decoration darker and sparser near roads and may need creatures 10 to 20 percent bigger. Bart's hand test decides.
-2. **Small text on the cover screen.** Hint and card labels are about 13 dp there. Readable, but at the low end. Keep body text at 40 viewport units or more in the real UI.
-3. **Store screenshots can't be 20:9.** Play allows at most 2:1, and the game's own portrait frame is 20:9. Store screenshots must be framed at 9:16 like the one above, with a caption band.
-4. **The road and grass are close in brightness for some color blind players.** The road passes at 3.91:1 and has a dark border (`ROAD_EDGE`), but a deuteranope sees sand and green as similar hues. The border and the cobble dots keep the edge visible. Check again with a simulator in phase 4.
-5. **Silhouette pairs to watch.** The Bakehouse dome and the Lantern cottage are both low buildings; the chimney and the tall crook carry the difference. The Watch post and the Lookout are both tall; stilts with a peaked roof against a solid column with a bow. Tier 2 and 3 art must keep each signature shape.
-6. **Performance.** The world is redrawn every frame with `_draw()` calls (about a thousand canvas commands in a busy wave). Fine on the PC; the Fold5 check is still to do. The real render code should cache the static ground (the slice already redraws it only on resize) and batch glows.
-7. **Music build time on the phone.** About 0.6 s on the PC, likely a few seconds on the phone. It runs on a worker thread, so play is not blocked, but the real audio code should build it once and keep it.
-8. **Originality.** Every shape here was drawn for Forkline from simple primitives. The look borrows no characters, layouts, palettes or tower designs from any game, and no game is named anywhere. Generic ideas (a windmill, a watch tower, a hare-like runner) are common folk imagery, not any game's designs.
-
-## Lessons that carry forward to phase 4
-
-- Keep the map in map units and convert to the screen at draw time. Orientation and fold changes then cost nothing.
-- Decide layout by window aspect (0.8 threshold) and pick the map flow by fit. No orientation setting.
-- One ink outline color for all game objects; text always on an opaque panel or with an ink outline.
-- Each tower: a lantern somewhere, one signature shape, one material (wood, clay, plaster and sails, stone, plum roof, moss).
-- Creatures: cool colors, glowing pale eyes, and a single readable body shape each.
-- Contrast is checked by a script against named tokens, not by eye.
+1. **Tall towers cover the cell above.** A tower may reach 0.35 cell into the cell above it, and the entrance thicket reaches about 0.6 cell outside the map. Render must draw in row order, and the UI should leave a little room above the map's top row or accept that the HUD covers the top of the thicket.
+2. **Long names on small cards.** "Pumpkin Catapult" and "Firework Tower" do not fit a seventh-of-the-screen card on the cover. The mock-up shows only the silhouette and the cost on cards; names belong on the selected tower's panel.
+3. **Road and grass for some color blind players.** The road passes at 3.91:1 and its border at 3.04:1, but a deuteranope sees sand and green as similar hues. The border and cobbles keep the edge visible. Still to check on the phone.
+4. **Closest shapes.** Pumpkin Catapult and Bakery are both low and wide; the arm and the chimney carry the difference. Shellback and Gatecrasher are both low four-legged bodies; the dome against the horns carries it. Watch these in the playtest.
+5. **Draw cost.** Each tower or creature is 20 to 60 canvas commands, drawn once per node and cached (contract 9.3). The static map is a few thousand commands, drawn once. Fine on the PC; the Fold5 check is the render engineer's.
+6. **The icon tool needs a display.** `IconArt.draw()` renders through a SubViewport, so it cannot run in `--headless` mode or in CI without a display.
+7. **Originality.** Every shape is drawn for Forkline from simple primitives. No game is named, and no character, layout, palette or tower design is borrowed. A bell tower, a catapult and a beehive oven are common folk images.
