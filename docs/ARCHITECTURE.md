@@ -179,6 +179,8 @@ The map and waves are placeholders. Both branches are 13 steps long, so with no 
 
 Spawn bound: one wave, with its Twist applied, spawns at most 120 creatures, counting `split_count` for each splitter (RULES 12.5). Boss releases depend on play, so the bots measure them (9.1).
 
+Dock room (7.4): on the Fold5 cover in portrait, the open wave preview fits below a map of up to 11 rows only for a wave of at most 4 groups whose names fit 4 across, or a boss alone whose info takes one line. Anything more makes the preview taller and covers the lowest map row. Today that is 5 or more groups, 4 groups with a `gatecrasher`, a boss with any other group, and `ironshell`, `moon_moth` or `old_tusk` even alone. Later regions keep waves inside this, or extend the dock test (tests/ui/real_tree_checks.gd `_stays_in_sight`, region 1 only today) to their maps. On 12 and 13 row maps the open preview can cover the lowest row in any wave (section 12).
+
 ### 2.5 Campaign order: data/levels/campaign.json (level-designer)
 
 ```json
@@ -947,7 +949,7 @@ func alpha() -> float                                  # 0 to 1: how far between
 func reset() -> void                                   # drops the leftover time
 
 class_name BattleScreen extends ScreenFrame            # src/ui/battle_screen.gd: map, HUD, panels, input
-signal save_requested()                                # a build phase began, a card was picked, or Pause opened
+signal save_requested()                                # a build phase began, a card was picked, the HUD pause button paused the game, or pause() opened Pause
 signal ended(result: Dictionary)                       # won, lost, or abandoned from Pause after a confirm (then won is false)
 signal left()                                          # "Back to menu" in Pause; the game stays saved
 func setup(battle: Battle, audio: AudioService, progress: Progress) -> void
@@ -965,15 +967,15 @@ class_name Links extends RefCounted                    # src/ui/links.gd (sectio
 App flow:
 
 1. **Launch.** `GameData.load_from()`. If it has problems, show the damaged message and stop. Load settings, progress and the saved games (an invalid one is deleted), and in phase 7 the daily record. Create the AudioService (3.8). Apply `UiTheme.build()`. Show the front door. Set `get_tree().quit_on_go_back = false`.
-2. **Play** opens ModeScreen. When any game is saved, the Continue card on top resumes the most recent one in one tap. A saved game also resumes from its own way in: the Roguelite or Daily button, or the saved level's card. Playing a different campaign level or Twist while one is saved asks first; a level and its own Twist count as different, since `SavedGame` has a `twist` flag. If the player confirms, the saved game ends as if abandoned from Pause, and nothing is recorded (RULES 4.10). Roguelite and Daily stay locked until `runs_open()`, and in phase 5 they stay locked.
+2. **Play** opens ModeScreen. When any game is saved, the Continue card on top resumes the most recent one in one tap. A saved game also resumes from its own way in: the Roguelite or Daily button, or the saved level's card. Playing a different campaign level or Twist while one is saved asks first; a level and its own Twist count as different, since `SavedGame` has a `twist` flag. If the player confirms, the saved game ends as if abandoned from Pause, and nothing is recorded (RULES 4.10). Roguelite and Daily stay locked until `runs_open()`, and in phase 5 they stay locked. Until the run mode exists (`App.RUNS_BUILT`), Roguelite and Daily show "Coming in a later update." whatever the stars.
 3. **Battle.** A campaign level: `Battle.create(level, catalog, relaxed, effects)`, where `effects` is the level's `twist_effects` when playing its Twist and empty otherwise. A run or the daily (phase 7): `RunSession.start(...)`. Then `BattleScreen.setup()`. Every battle starts at 1x. A resumed game opens paused, on the Pause menu.
-4. **Saving.** On `save_requested` the App saves that mode's game. On `NOTIFICATION_APPLICATION_PAUSED`, `NOTIFICATION_APPLICATION_FOCUS_OUT` and `NOTIFICATION_WM_CLOSE_REQUEST` while a battle is open, it calls `battle_screen.pause()` if a wave is running, then saves. Settings and progress save when they change.
+4. **Saving.** On `save_requested` the App saves that mode's game. A new level is also saved as soon as its battle opens. Pause opened from the Paused strip's Menu button does not save; the strip shows only after the HUD pause button, which saved. On `NOTIFICATION_APPLICATION_PAUSED`, `NOTIFICATION_APPLICATION_FOCUS_OUT` and `NOTIFICATION_WM_CLOSE_REQUEST` while a battle is open, it calls `battle_screen.pause()` if a wave is running, then saves. Settings and progress save when they change.
 5. **End.** On `ended`: record the stars (`Progress.record_level`, or `record_twist` for a won Twist), the counters for a run or daily and the daily record for a daily (phase 7), delete that mode's saved game, save, and show EndPanel. An abandoned campaign level records nothing. An abandoned run or daily counts as lost at its current wave (RULES 14.7).
-6. **Back button.** `handle_back()`: close or answer the top modal first, then go back one screen. In a battle, open Pause. On the front door, quit; everything is already saved.
+6. **Back button.** One press does exactly one step. `handle_back()`: close or answer the top modal first (a first sight card closes whole and counts as read), then go back one screen. A page opened from a modal, such as About from Settings, goes back before that modal closes. In a battle, an open build, tower or creature panel closes first, and the next press opens Pause. In the short wait between a battle's end and its end panel, a press shows the panel at once. On the front door or the damaged message, quit; everything is already saved. `handle_back()` returns `&"modal"` for a closed modal, a closed battle panel, Pause opening, or the end panel shown at once. A back press from the go-back notification and one from `ui_cancel` go through one entry that ignores a second press within 150 ms.
 7. **Resize.** The App connects its viewport's `size_changed` and calls `apply_layout(window, safe)` with `Layout.safe_rect()`, which lays out every screen and modal (7.5).
 8. **Debug builds** (`OS.is_debug_build()`) add a `PerfProbe` (3.7) that watches the open battle and its map view through `watch()`. BattleScreen times each `battle.step()` with `Time.get_ticks_usec()` and passes it to `record_tick_usec()` (9.2). Release builds do none of this.
 
-First sight (RULES 9.2, 9.6): a tower's card opens at the start of the first level that offers it, a creature's card in the build phase before the first wave that brings it, and a level's hint at its first start. Each opens by itself once, then its id goes into `Progress.seen`.
+First sight (RULES 9.2, 9.6): a tower's card opens at the start of the first level that offers it, a creature's card in the build phase before the first wave that brings it, and also, with the wave paused, when a creature of a kind the player has not seen first appears on the map (a wave called early, a released creature). A level's hint shows at its first start and closes when the player taps it or the first wave starts. A tower or creature goes into `Progress.seen` only when the player closes its card, and a level when its hint closes. A creature keeps its "New" tag in the preview until the wave that brings it starts.
 
 ### 3.7 Render: src/render/, shaders/ (render-engineer)
 
@@ -1140,7 +1142,7 @@ All in `user://` (the app's private storage, removed on uninstall). Each may hav
 |---|---|---|---|
 | settings.json | sound on or off | when it changes | 4 KB |
 | progress.json | star bits per level, Twists won, seen ids, counters | when any of it changes | 64 KB |
-| game_level.json, game_run.json, game_daily.json | one saved game per mode (Bart, hard stop A), at the exact moment | when a build phase begins, after a card pick, when Pause opens, on focus loss, app pause and close request, and when leaving the battle. Deleted when that game ends. | 1 MB each |
+| game_level.json, game_run.json, game_daily.json | one saved game per mode (Bart, hard stop A), at the exact moment | when a new level opens, when a build phase begins, after a card pick, when the HUD pause button pauses the game, when Pause opens (except from the Paused strip's Menu button), on focus loss, app pause and close request, and when leaving the battle. Deleted when that game ends. | 1 MB each |
 | daily.json (phase 7) | the day's best daily result and the streak | when a daily ends | 4 KB |
 
 Writes are synchronous on the main thread. The largest file is under 100 KB in the biggest wave, a few milliseconds to write. A write whose text equals the last text written to that file is skipped.
@@ -1283,25 +1285,25 @@ Checked in the Godot 4.7.2 source [11] [12] and in the installed release templat
 | Fold5 inner, 1812 x 2176 | 1.20 | landscape |
 | Fold5 inner turned, 2176 x 1812 | 0.83 | landscape |
 
-Why 1.5: with the HUD budgets below, the landscape layout shows the bigger map when the ratio is below about 1.5, and the portrait layout above it.
+Why 1.5: every phone shape stays portrait, and the Fold5 inner screen gets the landscape layout, which shows the bigger map there. With the 360 px portrait HUD, portrait would show a slightly bigger map on rarer windows such as an upright 4:3 tablet: between ratios of about 1.25 and 1.5 for 11 rows, and 1.4 and 1.5 for 13 rows.
 
 The map never rotates. The same 7 column grid shows in both layouts; only the HUD moves (RULES 3.1).
 
-- **Portrait:** the map at full width, the HUD above and below it. With 13 rows, the HUD gets at most 590 logical px of height in total, outside the safe insets.
+- **Portrait:** the HUD above the map and nothing else in the layout flow. The HUD is two rows of 48 dp controls, 360 logical px with its margins. The first row holds the numbers, the gate chip (the gate picture and the number in hand, a lock during a wave; drag from it as from the strip) and the pause button. The map gets the rest of the safe area, as large as fits, aligned to the top. On the cover the width decides, so cells stay 154 px, 49 dp for any row count up to 13. A dock floats at the bottom of the safe area, under the map or over its lowest rows, and holds the messages of the HUD and the gate chip, the Paused strip and the wave preview. The preview is open in a build phase, in portrait too. With 3 or more groups and no boss, its rows become small upright cells about 190 px tall, up to 4 across as the names fit, so most waves of 4 groups take one line. A boss wave, or a row the player opened, uses full rows. The hint floats over a band of map rows that hold no build spot, gate socket, entrance, home or highlighted cell, nearest the highlight, or nearest the bottom when nothing on the map is highlighted. It takes no height and closes on a tap or at the first wave. Only if a map has no such band does it go to the top of the dock. The dock and the floating hint hide while a build, tower or creature sheet is open. On maps of up to 11 rows, with waves inside the limits in 2.4, the dock in the default state, in a wave and with the hint leaves the home, every spot, socket and entrance fully visible. On 12 and 13 row maps the open preview can cover the lowest row (section 12). The Paused strip and messages may cover more of the lower map, but never the highlighted cell. The map never loses height to any state.
 - **Landscape:** the map at full height inside the safe area, and one side panel at least 720 logical px wide for the HUD, the build panel and the wave preview.
 - The project keeps its 1080 x 2400 base with `canvas_items` stretch and `expand`, so the cover screen is 1080 x 2767 logical px and the inner screen 1998 x 2400.
-- Room for the entrance thickets (3.9) comes out of the HUD budget, or the HUD covers part of them.
+- An entrance thicket (3.9) that reaches past the map edge may sit under the HUD or the dock, or past the screen edge.
 
 Touch size, with SumUp's measured densities and the same base viewport:
 
 | Screen | Logical px per dp | 160 px (`MIN_TOUCH`) | Map cell, 7 columns |
 |---|---|---|---|
-| Fold5 cover | 3.14 | 51 dp | 154 px, 49 dp |
-| 20:9 phone at 2.625 | 2.63 | 61 dp | height limited: 127 px, 48 dp at 13 rows |
+| Fold5 cover | 3.14 | 51 dp | 154 px, 49 dp, in every state |
+| 20:9 phone at 2.625 | 2.63 | 61 dp | height limited: 144 px, 55 dp at 13 rows |
 | Fold5 inner, landscape | 2.89 | 55 dp | height limited: about 167 px, 58 dp |
-| 16:9 phone at 2.625 | 3.28 | 49 dp | height limited: 127 px, 39 dp at 13 rows |
+| 16:9 phone at 2.625 | 3.28 | 49 dp | height limited: 144 px, 44 dp at 13 rows |
 
-Bart approved 7 columns by 8 to 13 rows at hard stop A, so map cells stay at 48 dp on the Fold5 cover. The table assumes the full 590 px portrait HUD and the measured insets: about 170 logical px on the cover and on phones, about 230 on the inner screen with its taskbar. Old 16:9 phones fall short on tall maps; a slimmer portrait HUD helps there (RULES 17). Taps on the map only select a cell or drag a gate; building, upgrading and selling happen on 48 dp buttons.
+Bart approved 7 columns by 8 to 13 rows at hard stop A, so map cells stay at 48 dp on the Fold5 cover. The table assumes the 360 px portrait HUD and the measured insets: about 170 logical px on the cover and on phones, about 230 on the inner screen with its taskbar. Old 16:9 phones still fall short on tall maps: just under 48 dp at 12 rows and 44 dp at 13 (RULES 17). Taps on the map only select a cell or drag a gate; building, upgrading and selling happen on 48 dp buttons.
 
 ### 7.5 Folding and unfolding mid-wave
 
@@ -1494,4 +1496,5 @@ The roguelite-engineer builds nothing for region 1. Its first task is phase 7: s
 
 ## 12. Open questions
 
-None at the moment.
+1. **The dock on 12 and 13 row maps.** Regions 2 to 4 use 10 to 13 rows, and every run map has 13 (RULES 3.1). On the Fold5 cover in portrait, with the tests/ui/ insets (96 px at the top, 171 at the bottom), the open wave preview covers the lowest row of a 12 or 13 row map in every build phase, and on 13 rows the folded strip covers it during waves too. With the 170 px insets of 7.4, 12 rows fit waves of 1 or 2 groups only, and 13 rows are covered in every build phase but not during waves. Region 1 (up to 11 rows) is not affected. This needs an answer before phase 7 content.
+2. **Level 2-1's call button highlight.** RULES 12.4 has the hint of level 2-1 highlight the call button (`hint.button` `"call"`, `LevelData.hint_button`). src/ui/ does not read `hint_button` yet, so nothing glows and the hint floats nearest the map's bottom. Open for phase 7.
