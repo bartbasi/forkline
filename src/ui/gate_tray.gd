@@ -31,6 +31,10 @@ var _dragging: bool = false
 var _pressing: bool = false
 var _press_at: Vector2 = Vector2.ZERO
 var _state: String = ""
+## The sentence for the strip as it is now. A tap on the chip shows it (item 6).
+var _sentence: String = ""
+var _down: bool = false
+var _travel: float = 0.0
 
 
 func _init() -> void:
@@ -123,6 +127,7 @@ func refresh() -> void:
 		text = "Gates: all placed"
 		detail = "Drag a gate to move it. Tap a gate to take it back."
 	_show_chip_marks()
+	_sentence = detail
 	var state: String = "%s|%s" % [text, detail]
 	if state == _state:
 		return
@@ -140,6 +145,7 @@ func is_dragging() -> bool:
 func cancel_drag() -> void:
 	_dragging = false
 	_pressing = false
+	_down = false
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -148,21 +154,36 @@ func _gui_input(event: InputEvent) -> void:
 		if button.pressed:
 			_pressing = _can_drag()
 			_dragging = false
+			_down = true
+			_travel = 0.0
 			_press_at = _global_of(button.position)
 		else:
+			var tapped: bool = _down and not _dragging and _travel < TapButton.DEADZONE
 			if _dragging:
 				_dragging = false
 				drag_ended.emit(_global_of(button.position))
 			_pressing = false
+			_down = false
+			if tapped:
+				tap()
 		return
 	var motion: InputEventMouseMotion = event as InputEventMouseMotion
-	if motion != null and _pressing:
+	if motion != null and _down:
 		var at: Vector2 = _global_of(motion.position)
-		if not _dragging and at.distance_to(_press_at) >= TapButton.DEADZONE:
-			_dragging = true
-			drag_began.emit(at)
-		if _dragging:
-			drag_moved.emit(at)
+		_travel = maxf(_travel, at.distance_to(_press_at))
+		if _pressing:
+			if not _dragging and at.distance_to(_press_at) >= TapButton.DEADZONE:
+				_dragging = true
+				drag_began.emit(at)
+			if _dragging:
+				drag_moved.emit(at)
+
+
+## A tap on the portrait chip shows its sentence in the dock, because the chip has no
+## words of its own. In the landscape strip the sentence is already on screen.
+func tap() -> void:
+	if chip and not _sentence.is_empty():
+		show_feedback(_sentence)
 
 
 func _can_drag() -> bool:
@@ -177,3 +198,4 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_VISIBILITY_CHANGED or what == NOTIFICATION_EXIT_TREE:
 		_dragging = false
 		_pressing = false
+		_down = false

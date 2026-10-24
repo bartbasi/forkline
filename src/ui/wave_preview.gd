@@ -10,11 +10,17 @@ extends BattlePanel
 ## row always shows its one line. Names, lines and numbers come from the Catalog and
 ## the Battle.
 
+## A build phase began and the preview opened for it. In portrait the screen then checks that
+## the open form fits under the map, and folds it again if it does not (docs/ARCHITECTURE.md 7.4).
+signal build_began()
+
 ## The wave the preview shows is the next one to start.
 var index: int = -1
 var expanded: bool = true
 var header: TapRow = null
 var header_label: Label = null
+## The folded strip's one line of chips, or null while the preview is open.
+var strip: StripRow = null
 var rows: Array[TapRow] = []
 var open_rows: Array[StringName] = []
 
@@ -39,6 +45,15 @@ func toggle() -> void:
 	refresh()
 
 
+## Opens or folds the preview without a tap. The screen uses it after measuring.
+func set_open(open: bool) -> void:
+	if expanded == open:
+		return
+	expanded = open
+	_signature = []
+	refresh()
+
+
 ## Opens or closes the numbers of one creature row.
 func toggle_row(enemy: StringName) -> void:
 	if open_rows.has(enemy):
@@ -57,6 +72,8 @@ func refresh() -> void:
 		_last_phase = int(battle.phase)
 		expanded = battle.phase == Battle.Phase.BUILD
 		_signature = []
+		if expanded:
+			build_began.emit()
 	var wave: int = battle.waves_started
 	if wave != index:
 		index = wave
@@ -73,6 +90,7 @@ func refresh() -> void:
 func _rebuild(preview: Array[Dictionary]) -> void:
 	clear_column()
 	rows.clear()
+	strip = null
 	header = TapRow.new()
 	header.set_look(Palette.PANEL_RAISED, Palette.PANEL_EDGE, 3, 16)
 	header.body.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -97,13 +115,11 @@ func _rebuild(preview: Array[Dictionary]) -> void:
 	top.add_child(fold)
 	header.body.add_child(top)
 	if not expanded and not preview.is_empty():
-		# The strip wraps onto lines, so a wave with many groups never widens the panel.
-		var strip: HFlowContainer = HFlowContainer.new()
-		strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		strip.add_theme_constant_override(&"h_separation", 24)
-		strip.add_theme_constant_override(&"v_separation", 4)
+		# The strip is one line: as many chips as fit, then a "+N" chip for the rest (RULES 9.1).
+		strip = StripRow.new()
+		strip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		for entry: Dictionary in preview:
-			strip.add_child(_chip(entry))
+			strip.add_chip(_chip(entry))
 		header.body.add_child(strip)
 	column.add_child(header)
 	if expanded:

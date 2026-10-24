@@ -21,8 +21,29 @@ static func audio() -> AudioService:
 	return _audio
 
 
+## Every process of the tests has its own folder, named by its process id, so two runs at
+## once on one machine (other agents, a clean copy check) never wipe each other's saves.
+static func root() -> String:
+	return "user://tests/ui/work_%d/" % OS.get_process_id()
+
+
 static func dir(tag: String) -> String:
-	return "user://tests/ui/%s/" % tag
+	return root() + "%s/" % tag
+
+
+## Removes this process's whole folder, with every tag folder and file in it.
+static func remove_all() -> void:
+	_remove_tree(root())
+
+
+static func _remove_tree(path: String) -> void:
+	if not DirAccess.dir_exists_absolute(path):
+		return
+	for file_name: String in DirAccess.get_files_at(path):
+		DirAccess.remove_absolute(path + file_name)
+	for sub: String in DirAccess.get_directories_at(path):
+		_remove_tree(path + sub + "/")
+	DirAccess.remove_absolute(path)
 
 
 ## Removes every file a test left in its folder.

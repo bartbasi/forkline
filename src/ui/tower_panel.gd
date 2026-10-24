@@ -20,7 +20,7 @@ signal sold(cell: Vector2i)
 const NO_CELL: Vector2i = Vector2i(-1, -1)
 ## A second tap on Sell that comes sooner than this after the first is ignored.
 const SELL_DELAY_MS: int = 600
-const STAR_WARNING: String = "Loses the third star."
+const STAR_WARNING: String = StarNote.TEXT
 
 var cell: Vector2i = NO_CELL
 ## The tier 3 path chosen but not yet confirmed, -1 for none.
@@ -164,7 +164,8 @@ func refresh() -> void:
 	var options: Array[Dictionary] = battle.upgrade_options(cell)
 	if tower.tier != 2 and picked_spec >= 0:
 		picked_spec = -1
-	var signature: Array = [cell, wide, numbers, options, picked_spec, sell_armed, tower.spent_now, tower.spent_before]
+	var warn: Array[bool] = [warns(&"upgrade", &"", 2), warns(&"upgrade", &"", 3)]
+	var signature: Array = [cell, wide, numbers, options, picked_spec, sell_armed, tower.spent_now, tower.spent_before, warn]
 	if signature != _signature:
 		_signature = signature
 		_rebuild(tower, numbers, options)
@@ -317,35 +318,19 @@ func _upgrade_section(tower: TowerState, type: TowerType, numbers: Dictionary, o
 	return box
 
 
-## On a level whose third star is "No tower above tier N", the upgrade that would pass N
-## says so before it is tapped. The rule is read from the level, on every such level.
+## The upgrade that would lose the third star says so before it is tapped. The sim decides
+## (Battle.loses_star3), so a tower that went above the cap and was sold is counted too.
 func _add_star_warning(box: VBoxContainer, new_tier: int) -> void:
 	if not breaks_star3(new_tier):
 		return
-	var note: HBoxContainer = HBoxContainer.new()
-	note.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	note.add_theme_constant_override(&"separation", 12)
-	var star: StarIcon = StarIcon.new(48.0, false)
-	star.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	note.add_child(star)
-	star_warning_label = UiKit.label(STAR_WARNING, &"Label")
-	star_warning_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	note.add_child(star_warning_label)
+	var note: StarNote = StarNote.new()
+	star_warning_label = note.label
 	box.add_child(note)
 
 
-## True when a tower at `new_tier` would end a "No tower above tier N" third star that
-## is still possible: no tower on the map is above N already.
+## True when a tower reaching `new_tier` would end a third star that is still possible.
 func breaks_star3(new_tier: int) -> bool:
-	if battle == null or battle.level.star3.get("kind", &"") != &"tier_at_most":
-		return false
-	var limit: int = int(battle.level.star3.get("value", 0))
-	if new_tier <= limit:
-		return false
-	for tower: TowerState in battle.towers:
-		if tower.tier > limit:
-			return false
-	return true
+	return warns(&"upgrade", &"", new_tier)
 
 
 func _path_card(type: TowerType, option: Dictionary, got_pct: int) -> TapRow:

@@ -25,6 +25,8 @@ var need_labels: Dictionary[StringName, Label] = {}
 var name_label: Label = null
 var info_label: Label = null
 var build_button: TapButton = null
+## The warning label above the Build button, or null when the chosen tower is safe.
+var star_warning_label: Label = null
 
 var _signature: Array = []
 var _open: bool = false
@@ -100,7 +102,7 @@ func refresh() -> void:
 		ids.append(option["tower"])
 	if not ids.has(selected):
 		selected = ids[0]
-	var signature: Array = [cell, selected, wide, options]
+	var signature: Array = [cell, selected, wide, options, warns(&"build", selected)]
 	if signature != _signature:
 		_signature = signature
 		_rebuild(options)
@@ -151,6 +153,12 @@ func _rebuild(options: Array[Dictionary]) -> void:
 	info_label = UiKit.label(type.info, &"SoftLabel")
 	column.add_child(info_label)
 	column.add_child(_rows(BattleText.tower_rows(chosen["numbers"], type.kind)))
+	star_warning_label = null
+	if warns(&"build", selected):
+		# A tower over the limit, a banned tower, or a kind over the limit (RULES 10.6).
+		var note: StarNote = StarNote.new()
+		star_warning_label = note.label
+		column.add_child(note)
 	var cost: int = int(chosen["cost"])
 	var affordable: bool = chosen["affordable"]
 	build_button = UiKit.wrapped(UiKit.button("Build for %d" % cost, &"PrimaryButton" if affordable else &"Button"))

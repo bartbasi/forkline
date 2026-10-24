@@ -9,6 +9,10 @@ extends RefCounted
 const BIT_WIN: int = 1
 const BIT_LIVES: int = 2
 const BIT_CHALLENGE: int = 4
+const STATE_EARNED: String = "Earned"
+const STATE_NOT_YET: String = "Not yet"
+const STATE_LOST: String = "Lost"
+const STATE_NORMAL_ONLY: String = "Normal only"
 
 
 static func win() -> String:
@@ -37,6 +41,10 @@ static func challenge(level: LevelData, catalog: Catalog) -> String:
 				return "Use no gates."
 			return "Use at most %d %s." % [value, _plural(value, "gate", "gates")]
 		&"tier_at_most":
+			# A cap of tier 1 reads "Upgrade no towers.": the player has not met tiers yet
+			# on the first levels (FUN_REVIEW_R1 item 4).
+			if value <= 1:
+				return "Upgrade no towers."
 			return "No tower above tier %d." % value
 		&"early_calls_at_least":
 			return "Call %d %s early." % [value, _plural(value, "wave", "waves")]
@@ -50,6 +58,30 @@ static func challenge(level: LevelData, catalog: Catalog) -> String:
 ## The three lines, star 1 to star 3.
 static func lines(level: LevelData, catalog: Catalog) -> PackedStringArray:
 	return PackedStringArray([win(), lives(catalog), challenge(level, catalog)])
+
+
+## The star lines of the Pause menu (RULES 10.6): the sentence, one word for where it stands
+## and whether the line is struck through. `earned` and `possible` are star bits. "Earned"
+## when the player has the star, "Normal only" for stars 2 and 3 on Relaxed, "Not yet" while
+## `possible` still holds it, else "Lost" (struck through, so color is never the only signal).
+static func play_lines(level: LevelData, catalog: Catalog, earned: int, possible: int, relaxed: bool) -> Array[Dictionary]:
+	var sentences: PackedStringArray = lines(level, catalog)
+	var out: Array[Dictionary] = []
+	for i: int in 3:
+		var state: String
+		var struck: bool = false
+		var got: bool = (earned >> i) & 1 == 1
+		if got:
+			state = STATE_EARNED
+		elif relaxed and i > 0:
+			state = STATE_NORMAL_ONLY
+		elif (possible >> i) & 1 == 1:
+			state = STATE_NOT_YET
+		else:
+			state = STATE_LOST
+			struck = true
+		out.append({"text": sentences[i], "state": state, "struck": struck, "earned": got})
+	return out
 
 
 ## How many stars a bit mask holds.

@@ -18,6 +18,8 @@ var levels_button: TapButton
 var star_states: Array[Label] = []
 var star_icons: Array[StarIcon] = []
 var summary_label: Label
+## The line that points a stuck player to Relaxed. Null unless this is a Normal loss.
+var relaxed_label: Label
 
 
 ## `result` is Battle.result() plus "relaxed". `previous_bits` are the stars the level
@@ -37,6 +39,10 @@ func _init(game: GameData, level_id: StringName, result: Dictionary, previous_bi
 	else:
 		summary_label = UiKit.label("%d of %d waves cleared." % [int(result.get("waves_cleared", 0)), level.waves.size()])
 	body.add_child(summary_label)
+	if not won and not bool(result.get("relaxed", false)) and not bool(result.get("twist", false)):
+		# After a Normal loss, a stuck player is told Relaxed exists (RULES 11, FUN_REVIEW_R1 item 9).
+		relaxed_label = UiKit.label(relaxed_hint(game), &"SoftLabel")
+		body.add_child(relaxed_label)
 	if won and next_id != &"":
 		next_button = UiKit.button("Next level", &"PrimaryButton")
 		next_button.tapped.connect(func() -> void: _answer(next_requested))
@@ -47,6 +53,14 @@ func _init(game: GameData, level_id: StringName, result: Dictionary, previous_bi
 	levels_button = UiKit.button("Levels")
 	levels_button.tapped.connect(request_close)
 	body.add_child(levels_button)
+
+
+## "Stuck? Relaxed gives 40 lives and more gold." The number is worked out from rules.json.
+static func relaxed_hint(game: GameData) -> String:
+	var rules: GameRules = game.catalog.rules
+	@warning_ignore("integer_division")
+	var lives: int = rules.start_lives * rules.relaxed_lives_pct / 100
+	return "Stuck? Relaxed gives %d lives and more gold." % lives
 
 
 func request_close() -> void:

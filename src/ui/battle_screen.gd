@@ -10,8 +10,11 @@ extends ScreenFrame
 ## Fold5 cover whatever is showing. The gate strip is a small chip in the HUD's first
 ## row. The Paused strip, the messages and the wave preview form a dock that floats over
 ## the lower edge of the map, in the free room under it, and covers the lowest rows only
-## on a tall map or a Paused strip. The hint floats over a map row with nothing in it to
-## see or tap. Each of these can be put away with one tap. The tower, build and creature panels are a bottom
+## on a tall map or a Paused strip. The wave preview opens in a build phase only when its
+## open form fits under the map, and starts folded into its one line strip otherwise. The
+## hint sits at the top of the dock when it still fits under the map, else it floats over
+## a band of map rows with nothing in it to see or tap (docs/ARCHITECTURE.md 7.4). Each of
+## these can be put away with one tap. The tower, build and creature panels are a bottom
 ## sheet over the lower map. The sheet never covers the HUD, and the map slides up so
 ## the tapped cell stays in sight. Landscape: the map on the left and one side column
 ## with the HUD, the open panel and the preview.
@@ -44,6 +47,9 @@ const GHOST_LIFT: float = 0.8
 const PAN_RATE: float = 14.0
 ## Inner margin of the dock panels in portrait.
 const DOCK_MARGIN: int = 14
+## Frames the preview stays open and unseen before the screen measures it. The map, the HUD
+## and the preview itself settle in that time.
+const FIT_FRAMES: int = 3
 
 var battle: Battle = null
 var audio: AudioService = null
@@ -53,6 +59,9 @@ var host: App = null
 ## Debug builds only: times every tick.
 var probe: PerfProbe = null
 var clock: BattleClock = BattleClock.new()
+## False for a game with no stars (a run). A Twist has none either, which the screen sees
+## in the battle itself. Star lines in Pause and the star warnings need this to be true.
+var stars_in_play: bool = true
 
 var map_area: Control
 var map_view: MapView
@@ -99,6 +108,10 @@ var _new_sig: Array = []
 ## True while a card paused a running wave, so closing it lets the wave go on.
 var _card_froze: bool = false
 var _card_resized: bool = false
+## Frames left before the open preview is measured against the room under the map. 0: none.
+var _fit_wait: int = 0
+## Map rows that hold something to see or tap, for the hint's free band. Worked out once.
+var _busy_rows: PackedByteArray = PackedByteArray()
 
 var _pressing: bool = false
 var _press_at: Vector2 = Vector2.ZERO
@@ -219,6 +232,7 @@ func _connect_panels() -> void:
 	hud.resume_requested.connect(resume)
 	pause_strip.menu_requested.connect(_on_strip_menu)
 	hint_banner.closed.connect(_on_hint_closed)
+	preview.build_began.connect(_start_fit)
 	for panel: BattlePanel in [hud, gate_tray, build_panel, tower_panel]:
 		panel.refused.connect(_on_refused)
 	build_panel.range_changed.connect(_on_range_changed)
@@ -240,6 +254,7 @@ func setup(new_battle: Battle, new_audio: AudioService, new_progress: Progress) 
 	map_view.setup(battle)
 	hud.refresh(battle)
 	hud.set_speed(clock.speed)
+	_sync_warnings()
 	for panel: BattlePanel in [gate_tray, preview, build_panel, tower_panel, enemy_panel]:
 		panel.setup(battle)
 	_refresh_new_tags()
@@ -296,6 +311,7 @@ func _open_pause_menu() -> void:
 		return
 	pause_strip.visible = false
 	_pause_panel = PausePanel.new()
+	_pause_panel.set_stars(star_entries())
 	_pause_panel.resume_requested.connect(resume)
 	_pause_panel.info_requested.connect(_open_info)
 	_pause_panel.settings_requested.connect(_open_settings)
@@ -392,6 +408,14 @@ func _relayout() -> void:
 	_sheet.visible = _context != null and not landscape
 	_sync_dock()
 	_fit_map.call_deferred()
+	if landscape:
+		# In landscape the preview is always open in a build phase (RULES 9.1).
+		_fit_wait = 0
+		preview.modulate.a = 1.0
+		if battle != null and battle.phase == Battle.Phase.BUILD:
+			preview.set_open(true)
+	else:
+		_start_fit()
 
 
 ## Puts the parts in the portrait or landscape arrangement. Nothing is freed.
@@ -487,19 +511,22 @@ func _sync_dock() -> void:
 	_hint_layer.visible = _dock_wrap.visible
 
 
-## In portrait the hint takes no height. It floats over the rows of the map that hold
-## nothing to see or tap (no build spot, gate socket, entrance, home or highlighted
-## cell), the free band nearest the highlight, or the bottom of the map when there is
-## no highlight. A map with no free band gets it at the top of the dock instead.
+## In portrait the hint takes no height. It goes to the first of these that works
+## (docs/ARCHITECTURE.md 7.4): the top of the dock, when the dock with the hint still stays
+## at or below the map's lowest row; a band of whole map rows wholly above the dock with
+## nothing in it to see or tap, nearest the highlight (nearest the top of the map for the
+## call button, nearest the bottom with no highlight); else the top of the dock anyway.
 func _place_hint() -> void:
 	if landscape or battle == null or not hint_banner.visible or hint_banner.get_parent() == null:
 		return
+	if _fit_wait > 0:
+		return
+	if _hint_fits_in_dock():
+		_put_hint_in_dock()
+		return
 	var top: float = _free_band_top(HintBanner.HEIGHT)
 	if top < 0.0:
-		if hint_banner.get_parent() != _dock:
-			hint_banner.get_parent().remove_child(hint_banner)
-			_dock.add_child(hint_banner)
-			_dock.move_child(hint_banner, 0)
+		_put_hint_in_dock()
 		return
 	if hint_banner.get_parent() != _hint_layer:
 		hint_banner.get_parent().remove_child(hint_banner)
@@ -508,13 +535,53 @@ func _place_hint() -> void:
 	hint_banner.size = Vector2(maxf(Layout.MIN_TOUCH, _stage.size.x - 2.0 * EDGE), HintBanner.HEIGHT)
 
 
-## The top, in stage coordinates, of a band `height` tall made of whole map rows with
-## nothing in them to see or tap. -1 when there is none.
-func _free_band_top(height: float) -> float:
-	var cell_px: float = _cell_px()
-	if cell_px <= 0.0:
-		return -1.0
+func _put_hint_in_dock() -> void:
+	if hint_banner.get_parent() != _dock:
+		hint_banner.get_parent().remove_child(hint_banner)
+		_dock.add_child(hint_banner)
+	_dock.move_child(hint_banner, 0)
+
+
+## The height of the parts of the dock that stay: the Paused strip and the preview. Messages
+## come and go, so they are left out and the hint does not jump about.
+func _dock_steady_height() -> float:
+	var total: float = 0.0
+	for part: Control in [pause_strip, preview]:
+		if part.visible:
+			total += part.get_combined_minimum_size().y + GAP
+	return total
+
+
+## True when the dock with the hint stays at or below the map's lowest row. `steady` is the
+## height of the dock's steady parts, or -1 for the parts as they are now.
+func _hint_fits_in_dock(steady: float = -1.0) -> bool:
+	var height: float = maxf(HintBanner.HEIGHT, hint_banner.get_combined_minimum_size().y)
+	var top: float = _dock.get_global_rect().end.y - (_dock_steady_height() if steady < 0.0 else steady) - height
+	return top >= _map_bottom() - 0.5
+
+
+## The bottom edge of the map's last row on screen (before any slide for a sheet).
+func _map_bottom() -> float:
+	return map_area.get_global_rect().position.y + _map_base.y + float(battle.level.rows) * _cell_px()
+
+
+## True for a road cell with three or four road neighbors: a fork or a join.
+func _is_junction(cell: Vector2i) -> bool:
+	if not battle.level.is_road(cell):
+		return false
+	var roads: int = 0
+	for step: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		if battle.level.is_road(cell + step):
+			roads += 1
+	return roads >= 3
+
+
+## 1 for each map row that holds a build spot, gate socket, entrance, home, highlighted cell,
+## fork or join. The level never changes, so this is worked out once.
+func _busy_row_marks() -> PackedByteArray:
 	var rows: int = battle.level.rows
+	if _busy_rows.size() == rows:
+		return _busy_rows
 	var busy: PackedByteArray = PackedByteArray()
 	busy.resize(rows)
 	var cells: Array[Vector2i] = []
@@ -526,11 +593,36 @@ func _free_band_top(height: float) -> float:
 	for cell: Vector2i in cells:
 		if cell.y >= 0 and cell.y < rows:
 			busy[cell.y] = 1
+	for y: int in rows:
+		for x: int in Sim.MAP_COLUMNS:
+			if _is_junction(Vector2i(x, y)):
+				busy[y] = 1
+	_busy_rows = busy
+	return busy
+
+
+## The top, in stage coordinates, of a band `height` tall made of whole map rows, wholly above
+## the steady part of the dock, with nothing in them to see or tap: no build spot, gate
+## socket, entrance, home, highlighted cell, fork or join. -1 when there is none.
+func _free_band_top(height: float, steady: float = -1.0) -> float:
+	var cell_px: float = _cell_px()
+	if cell_px <= 0.0:
+		return -1.0
+	var rows: int = battle.level.rows
+	var busy: PackedByteArray = _busy_row_marks()
 	var need: int = maxi(1, ceili((height - 0.5) / cell_px))
-	var anchor: float = float(battle.level.hint_cell.y) + 0.5 if battle.level.hint_cell.y >= 0 else float(rows) - 0.5
+	var anchor: float = float(rows) - 0.5
+	if battle.level.hint_cell.y >= 0:
+		anchor = float(battle.level.hint_cell.y) + 0.5
+	elif battle.level.hint_button == &"call":
+		anchor = 0.5
+	var map_top: float = map_area.get_global_rect().position.y + _map_base.y
+	var dock_top: float = _dock.get_global_rect().end.y - (_dock_steady_height() if steady < 0.0 else steady)
 	var best: int = -1
 	var best_d: float = INF
 	for first: int in range(0, rows - need + 1):
+		if map_top + float(first + need) * cell_px > dock_top + 0.5:
+			continue
 		var free: bool = true
 		for r: int in range(first, first + need):
 			if busy[r] == 1:
@@ -542,9 +634,54 @@ func _free_band_top(height: float) -> float:
 				best = first
 	if best < 0:
 		return -1.0
-	var map_top: float = map_area.get_global_rect().position.y + _map_base.y
 	var middle: float = map_top + (float(best) + float(need) * 0.5) * cell_px
 	return middle - height * 0.5 - _stage.get_global_rect().position.y
+
+
+# The preview fits under the map, or starts folded (docs/ARCHITECTURE.md 7.4, RULES 9.1).
+
+## A build phase began, or the layout changed: in portrait the preview opens unseen for a few
+## frames, is measured, and stays open only if its open form fits in the room under the map.
+func _start_fit() -> void:
+	if landscape or battle == null or battle.phase != Battle.Phase.BUILD or not is_inside_tree():
+		return
+	preview.set_open(true)
+	preview.modulate.a = 0.0
+	_fit_wait = FIT_FRAMES
+
+
+func _step_fit() -> void:
+	if _fit_wait <= 0:
+		return
+	if landscape or battle.phase != Battle.Phase.BUILD:
+		_fit_wait = 0
+		preview.modulate.a = 1.0
+		return
+	if not _dock_wrap.is_visible_in_tree():
+		return
+	_fit_wait -= 1
+	if _fit_wait > 0:
+		return
+	var open: bool = preview_fits()
+	if open and hint_banner.visible and not _hint_has_room(_dock_steady_height()):
+		# The hint would have to cover the map next to an open preview. A folded strip is
+		# shorter, so fold it: the strip still shows what is coming. A tap opens it.
+		open = false
+	preview.set_open(open)
+	preview.modulate.a = 1.0
+
+
+## True when the hint has a place that covers nothing next to dock parts of height `steady`:
+## the top of the dock under the map, or a free band of map rows.
+func _hint_has_room(steady: float) -> bool:
+	return _hint_fits_in_dock(steady) or _free_band_top(HintBanner.HEIGHT, steady) >= 0.0
+
+
+## True when the open preview's top, with the dock's bottom gap, stays at or below the
+## map's lowest row. Measured on the preview as it is now.
+func preview_fits() -> bool:
+	var room: float = _dock.get_global_rect().end.y - _map_bottom()
+	return preview.get_combined_minimum_size().y <= room + 0.5
 
 
 func _apply_pan() -> void:
@@ -600,6 +737,8 @@ func frame(delta: float) -> void:
 		_context.refresh()
 	_handle(events)
 	_watch_sights()
+	_sync_warnings()
+	_step_fit()
 	_place_hint()
 	if _drag_active and battle.phase != Battle.Phase.BUILD:
 		cancel_drag()
@@ -617,9 +756,15 @@ func frame(delta: float) -> void:
 
 func _handle(events: Array[Dictionary]) -> void:
 	for e: Dictionary in events:
-		if e.get("kind") == &"build_started":
+		var kind: Variant = e.get("kind")
+		if kind == &"build_started":
 			save_requested.emit()
 			_check_sights()
+		elif kind == &"wave_cleared":
+			# The clear bonus was paid. Kills only move the gold number, so say it once here.
+			hud.show_feedback(BattleText.cleared_text(int(e.get("wave", 0)), int(e.get("gold", 0))))
+		# Nothing is shown for the other events (released, break_started, sped_up, interest):
+		# RULES asks for no message, and the map and the sounds carry them.
 	if (battle.phase == Battle.Phase.WON or battle.phase == Battle.Phase.LOST) and not _finished:
 		_finished = true
 		var result: Dictionary = battle.result()
@@ -638,6 +783,36 @@ func _sync_routes() -> void:
 		map_view.show_routes(battle.routes(battle.closed_cells()))
 	else:
 		map_view.show_routes([] as Array[Dictionary])
+
+
+# Stars during play (RULES 10.6).
+
+## The star bits the player already has for this level.
+func _earned_bits() -> int:
+	if progress == null or battle == null:
+		return 0
+	return int(progress.levels.get(battle.level.id, 0))
+
+
+## True in a campaign level that is not a Twist: runs, dailies and Twists have no stars.
+func has_stars() -> bool:
+	return battle != null and stars_in_play and battle.twist_effects.is_empty()
+
+
+## The three star lines Pause shows, or none for a game without stars.
+func star_entries() -> Array[Dictionary]:
+	if not has_stars():
+		var none: Array[Dictionary] = []
+		return none
+	return StarText.play_lines(battle.level, battle.catalog, _earned_bits(), battle.stars_possible(), battle.relaxed)
+
+
+## The panels warn before a tap that would lose star 3 only while the game has stars and the
+## third star is not already earned. The sim says whether a tap would lose it (loses_star3).
+func _sync_warnings() -> void:
+	var on: bool = has_stars() and (_earned_bits() & StarText.BIT_CHALLENGE) == 0
+	for panel: BattlePanel in [build_panel, tower_panel, gate_tray]:
+		panel.star_warnings = on
 
 
 # First sights (RULES 9.2, 9.6).
@@ -911,14 +1086,27 @@ func tap_socket(cell: Vector2i) -> void:
 	if battle.level.gates == 0 and battle.gates.is_empty():
 		return
 	var result: StringName
+	var warn: bool = false
 	if battle.phase != Battle.Phase.BUILD:
 		result = &"gates_locked"
 	elif _gate_at(cell) != null:
 		result = battle.remove_gate(cell)
 	else:
+		warn = gate_tray.warns(&"gate")
 		result = battle.place_gate(cell)
-	if not gate_tray.finish(result):
+	if not _finish_gate(result, warn):
 		map_view.show_refused(cell)
+
+
+## Shows the outcome of a gate command in the gate message. A new gate that goes over the
+## level's gate rule says the third star is lost if a wave starts with it (RULES 10.6).
+## Returns true when the command was carried out.
+func _finish_gate(result: StringName, warn: bool) -> bool:
+	if not gate_tray.finish(result):
+		return false
+	if warn:
+		gate_tray.show_feedback(StarNote.GATE_TEXT)
+	return true
 
 
 func _gate_at(cell: Vector2i) -> GateState:
@@ -1000,14 +1188,16 @@ func end_drag(where: Vector2) -> void:
 	_drag_active = false
 	ghost.hide_ghost()
 	var result: StringName = &""
+	var warn: bool = false
 	if target.x >= 0:
 		if from.x < 0:
+			warn = gate_tray.warns(&"gate")
 			result = battle.place_gate(target)
 		elif target != from:
 			result = battle.move_gate(from, target)
 	elif from.x >= 0 and gate_tray.visible and (gate_tray.get_global_rect().has_point(where) or gate_tray.get_global_rect().has_point(where - Vector2(0.0, GHOST_LIFT * _cell_px()))):
 		result = battle.remove_gate(from)
-	if result != &"" and not gate_tray.finish(result):
+	if result != &"" and not _finish_gate(result, warn):
 		map_view.show_refused(target if target.x >= 0 else from)
 	_routes_sig = []
 	_sync_routes()

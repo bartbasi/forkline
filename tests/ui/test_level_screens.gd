@@ -97,7 +97,7 @@ func test_the_level_list_opens_levels_in_order_and_shows_the_rest_locked() -> vo
 	var progress: Progress = Progress.new()
 	var list: LevelSelect = _keep(LevelSelect.new()) as LevelSelect
 	list.populate(game, progress, &"")
-	assert_eq(list.rows.size(), 6)
+	assert_eq(list.rows.size(), game.levels.size(), "every level of the campaign is listed")
 	assert_false(list.rows[&"r1_l1"].overlay.disabled, "the first level is open")
 	assert_true(list.rows[&"r1_l2"].overlay.disabled, "the next is locked until this one is cleared")
 	progress.record_level(&"r1_l1", 1)

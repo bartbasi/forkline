@@ -14,7 +14,11 @@ signal leave_requested()
 ## The player confirmed that this game ends now.
 signal abandon_confirmed()
 
+## The three star lines, when this game has stars (RULES 10.6). Empty otherwise.
+var star_lines: Array[StarLine] = []
+
 var _confirm: ConfirmDialog = null
+var _stars_box: VBoxContainer = null
 var _window_size: Vector2 = Vector2.ZERO
 var _safe: Rect2 = Rect2()
 
@@ -37,6 +41,29 @@ func _init() -> void:
 	abandon.tapped.connect(_ask_abandon)
 	body.add_child(abandon)
 	body.add_child(CoffeeButton.new())
+
+
+## Shows the level's star lines (StarText.play_lines) under the title. Call it again to
+## replace them; an empty list takes them away. Only a campaign level that is not a Twist
+## has them (RULES 10.6).
+func set_stars(entries: Array[Dictionary]) -> void:
+	if _stars_box != null:
+		body.remove_child(_stars_box)
+		_stars_box.free()
+		_stars_box = null
+	star_lines.clear()
+	if entries.is_empty():
+		return
+	_stars_box = VBoxContainer.new()
+	_stars_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stars_box.add_theme_constant_override(&"separation", 14)
+	_stars_box.add_child(UiKit.heading("Stars"))
+	for entry: Dictionary in entries:
+		var line: StarLine = StarLine.new(entry)
+		star_lines.append(line)
+		_stars_box.add_child(line)
+	body.add_child(_stars_box)
+	body.move_child(_stars_box, 1)
 
 
 func apply_layout(window_size: Vector2, safe: Rect2) -> void:

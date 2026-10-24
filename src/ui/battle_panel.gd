@@ -21,6 +21,9 @@ const FEEDBACK_SECONDS: float = 3.0
 
 var battle: Battle = null
 var wide: bool = true
+## False when the game has no third star to protect (a Twist, a run, or a star already
+## earned): the panel then shows no star warnings (RULES 10.6). The battle screen sets it.
+var star_warnings: bool = true
 var column: VBoxContainer
 var feedback_box: PanelContainer
 var feedback_label: Label
@@ -47,6 +50,12 @@ func _init() -> void:
 func setup(new_battle: Battle) -> void:
 	battle = new_battle
 	refresh()
+
+
+## True when this action would lose a third star that is still possible and not earned yet.
+## The sim answers (Battle.loses_star3); this only adds the screen's "not earned yet" part.
+func warns(action: StringName, tower: StringName = &"", tier: int = 0) -> bool:
+	return star_warnings and battle != null and battle.loses_star3(action, tower, tier)
 
 
 ## Reads the Battle again. Cheap; the screen may call it every frame.

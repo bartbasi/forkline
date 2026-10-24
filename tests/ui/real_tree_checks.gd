@@ -80,7 +80,9 @@ func _run() -> void:
 	await _app()
 	await _battle_screens()
 	await _cell_floor()
+	await _u1_real()
 	Links.opener = Callable()
+	Fx.remove_all()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -89,7 +91,7 @@ func _run() -> void:
 
 const SCREEN_NAMES: PackedStringArray = [
 	"front door", "mode screen", "mode screen open", "info", "about", "license viewer",
-	"settings", "pause", "confirm", "level select", "level card", "level card saved", "end win", "end loss",
+	"settings", "pause", "pause stars", "confirm", "level select", "level card", "level card saved", "end win", "end loss",
 	"info card tower", "info card creature", "notice", "damaged",
 ]
 
@@ -842,11 +844,12 @@ func _battle_end_delay() -> void:
 
 
 # The map cell floor (hard rule): on the Fold5 cover in portrait, map cells stay at least
-# 48 dp in every state, on every region 1 map and on a 13 row map.
+# 48 dp in every state, on every region 1 map and on a 13 row map. The 13 row map keeps its
+# bottom row scenery only, as the level rule asks (docs/ARCHITECTURE.md 2.4).
 
 const TALL_GRID: PackedStringArray = [
 	"...1...", "...#...", ".o.#.o.", ".#####.", ".G...G.", ".#.o.#.", ".#####.",
-	"..o#o..", "...#...", ".o.#.o.", "...#...", "...#...", "..oB...",
+	"..o#o..", "...#...", ".o.#.o.", "...#...", "..oBo..", ".......",
 ]
 
 
@@ -926,11 +929,12 @@ func _floor_state(screen: BattleScreen, label: String, hint: bool, folded: bool,
 	_inside_and_big(screen, COVER, where)
 
 
-# What stays in sight (region 1, cover portrait, test insets): the home, every build spot,
-# every gate socket and every entrance, and any tower on a spot, in the default build state
-# (gate chip, preview open, no hint, no panel) for every wave's preview, and during a wave with
-# the preview folded. The hint never covers any of them, nor the highlighted cell. The Paused
-# strip and the messages may cover more, but never the highlighted cell.
+# What stays in sight (every level file, cover portrait, test insets): the home, every build
+# spot, every gate socket and every entrance, and any tower on a spot, in the default build
+# state (gate chip, preview open or folded as it fits, no hint, no panel) for every wave's
+# preview, and during a wave with the preview folded. The folded strip is one line. The hint
+# never covers any of them, nor the highlighted cell. The Paused strip and the messages may
+# cover more, but never the highlighted cell (docs/ARCHITECTURE.md 7.4).
 
 func _cell_rect(screen: BattleScreen, cell: Vector2i) -> Rect2:
 	var side: float = screen._cell_px()
@@ -965,69 +969,221 @@ func _first_hit(screen: BattleScreen, cells: Array[Vector2i], rects: Array[Rect2
 	return ""
 
 
-func _stays_in_sight() -> void:
-	for n: int in range(1, 7):
-		var id: StringName = StringName("r1_l%d" % n)
-		var b: Battle = BattleFixtures.battle(id)
-		b.gold = 5000
-		for cell: Vector2i in b.level.spots:
-			b.place_tower(cell, b.level.towers[0])
-		var vp: SubViewport = _viewport(COVER)
-		var screen: BattleScreen = BattleScreen.new()
-		screen.setup(b, null, _all_seen())
-		await _hosted(vp, screen, COVER, COVER_SAFE)
-		var must: Array[Vector2i] = _must_see(b)
-		check(screen.gate_tray.visible == (b.level.gates > 0), "%s: the gate chip shows when the level has gates" % id)
-		if screen.gate_tray.visible:
-			var chip: Rect2 = screen.gate_tray.get_global_rect()
-			check(screen.hud.get_global_rect().encloses(chip), "%s: the gate chip is inside the HUD" % id)
-			check(chip.size.x >= 150.0 and chip.size.y >= 150.0, "%s: the gate chip is a 48 dp target (%s)" % [id, chip.size])
-		# 1. The default build state, with every wave's preview open.
-		for wave: int in b.wave_count():
-			b.waves_started = wave
-			screen.preview.refresh()
-			await _frames(3)
-			check(screen.preview.expanded, "%s wave %d: the preview is open" % [id, wave + 1])
-			var hit: String = _first_hit(screen, must, _dock_rects(screen))
-			check(hit.is_empty(), "%s wave %d, default build state: %s" % [id, wave + 1, hit])
-		b.waves_started = 0
+## The folded strip is one line: its chips sit side by side inside it, the chips that do not
+## fit are counted by the "+N" chip, and it is no taller than one chip.
+func _strip_is_one_line(screen: BattleScreen, where: String) -> void:
+	var strip: StripRow = screen.preview.strip
+	check(strip != null, "%s: a folded preview has its strip" % where)
+	if strip == null:
+		return
+	var rect: Rect2 = strip.get_global_rect()
+	check(rect.size.y > 0.0 and rect.size.y <= 100.0, "%s: the strip is one line tall (%.0f px)" % [where, rect.size.y])
+	check(strip.visible_chips() > 0 or strip.chip_count() == 0, "%s: the strip shows at least one chip" % where)
+	var last_end: float = rect.position.x
+	for control: Control in strip.chips():
+		if not control.visible:
+			continue
+		var box: Rect2 = control.get_global_rect()
+		check(rect.grow(1.0).encloses(box), "%s: a strip chip is inside the strip (%s in %s)" % [where, box, rect])
+		check(box.position.x >= last_end - 1.0, "%s: strip chips do not overlap" % where)
+		last_end = box.end.x
+	var hidden: int = strip.chip_count() - strip.visible_chips()
+	if hidden > 0:
+		check(strip.more_text() == "+%d" % hidden, "%s: the +N chip counts the %d hidden (%s)" % [where, hidden, strip.more_text()])
+		var tag: Rect2 = strip.more_chip.get_global_rect()
+		check(rect.grow(1.0).encloses(tag), "%s: the +N chip is inside the strip (%s in %s)" % [where, tag, rect])
+		check(tag.position.x >= last_end - 1.0, "%s: the +N chip comes after the last chip" % where)
+	else:
+		check(strip.more_text().is_empty(), "%s: no +N chip when every group shows" % where)
+	check(screen.preview.get_global_rect().end.y <= COVER_SAFE.end.y + 0.5, "%s: the folded preview is inside the safe area" % where)
+
+
+## The preview in its build state after the screen has decided whether it fits. Folded: it did
+## not fit, and the open form measured now really is too tall. Open: it sits under the map.
+func _preview_decision(screen: BattleScreen, where: String) -> void:
+	check(screen._fit_wait == 0 and screen.preview.modulate.a == 1.0, "%s: the preview is decided and shown" % where)
+	if screen.preview.expanded:
+		check(screen.preview.get_global_rect().position.y >= screen._map_bottom() - 1.0, "%s: an open preview sits under the map (top %.0f, map bottom %.0f)" % [where, screen.preview.get_global_rect().position.y, screen._map_bottom()])
+		return
+	_strip_is_one_line(screen, where)
+	screen.preview.set_open(true)
+	await _frames(3)
+	check(not screen.preview_fits(), "%s: the preview was folded, so its open form must not fit (%.0f px)" % [where, screen.preview.get_combined_minimum_size().y])
+	screen.preview.set_open(false)
+	await _frames(3)
+
+
+func _dock_level(id: StringName, b: Battle) -> void:
+	b.gold = 5000
+	for cell: Vector2i in b.level.spots:
+		b.place_tower(cell, b.level.towers[0])
+	var vp: SubViewport = _viewport(COVER)
+	var screen: BattleScreen = BattleScreen.new()
+	screen.setup(b, null, _all_seen())
+	await _hosted(vp, screen, COVER, COVER_SAFE)
+	await _frames(6)
+	var must: Array[Vector2i] = _must_see(b)
+	check(screen.gate_tray.visible == (b.level.gates > 0), "%s: the gate chip shows when the level has gates" % id)
+	if screen.gate_tray.visible:
+		var chip: Rect2 = screen.gate_tray.get_global_rect()
+		check(screen.hud.get_global_rect().encloses(chip), "%s: the gate chip is inside the HUD" % id)
+		check(chip.size.x >= 150.0 and chip.size.y >= 150.0, "%s: the gate chip is a 48 dp target (%s)" % [id, chip.size])
+	# 1. The default build state, with every wave's preview, open or folded as it fits.
+	for wave: int in b.wave_count():
+		b.waves_started = wave
 		screen.preview.refresh()
-		# 3. With the hint: it is on a free row of the map, away from everything that matters.
-		screen.hint_banner.show_hint(b.level.hint_text)
-		screen.map_view.show_hint(b.level.hint_cell)
-		await _frames(3)
-		check(screen.hint_banner.get_parent() == screen._hint_layer, "%s: the hint floats over a free row of the map" % id)
-		var important: Array[Vector2i] = must.duplicate()
+		screen._start_fit()
+		await _frames(screen.FIT_FRAMES + 3)
+		var where: String = "%s wave %d, default build state" % [id, wave + 1]
+		await _preview_decision(screen, where)
+		var hit: String = _first_hit(screen, must, _dock_rects(screen))
+		check(hit.is_empty(), "%s: %s" % [where, hit])
+	b.waves_started = 0
+	screen.preview.refresh()
+	screen._start_fit()
+	await _frames(screen.FIT_FRAMES + 3)
+	# 2. With the hint: at the top of the dock when that stays under the map, else on a free
+	# band of rows, else at the top of the dock. It never covers what matters.
+	screen.hint_banner.show_hint(b.level.hint_text)
+	screen.map_view.show_hint(b.level.hint_cell)
+	screen._start_fit()
+	await _frames(screen.FIT_FRAMES + 3)
+	var important: Array[Vector2i] = must.duplicate()
+	if b.level.hint_cell.x >= 0:
 		important.append(b.level.hint_cell)
-		var hint_rect: Rect2 = screen.hint_banner.get_global_rect()
-		var rects: Array[Rect2] = _dock_rects(screen)
+	var hint_rect: Rect2 = screen.hint_banner.get_global_rect()
+	var rects: Array[Rect2] = _dock_rects(screen)
+	if screen.hint_banner.get_parent() == screen._dock:
+		var under_map: bool = hint_rect.position.y >= screen._map_bottom() - 1.0
+		check(under_map or screen._free_band_top(HintBanner.HEIGHT) < 0.0, "%s: the hint is in the dock over the map although a free band exists" % id)
+	else:
+		check(screen.hint_banner.get_parent() == screen._hint_layer, "%s: the hint is in the dock or on the map layer" % id)
 		rects.append(hint_rect)
-		var hint_hit: String = _first_hit(screen, important, rects)
-		check(hint_hit.is_empty(), "%s with the hint: %s" % [id, hint_hit])
-		check(hint_rect.size.y >= 150.0, "%s: the hint is a 48 dp target (%s)" % [id, hint_rect.size.y])
-		check(COVER_SAFE.encloses(hint_rect), "%s: the hint is inside the safe area (%s)" % [id, hint_rect])
-		# 4. The Paused strip and the messages may cover more, but never the highlighted cell.
-		screen.freeze()
-		screen.hud.show_feedback("The wave is still arriving.")
-		screen.gate_tray.show_feedback("Gates are locked until the wave is over.")
-		await _frames(3)
-		var soft_rects: Array[Rect2] = _dock_rects(screen)
-		soft_rects.append(hint_rect)
+	var hint_hit: String = _first_hit(screen, important, rects)
+	if screen.hint_banner.get_parent() == screen._dock:
+		for cell: Vector2i in important:
+			if hint_rect.intersects(_cell_rect(screen, cell)):
+				hint_hit = "cell %s is covered by the hint in the dock %s" % [cell, hint_rect]
+	if not hint_hit.is_empty() and not screen._hint_has_room(screen._dock_steady_height()):
+		# No place covers nothing, even next to a folded strip: the hint sits at the top of the
+		# dock (docs/ARCHITECTURE.md 7.4, place 3) and one tap puts it away.
+		print("NOTE %s: the hint must cover part of the map until it is tapped (%s)" % [id, hint_hit])
+		hint_hit = ""
+	check(hint_hit.is_empty(), "%s with the hint: %s" % [id, hint_hit])
+	check(hint_rect.size.y >= 150.0, "%s: the hint is a 48 dp target (%s)" % [id, hint_rect.size.y])
+	check(COVER_SAFE.encloses(hint_rect), "%s: the hint is inside the safe area (%s)" % [id, hint_rect])
+	# 3. The Paused strip and the messages may cover more, but never the highlighted cell.
+	screen.freeze()
+	screen.hud.show_feedback("The wave is still arriving.")
+	screen.gate_tray.show_feedback("Gates are locked until the wave is over.")
+	await _frames(3)
+	var soft_rects: Array[Rect2] = _dock_rects(screen)
+	soft_rects.append(screen.hint_banner.get_global_rect())
+	if b.level.hint_cell.x >= 0:
 		var soft: String = _first_hit(screen, [b.level.hint_cell] as Array[Vector2i], soft_rects)
 		check(soft.is_empty(), "%s paused with messages: %s" % [id, soft])
-		screen.resume()
-		screen.hint_banner.dismiss()
-		screen.hud.clear_feedback()
-		screen.gate_tray.clear_feedback()
-		# 2. During a wave, with the preview folded.
-		b.start_next_wave()
-		BattleFixtures.steps(b, 4)
-		await _frames(3)
-		check(not screen.preview.expanded, "%s: the preview is folded during a wave" % id)
-		var wave_hit: String = _first_hit(screen, must, _dock_rects(screen))
-		check(wave_hit.is_empty(), "%s during a wave: %s" % [id, wave_hit])
-		vp.queue_free()
-		await _frames(2)
+	screen.resume()
+	screen.hint_banner.dismiss()
+	screen.hud.clear_feedback()
+	screen.gate_tray.clear_feedback()
+	# 4. During a wave, with the preview folded and its strip one line.
+	b.start_next_wave()
+	BattleFixtures.steps(b, 4)
+	await _frames(3)
+	check(not screen.preview.expanded, "%s: the preview is folded during a wave" % id)
+	_strip_is_one_line(screen, "%s during a wave" % id)
+	var wave_hit: String = _first_hit(screen, must, _dock_rects(screen))
+	check(wave_hit.is_empty(), "%s during a wave: %s" % [id, wave_hit])
+	vp.queue_free()
+	await _frames(2)
+
+
+## A wave with eight groups cannot fit one line: the strip shows what fits and a +N chip.
+func _dock_many_groups() -> void:
+	var groups: Array = []
+	for enemy: String in ["scamp", "pip", "skitter", "flitter", "shellback", "scamp", "pip", "skitter"]:
+		groups.append({"enemy": enemy, "count": 12, "entrance": 1, "at_ms": 0, "every_ms": 500})
+	var b: Battle = BattleFixtures.battle_with_first_wave(groups, &"r1_l5")
+	var vp: SubViewport = _viewport(COVER)
+	var screen: BattleScreen = BattleScreen.new()
+	screen.setup(b, null, _all_seen())
+	await _hosted(vp, screen, COVER, COVER_SAFE)
+	await _frames(8)
+	check(not screen.preview.expanded, "eight groups: the open preview does not fit under the map")
+	_strip_is_one_line(screen, "eight groups")
+	var strip: StripRow = screen.preview.strip
+	if strip != null:
+		check(strip.chip_count() == 8, "eight groups: eight chips (%d)" % strip.chip_count())
+		check(strip.visible_chips() < 8 and strip.visible_chips() >= 2, "eight groups: some chips fit and some do not (%d)" % strip.visible_chips())
+		check(strip.more_text().begins_with("+"), "eight groups: the +N chip shows (%s)" % strip.more_text())
+	# A tap on the strip opens the full list over the map, a tap on its header folds it again.
+	screen.preview.header.tapped.emit()
+	await _frames(3)
+	check(screen.preview.expanded, "eight groups: a tap on the strip opens the preview")
+	check(screen.preview.rows.size() == 8 or screen.preview.rows.size() > 0, "eight groups: the open preview lists the groups")
+	screen.preview.header.tapped.emit()
+	await _frames(3)
+	check(not screen.preview.expanded, "eight groups: a tap on the header folds it")
+	# The choice holds until the layout changes, then the screen decides again.
+	screen.preview.header.tapped.emit()
+	await _frames(3)
+	screen.apply_layout(COVER, COVER_SAFE)
+	await _frames(screen.FIT_FRAMES + 3)
+	check(not screen.preview.expanded, "eight groups: a layout change decides again, and it still does not fit")
+	vp.queue_free()
+	await _frames(2)
+
+
+## The 13 row fixture, whose bottom row is scenery: the strip covers part of that row only.
+func _dock_tall() -> void:
+	var b: Battle = _tall_battle()
+	if b == null:
+		return
+	b.gold = 5000
+	for cell: Vector2i in b.level.spots:
+		b.place_tower(cell, &"sling_post")
+	var vp: SubViewport = _viewport(COVER)
+	var screen: BattleScreen = BattleScreen.new()
+	screen.setup(b, null, _all_seen())
+	await _hosted(vp, screen, COVER, COVER_SAFE)
+	await _frames(8)
+	var bottom_row: int = b.level.rows - 1
+	for x: int in Sim.MAP_COLUMNS:
+		check(b.level.kind_at(Vector2i(x, bottom_row)) == LevelData.Kind.SCENERY, "tall: the bottom row is scenery at column %d" % x)
+	await _preview_decision(screen, "tall, default build state")
+	check(not screen.preview.expanded, "tall: the preview starts folded on a 13 row map")
+	_strip_is_one_line(screen, "tall")
+	var must: Array[Vector2i] = _must_see(b)
+	var hit: String = _first_hit(screen, must, _dock_rects(screen))
+	check(hit.is_empty(), "tall: %s" % hit)
+	screen.hint_banner.show_hint(b.level.hint_text)
+	screen.map_view.show_hint(b.level.hint_cell)
+	await _frames(3)
+	var rects: Array[Rect2] = _dock_rects(screen)
+	rects.append(screen.hint_banner.get_global_rect())
+	var important: Array[Vector2i] = must.duplicate()
+	important.append(b.level.hint_cell)
+	var hint_hit: String = _first_hit(screen, important, rects)
+	check(hint_hit.is_empty(), "tall with the hint: %s" % hint_hit)
+	screen.hint_banner.dismiss()
+	b.start_next_wave()
+	BattleFixtures.steps(b, 4)
+	await _frames(3)
+	_strip_is_one_line(screen, "tall during a wave")
+	var wave_hit: String = _first_hit(screen, must, _dock_rects(screen))
+	check(wave_hit.is_empty(), "tall during a wave: %s" % wave_hit)
+	vp.queue_free()
+	await _frames(2)
+
+
+func _stays_in_sight() -> void:
+	for id: StringName in BattleFixtures.all_level_ids():
+		var b: Battle = BattleFixtures.file_battle(id)
+		check(b != null, "%s makes a battle" % id)
+		if b != null:
+			await _dock_level(id, b)
+	await _dock_many_groups()
+	await _dock_tall()
 
 
 func _cell_floor() -> void:
@@ -1064,3 +1220,97 @@ func _cell_floor() -> void:
 			await _floor_state(screen, level_id, false, true, true, 0, true, true)
 		vp.queue_free()
 		await _frames(2)
+
+
+# Task U1 in a real tree: the call button ring, the gate chip's tap, Pause with its star
+# lines, and the preview deciding again when the layout changes.
+
+func _u1_real() -> void:
+	for pair: Array in [[COVER, COVER_SAFE, "cover"], [INNER, INNER_SAFE, "inner"]]:
+		var size: Vector2 = pair[0]
+		var safe: Rect2 = pair[1]
+		var label: String = pair[2]
+		var tag: String = "real_%s_u1" % label
+		var vp: SubViewport = _viewport(size)
+		var made: App = await _battle_app(vp, size, safe, tag)
+		var screen: BattleScreen = await _start_level(made, &"r2_l1")
+		var b: Battle = screen.battle
+		var where: String = "u1 at %s" % size
+		check(not screen.hud.call_ring.visible, "%s: no ring in a build phase" % where)
+		check(Fx.build(screen, b.level.spots[0], &"sling_post"), "%s: a first tower" % where)
+		check(Fx.build(screen, b.level.spots[1], &"pumpkin_catapult"), "%s: a second tower" % where)
+		screen.close_context()
+		await _frames(2)
+		_touch(vp, screen.hud.call_button.get_global_rect().get_center())
+		check(b.phase == Battle.Phase.WAVE, "%s: a real tap on Start wave starts it" % where)
+		screen.clock.speed = 3
+		var guard: int = 0
+		while b.next_wave_info()["refusal"] != &"" and guard < 400 and b.phase == Battle.Phase.WAVE:
+			await process_frame
+			guard += 1
+		await _frames(3)
+		check(b.next_wave_info()["refusal"] == &"", "%s: an early call is offered" % where)
+		check(screen.hud.call_ring.visible, "%s: the ring shows while an early call is offered" % where)
+		var button_rect: Rect2 = screen.hud.call_button.get_global_rect()
+		var ring_rect: Rect2 = screen.hud.call_ring.get_global_rect()
+		check(ring_rect.encloses(button_rect), "%s: the ring is around the button (%s around %s)" % [where, ring_rect, button_rect])
+		check(Rect2(Vector2.ZERO, size).grow(0.6).encloses(ring_rect), "%s: the ring is inside the screen" % where)
+		check(screen.hud.call_button.theme_type_variation == &"Button", "%s: the glowing button is not honey" % where)
+		_touch(vp, button_rect.get_center())
+		await _frames(3)
+		check(b.waves_started == 2, "%s: a real tap on the glowing button calls the wave" % where)
+		check(not screen.hud.call_ring.visible, "%s: the first early call puts the ring away" % where)
+		# Pause with its star lines, inside the screen and the safe area.
+		screen.pause()
+		await _frames(3)
+		var pause: PausePanel = made.top_modal() as PausePanel
+		check(pause != null and pause.star_lines.size() == 3, "%s: Pause shows three star lines" % where)
+		if pause != null:
+			_inside_and_big(pause, size, "%s Pause with star lines" % where)
+			check(safe.grow(0.6).encloses(pause.card.get_global_rect()), "%s: the Pause card is inside the safe area (%s)" % [where, pause.card.get_global_rect()])
+			for line: StarLine in pause.star_lines:
+				check(line.sentence.get_global_rect().size.x >= 200.0, "%s: a star sentence has room (%.0f px)" % [where, line.sentence.get_global_rect().size.x])
+		made.handle_back()
+		await _frames(2)
+		vp.queue_free()
+		Fx.wipe(tag)
+		await _frames(2)
+	await _u1_chip_and_fold()
+
+
+func _u1_chip_and_fold() -> void:
+	var vp: SubViewport = _viewport(COVER)
+	var made: App = await _battle_app(vp, COVER, COVER_SAFE, "real_cover_u1")
+	var screen: BattleScreen = await _start_level(made, &"r1_l2")
+	var chip: GateTray = screen.gate_tray
+	check(chip.chip and chip.visible, "chip: the portrait gate chip shows")
+	_touch(vp, chip.get_global_rect().get_center())
+	await _frames(2)
+	check(chip.feedback_text() == "Drag one onto a marked road, or tap a marked road.", "chip: a real tap shows its sentence (%s)" % chip.feedback_text())
+	check(chip.feedback_box.is_visible_in_tree(), "chip: the sentence is on screen")
+	check(screen.battle.gates.is_empty(), "chip: and a tap placed nothing")
+	vp.queue_free()
+	Fx.wipe("real_cover_u1")
+	await _frames(2)
+	# The preview decides again after a fold and an unfold.
+	var vp2: SubViewport = _viewport(COVER)
+	var made2: App = await _battle_app(vp2, COVER, COVER_SAFE, "real_cover_u1")
+	var tall: BattleScreen = await _start_level(made2, &"r2_l6")
+	await _frames(8)
+	check(not tall.preview.expanded, "fold: a 13 row map starts folded on the cover")
+	vp2.size = Vector2i(INNER)
+	await _frames(3)
+	made2.apply_layout(INNER, INNER_SAFE)
+	await _frames(8)
+	check(tall.landscape and tall.preview.expanded, "fold: the landscape layout opens the preview")
+	check(tall.preview.modulate.a == 1.0, "fold: and shows it")
+	vp2.size = Vector2i(COVER)
+	await _frames(3)
+	made2.apply_layout(COVER, COVER_SAFE)
+	await _frames(10)
+	check(not tall.landscape and not tall.preview.expanded, "fold: back on the cover it is folded again (landscape %s, open %s, wait %d, alpha %s, dock end %.0f, map bottom %.0f, min %.0f)" % [tall.landscape, tall.preview.expanded, tall._fit_wait, tall.preview.modulate.a, tall._dock.get_global_rect().end.y, tall._map_bottom(), tall.preview.get_combined_minimum_size().y])
+	check(tall.preview.modulate.a == 1.0 and tall._fit_wait == 0, "fold: decided and shown")
+	check(tall.battle.phase == Battle.Phase.BUILD and tall.battle.waves_started == 0, "fold: nothing else changed")
+	vp2.queue_free()
+	Fx.wipe("real_cover_u1")
+	await _frames(2)

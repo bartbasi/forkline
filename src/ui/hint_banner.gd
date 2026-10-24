@@ -5,9 +5,10 @@ extends BattlePanel
 ## A level's one line hint (RULES 9.6). It shows at the start of the level the first
 ## time it is played, next to a glow on the thing it talks about. A tap anywhere on it
 ## closes it, and the screen closes it when the first wave starts. In portrait it takes
-## no height from the map: the screen floats it over a row of the map with nothing to
-## tap in it (BattleScreen._place_hint). It is as tall as one 48 dp touch target. The
-## hint always stays on the level card.
+## no height from the map: the screen puts it at the top of the dock when that stays under
+## the map, else over a band of map rows with nothing in it to see or tap
+## (BattleScreen._place_hint). It is as tall as one 48 dp touch target. The hint always
+## stays on the level card.
 
 const HEIGHT: float = 152.0
 

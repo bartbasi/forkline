@@ -4,7 +4,7 @@ class_name InfoArt
 extends Control
 ## The small real examples in the Info guide. Each one is drawn by the same
 ## src/theme/ code the game uses, so what the guide shows is what the player
-## will see. Kinds: walk, hud, spots, tiers, towers, creatures, gates, signals,
+## will see (the creatures section shows the bosses too). Kinds: walk, hud, spots, tiers, towers, creatures, gates, signals,
 ## stars. Captions (names under towers and creatures) are optional: the guide
 ## passes them only when the data has names, and draws shapes alone otherwise. A name
 ## wraps onto two lines when it must, and the pictures go three to a row when the names
@@ -146,7 +146,7 @@ func _creatures() -> void:
 	_card_background()
 	var g: Dictionary = _grid(size.x)
 	var slot: float = g["slot"]
-	var ids: Array[StringName] = Silhouettes.CREATURES
+	var ids: Array[StringName] = creature_ids()
 	for i: int in ids.size():
 		var at: Vector2 = _slot_center(g, i)
 		Silhouettes.draw_enemy(self, ids[i], at, Silhouettes.enemy_size(ids[i], float(g["picture"])), 1)
@@ -227,7 +227,15 @@ func _arrow(from: Vector2, to: Vector2, color: Color = Palette.ROUTE) -> void:
 
 ## The ids of the pictures this kind shows.
 func _ids() -> Array[StringName]:
-	return Silhouettes.TOWERS if kind == &"towers" else Silhouettes.CREATURES
+	return Silhouettes.TOWERS if kind == &"towers" else creature_ids()
+
+
+## Every creature, then every boss: the pictures of the Creatures section.
+static func creature_ids() -> Array[StringName]:
+	var ids: Array[StringName] = []
+	ids.append_array(Silhouettes.CREATURES)
+	ids.append_array(Silhouettes.BOSSES)
+	return ids
 
 
 ## How the pictures sit in `width`: pictures per row, the slot each gets, the picture

@@ -155,6 +155,13 @@ static func refusal(reason: StringName, need: int = 0) -> String:
 	return "That did not work."
 
 
+## The message when a wave is cleared (event wave_cleared, 0 based wave, the clear bonus).
+static func cleared_text(wave: int, gold: int) -> String:
+	if gold <= 0:
+		return "Wave %d cleared." % (wave + 1)
+	return "Wave %d cleared: +%d gold." % [wave + 1, gold]
+
+
 ## Gold still missing for a refusal, from the price and the gold in hand.
 static func shortfall(reason: StringName, price: int, gold: int) -> int:
 	if reason == &"too_poor":

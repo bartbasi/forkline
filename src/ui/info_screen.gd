@@ -49,7 +49,7 @@ func _captions(art_kind: StringName, names: Dictionary) -> PackedStringArray:
 	if art_kind == &"towers":
 		ids = Silhouettes.TOWERS
 	elif art_kind == &"creatures":
-		ids = Silhouettes.CREATURES
+		ids = InfoArt.creature_ids()
 	var out: PackedStringArray = PackedStringArray()
 	var found: bool = false
 	for id: StringName in ids:
@@ -80,12 +80,14 @@ func _sections(rules: Dictionary) -> Array[Dictionary]:
 			"Towers stand on the round build spots. Tap a spot, pick a tower, and look at its range ring before you confirm.",
 			"Every tower has one job, and none is best everywhere. Mix them."]},
 		{"title": "Telling towers apart", "art": &"towers", "text": [
-			"Each tower looks different, so you can tell them apart by shape alone. Tap any tower to see its real numbers."]},
+			"Each tower looks different, so you can tell them apart by shape alone. Some shoot, some only hit flyers, some slow creatures down, and some make the towers around them better.",
+			"Tap any tower to see its real numbers."]},
 		{"title": "Upgrades", "art": &"tiers", "text": [
 			"Every tower has three tiers. At tier 3 you pick one of two paths. The choice is permanent for that tower. Selling it is the only way to choose again.",
 			"An upgrade shows its cost and the numbers before and after, so you can decide first."]},
 		{"title": "Creatures", "art": &"creatures", "text": [
-			"Creatures differ in speed, health and armor. Some fly, some heal the others, some break gates.",
+			"Creatures differ in speed, health and armor. Some fly, some wear a bubble that stops one hit, some burst into smaller ones, some heal the others, and some break gates.",
+			"The last pictures are the bosses. Each region ends with one.",
 			"The first time a new one is in the next wave, a card tells you about it. Tap any creature to see its real numbers."]},
 		{"title": "Gates", "art": &"gates", "text": [
 			"Some road tiles have a socket. Each level gives you a set number of gates, and a gate closes its socket.",

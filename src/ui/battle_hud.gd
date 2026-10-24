@@ -4,8 +4,10 @@ class_name BattleHud
 extends BattlePanel
 ## The HUD (RULES 4.7 to 4.9, 9.7): lives, gold, the wave, the speed 1x 2x 3x,
 ## pause, and the button that starts the next wave. In a build phase it reads
-## "Start wave N". During a wave it calls the next wave early and shows the gold
-## bonus for doing so, updated live. Calling works while paused.
+## "Start wave N", in honey: the only honey button here. During a wave it calls the next
+## wave early and shows the gold bonus for doing so, updated live, in the plain look. On a
+## level whose highlight is this button (2-1) a pulsing ring wears it while it offers an
+## early call, until the first early call. Calling works while paused.
 ##
 ## The speed and the paused look are only shown here: the screen owns the clock.
 
@@ -22,6 +24,9 @@ var wave_label: Label
 var pause_button: TapButton
 var speed_buttons: Array[TapButton] = []
 var call_button: TapButton
+## The pulsing ring on the call button (RULES 9.6). Visible only on a level whose highlight
+## is that button, while the button offers an early call, until the first early call.
+var call_ring: CallRing
 
 var speed: int = 1
 var paused: bool = false
@@ -45,6 +50,8 @@ var _row_mid: HBoxContainer
 var _row_call: HBoxContainer
 var _wide: bool = true
 var _call_state: String = ""
+## True once the player has called a wave early on this screen. The ring then stays away.
+var _called_early: bool = false
 ## A part that sits in the first row, between the numbers and the pause button: the
 ## gate chip in portrait. Null for none.
 var _gate_slot: Control = null
@@ -81,6 +88,8 @@ func _init() -> void:
 	call_button = UiKit.wrapped(UiKit.button(""))
 	call_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	call_button.tapped.connect(_on_call)
+	call_ring = CallRing.new()
+	call_button.add_child(call_ring)
 	_arrange(true)
 	_show_speed()
 
@@ -236,22 +245,27 @@ func _refresh_call() -> void:
 	var refusal: StringName = info["refusal"]
 	var next_number: int = battle.waves_started + 1
 	var text: String
-	var primary: bool
+	# Honey only for "Start wave N" in a build phase. An early call keeps the plain look with
+	# its "+N", so a new player does not take it for the next step (FUN_REVIEW_R1 item 3).
+	var primary: bool = false
+	var locked: bool = false
+	var early: bool = false
 	if battle.phase == Battle.Phase.BUILD and refusal == &"":
 		text = "Start wave %d" % next_number
 		primary = true
 	elif refusal == &"":
 		text = "Call wave %d  +%d" % [next_number, int(info["bonus"])]
-		primary = true
+		early = true
 	elif refusal == &"no_more_waves":
 		text = "Last wave is out"
-		primary = false
+		locked = true
 	elif refusal == &"over":
 		text = "Battle over"
-		primary = false
+		locked = true
 	else:
 		text = "Call wave %d" % next_number
-		primary = false
+		locked = true
+	call_ring.visible = early and not _called_early and battle.level.hint_button == &"call"
 	var state: String = "%s|%s" % [text, primary]
 	if state == _call_state:
 		return
@@ -259,7 +273,7 @@ func _refresh_call() -> void:
 	call_button.text = text
 	call_button.theme_type_variation = &"PrimaryButton" if primary else &"Button"
 	# A call that cannot be made yet carries a lock, so it never differs by color alone.
-	call_button.icon = null if primary else IconTex.make(&"lock", 56)
+	call_button.icon = IconTex.make(&"lock", 56) if locked else null
 	call_button.add_theme_color_override(&"icon_normal_color", Palette.TEXT_SOFT)
 	call_button.add_theme_color_override(&"icon_hover_color", Palette.TEXT_SOFT)
 	call_button.add_theme_color_override(&"icon_pressed_color", Palette.TEXT_SOFT)
@@ -280,6 +294,9 @@ func _on_pause() -> void:
 func _on_call() -> void:
 	if battle == null:
 		return
+	var early: bool = battle.phase == Battle.Phase.WAVE
 	var result: StringName = battle.start_next_wave()
 	if finish(result):
+		if early:
+			_called_early = true
 		refresh()
