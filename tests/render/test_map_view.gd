@@ -102,35 +102,35 @@ func test_never_changes_the_battle() -> void:
 
 
 func test_nodes_follow_creatures_and_nothing_leaks() -> void:
+	# Plays every wave of the level through one view. The pool must stay near the largest crowd
+	# ever on the map, however the waves are sized, while many more creatures than that pass through.
 	var b: Battle = Fx.battle("r1_l5")
 	var v: MapView = _view(b)
 	Fx.defend(b)
-	Fx.fast_forward(b, 3)
-	b.start_next_wave()
+	var seen: Dictionary = {}
 	var peak: int = 0
 	var guard: int = 0
-	while b.phase == Battle.Phase.WAVE and guard < 8000:
-		var events: Array[Dictionary] = Fx.tick(b)
-		v.sync(1.0)
-		v.play_events(events)
-		assert_eq(v.creature_count(), b.enemies.size(), "tick %d: one node per live creature" % b.tick)
-		peak = maxi(peak, b.enemies.size())
-		guard += 1
-	assert_true(peak > 3, "the wave had a crowd")
-	v.advance_effects(2.0)
-	v.sync(0.0)
-	assert_eq(v.creature_count(), 0)
-	assert_eq(v.ghost_count(), 0, "no creature is kept after the wave")
-	assert_true(v.sprite_count() <= v.tower_count() + peak + 4, "sprites are pooled: %d for %d towers and a peak of %d" % [v.sprite_count(), v.tower_count(), peak])
-	var made: int = v.sprite_count()
-	b.start_next_wave()
-	guard = 0
-	while b.phase == Battle.Phase.WAVE and guard < 8000:
-		var events2: Array[Dictionary] = Fx.tick(b)
-		v.sync(1.0)
-		v.play_events(events2)
-		guard += 1
-	assert_true(v.sprite_count() <= made + 6, "a second wave reuses the pool")
+	while b.phase == Battle.Phase.BUILD and b.waves_started < b.wave_count():
+		b.start_next_wave()
+		while b.phase == Battle.Phase.WAVE and guard < 40000:
+			var events: Array[Dictionary] = Fx.tick(b)
+			v.sync(1.0)
+			v.play_events(events)
+			assert_eq(v.creature_count(), b.enemies.size(), "tick %d: one node per live creature" % b.tick)
+			peak = maxi(peak, b.enemies.size())
+			for e: EnemyState in b.enemies:
+				seen[e.id] = true
+			guard += 1
+		v.advance_effects(2.0)
+		v.sync(0.0)
+		assert_eq(v.creature_count(), 0)
+		assert_eq(v.ghost_count(), 0, "no creature is kept after wave %d" % b.waves_started)
+		assert_true(v.sprite_count() <= v.tower_count() + peak + 4, "sprites are pooled after wave %d: %d for %d towers and a peak of %d" % [b.waves_started, v.sprite_count(), v.tower_count(), peak])
+	assert_true(guard < 40000, "the waves ended")
+	assert_true(b.waves_started >= 2, "more than one wave was played")
+	assert_true(peak > 3, "a wave had a crowd")
+	# Without this the pool bound above would pass for a pool that never reuses a sprite.
+	assert_true(seen.size() > peak + 4, "more creatures passed through (%d) than the pool bound allows (peak %d)" % [seen.size(), peak])
 
 
 func test_sold_towers_free_their_nodes() -> void:

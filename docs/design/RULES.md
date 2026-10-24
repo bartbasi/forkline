@@ -6,6 +6,8 @@ Phase 4 additions, 2026-10-23. No number changed. Added: the Puff's card line an
 
 Clarifications, 2026-10-23, after the sim was built. No number changed. Settled: a level or run is won only when no wave is left running (4.1, 8.1, 14.1); an upgrade or a reload card never leaves a reload timer above the new reload time (4.6, 5.2); a refund never pays back more than was paid (4.6); and a Bell that slows flyers slows every flyer, the Moon Moth included (5.5, 5.11, 6.3, 6.5, 14.6).
 
+Region 1 tuning, 2026-10-24, after the first balance report. The plan and its evidence are in docs/design/TUNING_R1.md. Changed numbers: Pumpkin Catapult tier 1 range 3.0 to 2.5, tier 2 splash 0.75 to 1.25, Prize Pumpkin splash 1.25 to 1.5, Jam Pot splash 1.0 to 1.25 (5.4); Pip health 12 to 21 and bounty 2 to 3 (6.1). Changed text: the Pip's card line (6.6). Changed plan: region 1 waves, star 3 rules and level 1-6's strength (12.3, 12.4). New: difficulty targets in place of the old wave size guide (12.5). The 5.10 tables are recomputed.
+
 Names follow docs/art/NAMES.md as the game designer reviewed it on 2026-10-23. Bart still has to see the final name list. The tables in 5.1, 5.3 to 5.8, 6.1, 6.3 and 12.1 give each tower, tier 3 path, creature, boss and region its id from that list, so the data files have one source. In each tower's tier table, the first tier 3 row is spec 0 and the second is spec 1.
 
 This file holds every game rule and number for version 1. The sim engineer, level designer, roguelite engineer, balance analyst and UI engineer build from it. If something here is unclear or seems to conflict with docs/ARCHITECTURE.md, ask the DM. Do not guess.
@@ -284,11 +286,12 @@ Lobs pumpkins that splash every walker near the target. Cannot hit flyers.
 
 | Tier | Name | Id | Price | Total spent | Damage | Reload (s) | Rate per s | Range | Splash radius | Extra |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Pumpkin Catapult | `pumpkin_catapult` | 120 | 120 | 14 | 2.0 | 0.5 | 3.0 | 0.75 | none |
-| 2 | Pumpkin Catapult | `pumpkin_catapult` | 130 | 250 | 24 | 2.0 | 0.5 | 3.0 | 0.75 | none |
-| 3 | Prize Pumpkin | `prize_pumpkin` | 230 | 480 | 50 | 2.5 | 0.4 | 3.5 | 1.25 | none |
-| 3 | Jam Pot | `jam_pot` | 230 | 480 | 24 | 1.5 | 0.7 | 3.0 | 1.0 | Every walker it damages is slowed 40% for 3.0 s |
+| 1 | Pumpkin Catapult | `pumpkin_catapult` | 120 | 120 | 14 | 2.0 | 0.5 | 2.5 | 0.75 | none |
+| 2 | Pumpkin Catapult | `pumpkin_catapult` | 130 | 250 | 24 | 2.0 | 0.5 | 3.0 | 1.25 | none |
+| 3 | Prize Pumpkin | `prize_pumpkin` | 230 | 480 | 50 | 2.5 | 0.4 | 3.5 | 1.5 | none |
+| 3 | Jam Pot | `jam_pot` | 230 | 480 | 24 | 1.5 | 0.7 | 3.0 | 1.25 | Every walker it damages is slowed 40% for 3.0 s |
 
+- Tier 1 reaches as far as a tier 1 Sling Post, so on single walkers the Sling Post is the better buy. Tier 2 reaches further and splashes much wider: the answer to crowds.
 - Prize Pumpkin: raw splash. Better against fast or spread-out groups and armored groups.
 - Jam Pot: control. Its slow makes every other tower in the area better. It fires often enough that every other shot gets past a Bubbler's bubble.
 
@@ -384,38 +387,38 @@ Plurals, for the star 3 line "Build no ..." (10.3): Sling Posts, Pumpkin Catapul
 
 ### 5.10 Why no tower is best everywhere
 
-Method. These tables come from a rough model, not from the bots. They show useful damage per second for every 100 gold spent, against a steady stream of one creature type, with wasted damage on kills counted and no support towers. Creature spacing: Pips 0.3 s apart, Flitters 0.4 s, Skitters 0.8 s, Scamps 1.0 s, Bubblers and Menders 1.2 s, Shellbacks 1.5 s, Dusk Moths 2.0 s, Gatecrashers 3.0 s, Puffs in their threes. Boss columns use one huge target. The best value in each column is in bold. The balance bots on real maps have the final word.
+Method. These tables come from a rough model, not from the bots. They show useful damage per second for every 100 gold spent, against a steady stream of one creature type, with wasted damage on kills counted and no support towers. Creature spacing: Pips 0.3 s apart, Flitters 0.4 s, Skitters 0.8 s, Scamps 1.0 s, Bubblers and Menders 1.2 s, Shellbacks 1.5 s, Dusk Moths 2.0 s, Gatecrashers 3.0 s, Puffs in their threes. Boss columns use one huge target. The best value in each column is in bold. The model counts splash on both sides of the target, as in a long stream. In a short pack a tower aiming First hits the front, so splash finds creatures on one side only, and the model overrates splash there. The balance bots on real maps have the final word (docs/design/TUNING_R1.md). Recomputed on 2026-10-24 with the region 1 tuning numbers.
 
 Tier 1 at strength 100:
 
 | Tower | Scamp | Pip | Skitter | Flitter | Shellback | Bubbler | Puff | Mender | Gatecrasher | Dusk Moth | Ironshell | Moon Moth | Old Tusk |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Sling Post | **11.4** | 12.0 | **12.0** | 12.0 | 4.0 | **8.3** | 12.0 | **10.0** | 8.0 | 2.0 | 2.0 | 6.0 | 4.0 |
-| Pumpkin Catapult | 5.6 | **25.0** | 4.2 | 0 | 4.2 | 0 | **15.0** | 4.9 | 4.8 | 0 | 3.3 | 0 | 4.2 |
-| Longbow Loft | 10.7 | 3.2 | 8.0 | 0 | **8.0** | 0 | 3.2 | 9.3 | **10.7** | 0 | **10.7** | 0 | **10.7** |
+| Sling Post | **11.4** | 10.5 | **12.0** | 12.0 | 4.0 | **8.3** | 12.0 | **10.0** | 8.0 | 2.0 | 2.0 | 6.0 | 4.0 |
+| Pumpkin Catapult | 5.6 | **21.9** | 4.2 | 0 | 4.2 | 0 | **15.0** | 4.9 | 4.8 | 0 | 3.3 | 0 | 4.2 |
+| Longbow Loft | 10.7 | 5.6 | 8.0 | 0 | **8.0** | 0 | 3.2 | 9.3 | **10.7** | 0 | **10.7** | 0 | **10.7** |
 | Firework Tower | 0 | 0 | 0 | **27.3** | 0 | 0 | 0 | 0 | 0 | **6.1** | 0 | **8.2** | 0 |
 
 Tier 3 at strength 220:
 
 | Tower | Scamp | Pip | Skitter | Flitter | Shellback | Bubbler | Puff | Mender | Gatecrasher | Dusk Moth | Ironshell | Moon Moth | Old Tusk |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Quickshot | 9.8 | 7.9 | 8.9 | 8.9 | 4.8 | **8.6** | **7.9** | 8.5 | 7.3 | 3.7 | 2.4 | 6.1 | 4.9 |
-| Stone Sling | 8.6 | 6.3 | 8.0 | 8.0 | 7.4 | 6.7 | 6.3 | 8.3 | 8.6 | 7.2 | 6.8 | 8.3 | 7.8 |
-| Prize Pumpkin | **11.0** | **15.2** | 2.8 | 0 | 9.9 | 0 | 6.5 | 9.6 | 3.7 | 0 | 3.7 | 0 | 3.8 |
-| Jam Pot | 9.2 | 9.0 | 3.1 | 0 | 2.8 | 1.5 | 5.4 | 9.2 | 3.1 | 0 | 2.5 | 0 | 2.8 |
-| Giant Bow | 5.0 | 1.5 | 3.7 | 0 | 5.6 | 0 | 1.5 | 8.7 | 9.9 | 0 | **10.2** | 0 | **10.2** |
-| Triple Bow | 8.9 | 5.3 | **13.4** | 0 | **13.4** | 0 | 5.3 | **10.4** | **11.9** | 0 | 4.7 | 0 | 4.7 |
+| Quickshot | 9.8 | 9.3 | 8.9 | 8.9 | 4.8 | **8.6** | **7.9** | 8.5 | 7.3 | 3.7 | 2.4 | 6.1 | 4.9 |
+| Stone Sling | 8.6 | 7.5 | 8.0 | 8.0 | 7.4 | 6.7 | 6.3 | 8.3 | 8.6 | 7.2 | 6.8 | 8.3 | 7.8 |
+| Prize Pumpkin | **11.0** | **34.5** | 2.8 | 0 | 9.9 | 0 | 6.5 | 9.6 | 3.7 | 0 | 3.7 | 0 | 3.8 |
+| Jam Pot | 9.2 | 22.4 | 3.1 | 0 | 8.2 | 4.6 | 5.4 | 9.2 | 3.1 | 0 | 2.5 | 0 | 2.8 |
+| Giant Bow | 5.0 | 2.6 | 3.7 | 0 | 5.6 | 0 | 1.5 | 8.7 | 9.9 | 0 | **10.2** | 0 | **10.2** |
+| Triple Bow | 8.9 | 9.4 | **13.4** | 0 | **13.4** | 0 | 5.3 | **10.4** | **11.9** | 0 | 4.7 | 0 | 4.7 |
 | Star Bloom | 0 | 0 | 0 | **25.0** | 0 | 0 | 0 | 0 | 0 | 5.5 | 0 | 6.1 | 0 |
 | Skyrocket | 0 | 0 | 0 | 10.0 | 0 | 0 | 0 | 0 | 0 | **13.3** | 0 | **13.6** | 0 |
 
 What the tables show:
 
 - Every attacking tower is best against something, and none is best against everything.
-- The Sling Post is the strongest all-rounder at tier 1, and it is the only tower that hurts Bubblers well. It falls to about a third of its value against armor. It is the tower to watch in the bot reports.
+- The Sling Post is the best tier 1 tower against single walkers, and it is the only tower that hurts Bubblers well. It falls to about a third of its value against armor. A Pip takes four tier 1 pebbles or three Quickshot pebbles but only one tier 2 pumpkin, so crowds belong to splash. The first bot report found the Sling Post doing every job in region 1; this split is the fix.
 - The Stone Sling tops no column, but it is second best against the Dusk Moth and every armored boss, and it is the only tower that is good against both armored walkers and armored flyers. The Jam Pot's value is its slow, which the tables cannot show (see below).
 - Each tier 3 pair splits cleanly: Quickshot against bubbles and crowds, Stone Sling against armor; Prize Pumpkin for damage, Jam Pot for control; Giant Bow against bosses, Triple Bow against armored groups; Star Bloom against flocks, Skyrocket against armored flyers.
 
-The support towers, from the same rough model, using a straight road past five spots in a row:
+The support towers, from the same rough model with the phase 4 numbers (before the region 1 tuning), using a straight road past five spots in a row:
 
 - Bell with splash. Ten Shellbacks at strength 200. Five tier 2 Catapults let 7 through. Four tier 2 Catapults and a tier 2 Bell let 4 through. With a Hush Bell, 3. Drowsy walkers bunch up, so splash hits more of them.
 - Bell without splash. With five tier 2 Sling Posts, 7 Shellbacks got through, and swapping one Sling Post for a Bell did not help. Against 24 Scamps at strength 200, five tier 2 Sling Posts let none through. Four and a Hush Bell let 7 through. A Bell is a poor pick in a build of single-target towers.
@@ -446,7 +449,7 @@ Numbers at strength 100. Health, heal amounts and bounty scale with strength (6.
 | Creature | Id | Health | Armor | Speed | Moves | Lives lost | Bounty | Special |
 |---|---|---|---|---|---|---|---|---|
 | Scamp | `scamp` | 40 | 0 | 1.0 | Walks | 1 | 5 | None. The basic creature. |
-| Pip | `pip` | 12 | 0 | 1.2 | Walks | 1 | 2 | None. Comes in crowds. |
+| Pip | `pip` | 21 | 0 | 1.2 | Walks | 1 | 3 | None. Comes in crowds. |
 | Skitter | `skitter` | 30 | 0 | 2.0 | Walks | 1 | 5 | None. Very fast. |
 | Flitter | `flitter` | 30 | 0 | 1.2 | Flies | 1 | 5 | Flies (6.5). |
 | Shellback | `shellback` | 90 | 4 | 0.7 | Walks | 2 | 12 | Armor. |
@@ -494,7 +497,7 @@ Breaks gates (Gatecrasher): see 7.7.
 
 ### 6.3 Bosses
 
-A boss always comes in the final wave of its level or run. A boss that reaches the base costs 20 lives, which loses any Normal game. Bosses can be slowed, with no exception for any boss. The Moon Moth is a flyer, so the flyer rule decides (6.5): a Night Bell slows it, and in runs so does any Lullaby Bell with the Frost Chime card (14.6).
+A boss always comes in the final wave of its level or run. A boss that reaches the base costs 20 lives, which loses any Normal game. On Relaxed, a player with more than 20 lives left survives it and can still win the level. That is intended: Relaxed exists so a player who is stuck can move on, and such a win earns star 1 only. Bosses can be slowed, with no exception for any boss. The Moon Moth is a flyer, so the flyer rule decides (6.5): a Night Bell slows it, and in runs so does any Lullaby Bell with the Frost Chime card (14.6).
 
 | Boss | Id | Region | Health | Armor | Speed | Moves | Lives lost | Bounty | Special |
 |---|---|---|---|---|---|---|---|---|---|
@@ -537,7 +540,7 @@ Example: a Shellback at strength 150 has 135 health, armor 4, speed 0.7, and pay
 | Creature | Line |
 |---|---|
 | Scamp | A small night creature. Each one that gets through costs a life. |
-| Pip | Tiny and easy to pop, but comes in crowds. Splash clears them. |
+| Pip | Small, but comes in big crowds. Splash clears them. |
 | Skitter | Very fast. Give it a long road, or make it drowsy. |
 | Flitter | Flies straight over roads and gates. Not every tower can hit it. |
 | Shellback | Its shell blocks 4 damage from every hit. Big hits get through. |
@@ -855,7 +858,9 @@ Region 1, Lantern Hill:
 | 1-3 | Tall Posts | Upgrade towers when spots run out. | none | none | 1 (2) | 9 | 100 | 250 | 380 |
 | 1-4 | Pumpkin Patch | Splash beats crowds. | Pip | 3 | 1 (3) | 9 | 100 | 300 | 450 |
 | 1-5 | Night Wings | Flyers ignore roads and gates. | Flitter | 3 | 1 (3) | 10 | 100 | 300 | 450 |
-| 1-6 | Grumblesack | Tier 3 paths, then a boss. | Grumblesack | 10 | 1 (3) | 10 | 110 | 350 | 530 |
+| 1-6 | Grumblesack | Tier 3 paths, then a boss. | Grumblesack | 10 | 1 (3) | 10 | 100 | 350 | 530 |
+
+Region 1 waves set their own strength where TUNING_R1.md lists one: tougher Scamp waves at 140 to 180, and the 1-6 boss wave at 50, so Grumblesack has 1000 health there.
 
 Region 2, Millbrook:
 
@@ -898,12 +903,12 @@ The number in each star 3 rule is a starting target. The level designer confirms
 
 | Level | Star 3 | Hint | Highlight |
 |---|---|---|---|
-| 1-1 | Lose no lives. | Tap a glowing spot to build a tower by the road. | The best first build spot |
-| 1-2 | Have at most 4 towers. | Drop the gate on a road. The line shows their new way. | The socket that makes the long road |
-| 1-3 | Have at most 3 towers. | Tap a tower to upgrade it. Spots are few, so make them count. | The tower that covers the most road |
-| 1-4 | Use no gates. | Pips come in crowds. Catapults hit the whole crowd. | The spot at the busiest bend |
-| 1-5 | Lose no lives. | Flitters fly over roads and gates. Only Sling Posts hit them. | A spot under the flight line |
-| 1-6 | Call 4 waves early. | At tier 3, a tower picks one of two paths for good. | The spot beside the boss's longest stretch |
+| 1-1 | No tower above tier 1. | Tap a glowing spot to build a tower by the road. | The best first build spot |
+| 1-2 | No tower above tier 1. | Drop the gate on a road. The line shows their new way. | The socket that makes the long road |
+| 1-3 | Have at most 2 towers. | Tap a tower to upgrade it. Spots are few, so make them count. | The tower that covers the most road |
+| 1-4 | No tower above tier 1. | Pips come in crowds. Catapults hit the whole crowd. | The spot at the busiest bend |
+| 1-5 | No tower above tier 2. | Flitters fly over roads and gates. Only Sling Posts hit them. | A spot under the flight line |
+| 1-6 | Use no gates. | At tier 3, a tower picks one of two paths for good. | The spot beside the boss's longest stretch |
 | 2-1 | Call 6 waves early. | Doing well? Call the next wave early for bonus gold. | The call button |
 | 2-2 | Have at most 6 towers. | Bells make walkers drowsy. Slow crowds are easy Catapult targets. | A spot whose ring covers a bend beside a Catapult spot |
 | 2-3 | No tower above tier 2. | Armor blocks small hits. Longbow arrows go straight through. | A spot that sees two stretches of road |
@@ -925,6 +930,8 @@ The number in each star 3 rule is a starting target. The level designer confirms
 
 Star 2 on every level: "Keep 15 lives."
 
+Region 1's star 3 rules were set with the bots (TUNING_R1.md): a rule that limits spending is what stops one tower type from earning all three stars. Level 1-6 no longer asks for early calls, which level 2-1 teaches.
+
 ### 12.5 Building waves: a guide for the level designer
 
 - A wave is a list of groups. Each group: creature, count, entrance, start time (seconds after the wave starts) and gap (seconds between its creatures). A wave may also set its own strength (6.4).
@@ -933,8 +940,8 @@ Star 2 on every level: "Keep 15 lives."
 
 | Creature | Gap (s) |
 |---|---|
-| Scamp | 0.6 to 1.5. Packs for splash: 0.3 to 0.5 |
-| Pip | 0.2 to 0.4 |
+| Scamp | Spread out: 1.3 to 2.0. Packs for splash: 0.2 to 0.3 |
+| Pip | 0.1 to 0.3, in crowds |
 | Skitter | 0.5 to 1.0 |
 | Flitter | 0.3 to 0.5, in flocks |
 | Shellback | 1.2 to 2.0 |
@@ -944,11 +951,23 @@ Star 2 on every level: "Keep 15 lives."
 | Gatecrasher | 3.0 to 6.0 |
 | Dusk Moth | 1.5 to 3.0 |
 
-- Wave size, as a start: a wave's total health after strength is about 0.8 times the gold a player could have by then (starting gold plus every bounty and bonus paid before that wave) in region 1, rising to about 1.0 in region 4. The bots tune from there.
+- Difficulty targets. They replace the old guide of wave health against gold on hand, which did not measure difficulty: towers keep firing every wave, so the same ratio gave a free win on one level and a wall on the next.
+
+| Level | A thoughtful player wins on the first try, Normal |
+|---|---|
+| 1-1 | 95% |
+| 1-2 | 90% |
+| 1-3 | 85% |
+| 1-4 | 85% |
+| 1-5 | 75% |
+| 1-6 | 70% |
+
+  A thoughtful player reads the hint and the wave preview, builds both towers where they see the most road, and upgrades as gold allows. The bots cannot play like that, so they check three things instead. First, the plain mixed recipe (Sling Posts and Catapults in turn, on the spots that see the most road first, each upgraded once, with the best gate) wins on Normal: with 15 lives or more on 1-1 to 1-5, and at all on 1-6. Second, it wins on Relaxed on every level. Third, random strategies earn all three stars in under 10% of plays. Random strategies pick their tower mix by chance and never buy more than their list, so their win rate is a floor for comparing levels, not a target. Bart's playtest at hard stop B is the real check. Later regions: aim for about 85% on each region's first level, falling to about 65% on its boss level.
+- Giving each tower its job. Spread-out Scamps, and tougher Scamps from waves at strength 140 to 180 spaced 1.6 to 2.0 s, are the Sling Post's job: they walk farther apart than a pumpkin splashes. Packs of Scamps and Pip crowds are the Catapult's job. Flitters need Sling Posts. A Pip crowd and a Flitter flock arriving together is the hardest moment for one tower type alone.
+- Third stars that bite. A star 3 rule that limits spending (No tower above tier N, Have at most N towers) makes the mix matter. In region 1, rules that limit nothing about towers (Call N waves early, Lose no lives) did not stop one tower type from earning all three stars: it bought its way through. Use no gates works on 1-6 only because its late waves are hard.
 - Largest wave: one wave spawns at most 120 creatures in all, Puffs and summons included, and at most 2 waves run at once (4.9). That is the contract's performance ceiling. Aim for 80 or fewer per wave so the screen stays readable.
 - Map height: see 3.1. Ranges are long on a 7-wide map by design: a Longbow Loft in the middle column reaches both side lanes.
 - Level length: 5 to 10 minutes at 1x, measured as the sum of the wave phases with no early calls, plus 15 s for each build phase.
-- To break one-tower solutions in region 1, where there is no armor yet, mix spread-out waves (better for Sling Posts) with tight packs and Pip crowds (better for Catapults), on few spots.
 - Every level must pass the bots: it can be won, one Normal win can earn all three stars, no single tower type earns three stars alone, and across the campaign every tower type is part of some three-star win.
 
 ## 13. Twists

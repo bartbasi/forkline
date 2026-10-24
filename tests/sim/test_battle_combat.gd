@@ -259,17 +259,28 @@ func test_splash_pops_each_bubble_it_reaches_rules_6_2() -> void:
 
 
 func test_prize_pumpkin_rules_5_4() -> void:
-	var b: Battle = _battle([Fx.group("scamp", 1, 0), Fx.group("scamp", 1, 1250), Fx.group("scamp", 1, 1300)])
+	# The path's own damage and wider splash, read from data/stats/, replace tier 2's.
+	var prize: TowerStats = catalog.tower(&"pumpkin_catapult").stats(3, 0)
+	var tier2: TowerStats = catalog.tower(&"pumpkin_catapult").stats(2, -1)
+	var scamp: EnemyType = catalog.enemy(&"scamp")
+	assert_true(prize.splash > tier2.splash, "Prize Pumpkin: wider splash")
+	assert_true(prize.damage >= scamp.health and tier2.damage < scamp.health, "this test needs a Prize Pumpkin that pops a Scamp and a tier 2 that does not")
+	# The second Scamp walks the most whole ticks behind the first that keep it inside the
+	# splash, and outside tier 2's; the third walks one tick more, past the splash.
+	var per_tick: int = scamp.speed * 10
+	var inside: int = prize.splash * 200 / per_tick
+	assert_true(inside * per_tick > tier2.splash * 200, "the second Scamp is past tier 2's splash")
+	assert_true(inside + 1 < 40, "every Scamp is on the road by tick 40")
+	var b: Battle = _battle([Fx.group("scamp", 1, 0), Fx.group("scamp", 1, inside * 50), Fx.group("scamp", 1, (inside + 1) * 50)])
 	b.start_next_wave()
 	Fx.steps(b, 40)
 	b.place_tower(Vector2i(2, 3), &"pumpkin_catapult")
 	b.upgrade_tower(Vector2i(2, 3))
 	b.upgrade_tower(Vector2i(2, 3), 0)
 	b.step()
-	# 50 damage, splash 1.25 tiles (25000): the second Scamp is 25000 behind, the third 26000.
-	assert_null(b.enemy_with_id(0), "50 damage pops a Scamp")
-	assert_null(b.enemy_with_id(1))
-	assert_eq(b.enemy_with_id(2).health, 40)
+	assert_null(b.enemy_with_id(0), "the Prize Pumpkin's damage pops a Scamp")
+	assert_null(b.enemy_with_id(1), "the splash reaches %d sub-units behind" % (inside * per_tick))
+	assert_eq(b.enemy_with_id(2).health, scamp.health, "%d sub-units behind is past the splash" % ((inside + 1) * per_tick))
 
 
 func test_jam_pot_slows_what_it_damages_rules_8_5() -> void:
@@ -323,7 +334,11 @@ func test_flyers_and_kinds_rules_6_5() -> void:
 
 
 func test_a_defeated_creature_is_not_targeted_again_rules_8_1() -> void:
-	var b: Battle = _battle([Fx.group("pip", 1)])
+	# A Pip with exactly one Stone Sling stone of health: the first tower's shot defeats it.
+	var stone: int = catalog.tower(&"sling_post").stats(3, 1).damage
+	var thin: Catalog = Fx.catalog_with_enemy("pip", {"health": stone})
+	var pip: EnemyType = thin.enemy(&"pip")
+	var b: Battle = _battle([Fx.group("pip", 1)], thin)
 	for cell: Vector2i in [Vector2i(2, 1), Vector2i(4, 1)]:
 		b.place_tower(cell, &"sling_post")
 		b.upgrade_tower(cell)
@@ -336,7 +351,7 @@ func test_a_defeated_creature_is_not_targeted_again_rules_8_1() -> void:
 	assert_eq(b.tower_at(Vector2i(4, 1)).reload, 0, "and waits at 0")
 	var defeated: Array[Dictionary] = Fx.events_of(events, &"defeated")
 	assert_eq(defeated.size(), 1)
-	assert_eq(defeated[0], {"kind": &"defeated", "id": 0, "enemy": &"pip", "pos": Sim.center(Vector2i(3, 0)) + Vector2i(0, 1200), "gold": 2})
+	assert_eq(defeated[0], {"kind": &"defeated", "id": 0, "enemy": &"pip", "pos": Sim.center(Vector2i(3, 0)) + Vector2i(0, pip.speed * 10), "gold": pip.bounty})
 
 
 func test_bells_and_bakeries_do_nothing_yet_rules_5_5_and_5_8_phase_7() -> void:

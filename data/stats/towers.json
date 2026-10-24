@@ -16,14 +16,14 @@
    "info": "Pumpkins splash every walker near the target. Can't hit flyers.",
    "kind": "attack",
    "tiers": [
-     {"cost": 120, "reach": 300, "hits": "ground", "damage": 14, "reload_ms": 2000, "splash": 75},
-     {"cost": 130, "reach": 300, "hits": "ground", "damage": 24, "reload_ms": 2000, "splash": 75}
+     {"cost": 120, "reach": 250, "hits": "ground", "damage": 14, "reload_ms": 2000, "splash": 75},
+     {"cost": 130, "reach": 300, "hits": "ground", "damage": 24, "reload_ms": 2000, "splash": 125}
    ],
    "specs": [
      {"id": "prize_pumpkin", "name": "Prize Pumpkin", "info": "Huge pumpkins, wider splash.",
-      "cost": 230, "reach": 350, "hits": "ground", "damage": 50, "reload_ms": 2500, "splash": 125},
+      "cost": 230, "reach": 350, "hits": "ground", "damage": 50, "reload_ms": 2500, "splash": 150},
      {"id": "jam_pot", "name": "Jam Pot", "info": "Sticky jam slows every walker it splashes.",
-      "cost": 230, "reach": 300, "hits": "ground", "damage": 24, "reload_ms": 1500, "splash": 100,
+      "cost": 230, "reach": 300, "hits": "ground", "damage": 24, "reload_ms": 1500, "splash": 125,
       "slow_pct": 40, "slow_ms": 3000}
    ]},
   {"id": "lullaby_bell", "name": "Lullaby Bell", "plural": "Lullaby Bells",

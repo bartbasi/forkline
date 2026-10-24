@@ -48,40 +48,76 @@ func test_the_real_stat_files_load() -> void:
 	assert_null(catalog.enemy(&"nope"))
 
 
+## A stat block as [field, value] pairs, in TowerStats order.
+func _stat_values(stats: TowerStats) -> Array:
+	return [
+		["cost", stats.cost], ["reach", stats.reach], ["hits_ground", stats.hits_ground], ["hits_air", stats.hits_air],
+		["damage", stats.damage], ["reload_ms", stats.reload_ms], ["splash", stats.splash], ["targets", stats.targets],
+		["pierce", stats.pierce], ["slow_pct", stats.slow_pct], ["slow_ms", stats.slow_ms],
+		["boost_pct", stats.boost_pct], ["boost_damage", stats.boost_damage],
+	]
+
+
+## What TowerStats must hold for one raw tier or path: a missing optional field is 0, false
+## or empty, except targets, which is 1 (2.6).
+func _raw_values(raw: Dictionary) -> Array:
+	var hits: String = String(raw.get("hits", ""))
+	return [
+		["cost", int(raw["cost"])], ["reach", int(raw["reach"])],
+		["hits_ground", hits == "ground" or hits == "both"], ["hits_air", hits == "air" or hits == "both"],
+		["damage", int(raw.get("damage", 0))], ["reload_ms", int(raw.get("reload_ms", 0))],
+		["splash", int(raw.get("splash", 0))], ["targets", int(raw.get("targets", 1))],
+		["pierce", bool(raw.get("pierce", false))], ["slow_pct", int(raw.get("slow_pct", 0))],
+		["slow_ms", int(raw.get("slow_ms", 0))], ["boost_pct", int(raw.get("boost_pct", 0))],
+		["boost_damage", int(raw.get("boost_damage", 0))],
+	]
+
+
 func test_every_tower_field_of_2_6_is_read() -> void:
+	# Every tier and path of every tower in the real files, field by field, so a retune
+	# of data/stats/ never breaks this test but a field read into the wrong place does.
 	var catalog: Catalog = Fx.catalog()
-	# RULES 5.3: Sling Post tiers and paths.
+	var defaults: Array = _stat_values(TowerStats.new())
+	var seen: Dictionary = {}
+	for raw: Dictionary in files[0]["towers"]:
+		var type: TowerType = catalog.tower(StringName(raw["id"]))
+		assert_not_null(type, raw["id"])
+		if type == null:
+			continue
+		assert_eq([type.name, type.plural, type.info, type.kind], [raw["name"], raw["plural"], raw["info"], StringName(raw["kind"])], raw["id"])
+		var blocks: Array = []
+		for t: int in 2:
+			blocks.append([type.stats(t + 1, -1), raw["tiers"][t], "%s tier %d" % [raw["id"], t + 1]])
+		for s: int in 2:
+			var spec: Dictionary = raw["specs"][s]
+			assert_eq([type.specs[s], type.spec_name(s), type.spec_info(s)], [StringName(spec["id"]), spec["name"], spec["info"]])
+			blocks.append([type.stats(3, s), spec, "%s spec %d" % [raw["id"], s]])
+		for block: Array in blocks:
+			var stats: TowerStats = block[0]
+			var raw_block: Dictionary = block[1]
+			var expected: Array = _raw_values(raw_block)
+			assert_eq(_stat_values(stats), expected, block[2])
+			for i: int in expected.size():
+				if expected[i][1] != defaults[i][1]:
+					seen[expected[i][0]] = true
+			if raw_block.has("hits"):
+				seen["hits " + String(raw_block["hits"])] = true
+	# Every field and every hits value differs from its default somewhere in the real files,
+	# so a reader that skipped one would fail the loop above.
+	for pair: Array in defaults:
+		assert_true(seen.has(pair[0]), "some tower in data/stats/ sets " + String(pair[0]))
+	for hits: String in ["ground", "air", "both"]:
+		assert_true(seen.has("hits " + hits), "some tower in data/stats/ hits " + hits)
+	# Tier and spec pairs outside 2.6 give nothing.
 	var sling: TowerType = catalog.tower(&"sling_post")
-	assert_eq(sling.kind, &"attack")
-	assert_eq(sling.plural, "Sling Posts")
-	assert_eq(sling.specs, [&"quickshot", &"stone_sling"])
-	assert_eq(sling.spec_name(1), "Stone Sling")
-	assert_eq(sling.spec_info(0), "Fires twice as fast.")
-	var t1: TowerStats = sling.stats(1, -1)
-	assert_eq([t1.cost, t1.reach, t1.damage, t1.reload_ms, t1.splash, t1.targets], [100, 250, 6, 500, 0, 1])
-	assert_true(t1.hits_ground and t1.hits_air, "Sling Post hits both")
-	assert_eq(sling.stats(3, 0).reload_ms, 200)
-	assert_eq(sling.stats(3, 1).damage, 20)
 	assert_null(sling.stats(3, -1), "tier 3 needs a spec")
 	assert_null(sling.stats(2, 0), "tier 2 takes spec -1")
 	assert_null(sling.stats(4, -1))
-	# RULES 5.4: Pumpkin Catapult, Jam Pot slow.
-	var pumpkin: TowerType = catalog.tower(&"pumpkin_catapult")
-	assert_false(pumpkin.stats(1, -1).hits_air, "Catapult cannot hit flyers")
-	assert_eq(pumpkin.stats(1, -1).splash, 75)
-	assert_eq(pumpkin.stats(3, 0).splash, 125)
-	var jam: TowerStats = pumpkin.stats(3, 1)
-	assert_eq([jam.slow_pct, jam.slow_ms, jam.reload_ms, jam.splash], [40, 3000, 1500, 100])
-	# The other kinds and optional fields.
-	var bell: TowerType = catalog.tower(&"lullaby_bell")
-	assert_eq(bell.kind, &"slow")
-	assert_true(bell.stats(3, 1).hits_air, "Night Bell reaches flyers")
-	assert_eq(catalog.tower(&"longbow_loft").stats(3, 1).targets, 3)
-	assert_true(catalog.tower(&"longbow_loft").stats(1, -1).pierce)
-	var bakery: TowerType = catalog.tower(&"bakery")
-	assert_eq(bakery.kind, &"boost")
-	assert_eq(bakery.stats(3, 1).boost_damage, 2)
-	assert_eq(bakery.stats(3, 0).boost_pct, 40)
+	# What each tower can hit is part of its job (RULES 5.1, 6.5).
+	assert_true(sling.stats(1, -1).hits_ground and sling.stats(1, -1).hits_air, "Sling Post hits both")
+	assert_false(catalog.tower(&"pumpkin_catapult").stats(1, -1).hits_air, "Catapult cannot hit flyers")
+	assert_true(catalog.tower(&"lullaby_bell").stats(3, 1).hits_air, "Night Bell reaches flyers")
+	var t1: TowerStats = sling.stats(1, -1)
 	var numbers: Dictionary = t1.numbers()
 	for key: String in ["damage", "reload_ms", "reach", "splash", "targets", "pierce", "slow_pct", "slow_ms", "hits_ground", "hits_air", "boost_pct", "boost_damage"]:
 		assert_true(numbers.has(key), "numbers has " + key)

@@ -18,17 +18,17 @@
   "gates": 1,
   "strength": 100,
   "towers": ["sling_post", "pumpkin_catapult"],
-  "star3": {"kind": "towers_at_most", "value": 3},
+  "star3": {"kind": "towers_at_most", "value": 2},
   "hint": {"text": "Tap a tower to upgrade it. Spots are few, so make them count.", "cell": [2, 3]},
   "waves": [
-    {"groups": [{"enemy": "scamp", "count": 3, "entrance": 1, "at_ms": 0, "every_ms": 1500}, {"enemy": "scamp", "count": 2, "entrance": 1, "at_ms": 9000, "every_ms": 1500}]},
-    {"groups": [{"enemy": "scamp", "count": 3, "entrance": 1, "at_ms": 0, "every_ms": 1200}, {"enemy": "scamp", "count": 3, "entrance": 1, "at_ms": 10000, "every_ms": 1200}]},
-    {"groups": [{"enemy": "scamp", "count": 4, "entrance": 1, "at_ms": 0, "every_ms": 1200}, {"enemy": "scamp", "count": 4, "entrance": 1, "at_ms": 10000, "every_ms": 500}]},
-    {"groups": [{"enemy": "scamp", "count": 5, "entrance": 1, "at_ms": 0, "every_ms": 1200}, {"enemy": "scamp", "count": 4, "entrance": 1, "at_ms": 12000, "every_ms": 1200}]},
-    {"groups": [{"enemy": "scamp", "count": 6, "entrance": 1, "at_ms": 0, "every_ms": 1000}, {"enemy": "scamp", "count": 5, "entrance": 1, "at_ms": 12000, "every_ms": 400}]},
-    {"groups": [{"enemy": "scamp", "count": 5, "entrance": 1, "at_ms": 0, "every_ms": 1000}, {"enemy": "scamp", "count": 5, "entrance": 1, "at_ms": 10000, "every_ms": 400}, {"enemy": "scamp", "count": 4, "entrance": 1, "at_ms": 18000, "every_ms": 1000}]},
-    {"groups": [{"enemy": "scamp", "count": 8, "entrance": 1, "at_ms": 0, "every_ms": 1000}, {"enemy": "scamp", "count": 8, "entrance": 1, "at_ms": 14000, "every_ms": 400}]},
-    {"groups": [{"enemy": "scamp", "count": 6, "entrance": 1, "at_ms": 0, "every_ms": 800}, {"enemy": "scamp", "count": 6, "entrance": 1, "at_ms": 10000, "every_ms": 400}, {"enemy": "scamp", "count": 6, "entrance": 1, "at_ms": 20000, "every_ms": 800}]},
-    {"groups": [{"enemy": "scamp", "count": 8, "entrance": 1, "at_ms": 0, "every_ms": 800}, {"enemy": "scamp", "count": 8, "entrance": 1, "at_ms": 12000, "every_ms": 400}, {"enemy": "scamp", "count": 6, "entrance": 1, "at_ms": 22000, "every_ms": 600}]}
+    {"groups": [{"enemy": "scamp", "count": 5, "entrance": 1, "at_ms": 0, "every_ms": 1500}]},
+    {"groups": [{"enemy": "scamp", "count": 8, "entrance": 1, "at_ms": 0, "every_ms": 1400}]},
+    {"groups": [{"enemy": "scamp", "count": 5, "entrance": 1, "at_ms": 0, "every_ms": 1500}, {"enemy": "scamp", "count": 6, "entrance": 1, "at_ms": 9000, "every_ms": 300}]},
+    {"strength": 160, "groups": [{"enemy": "scamp", "count": 7, "entrance": 1, "at_ms": 0, "every_ms": 2000}]},
+    {"groups": [{"enemy": "scamp", "count": 10, "entrance": 1, "at_ms": 0, "every_ms": 250}, {"enemy": "scamp", "count": 6, "entrance": 1, "at_ms": 6000, "every_ms": 1500}]},
+    {"strength": 180, "groups": [{"enemy": "scamp", "count": 8, "entrance": 1, "at_ms": 0, "every_ms": 2000}]},
+    {"groups": [{"enemy": "scamp", "count": 6, "entrance": 1, "at_ms": 0, "every_ms": 1500}, {"enemy": "scamp", "count": 14, "entrance": 1, "at_ms": 10000, "every_ms": 200}]},
+    {"strength": 180, "groups": [{"enemy": "scamp", "count": 10, "entrance": 1, "at_ms": 0, "every_ms": 1800}, {"enemy": "scamp", "count": 8, "entrance": 1, "at_ms": 20000, "every_ms": 250}]},
+    {"strength": 140, "groups": [{"enemy": "scamp", "count": 10, "entrance": 1, "at_ms": 0, "every_ms": 1600}, {"enemy": "scamp", "count": 24, "entrance": 1, "at_ms": 18000, "every_ms": 200}, {"enemy": "scamp", "count": 8, "entrance": 1, "at_ms": 26000, "every_ms": 1600}]}
   ]
 }

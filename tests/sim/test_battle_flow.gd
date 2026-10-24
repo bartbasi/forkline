@@ -204,7 +204,9 @@ func test_clear_bonus_build_phases_and_win_rules_4_1_and_4_5() -> void:
 
 
 func test_bounties_are_paid_on_defeat_rules_4_5() -> void:
-	var b: Battle = Fx.battle(Fx.LINE_GRID, [{"strength": 150, "groups": [Fx.group("pip", 1)]}], {"start_gold": 100}, catalog)
+	# A fixture Pip with an odd bounty, so the strength scaling has a half to round.
+	var odd: Catalog = Fx.catalog_with_enemy("pip", {"health": 12, "bounty": 3})
+	var b: Battle = Fx.battle(Fx.LINE_GRID, [{"strength": 150, "groups": [Fx.group("pip", 1)]}], {"start_gold": 100}, odd)
 	assert_eq(b.place_tower(Vector2i(2, 1), &"sling_post"), Battle.DONE)
 	assert_eq(b.gold, 0)
 	b.start_next_wave()
@@ -214,9 +216,9 @@ func test_bounties_are_paid_on_defeat_rules_4_5() -> void:
 		if entry[1]["kind"] == &"defeated":
 			defeated.append(entry[1])
 	assert_eq(defeated.size(), 1)
-	assert_eq(defeated[0]["gold"], 3, "2 x 1.5 = 3")
+	assert_eq(defeated[0]["gold"], 5, "3 x 1.5 = 4.5, rounded half up")
 	assert_eq(defeated[0]["enemy"], &"pip")
-	assert_eq(b.gold, 3 + 38, "bounty plus clear bonus 25 x 1.5 = 37.5, rounded half up")
+	assert_eq(b.gold, 5 + 38, "bounty plus clear bonus 25 x 1.5 = 37.5, rounded half up")
 
 
 func test_final_wave_win_waits_for_every_running_wave_rules_4_1() -> void:
@@ -267,12 +269,15 @@ func test_early_calls_rules_4_9() -> void:
 
 
 func test_early_bonus_counts_only_the_newest_wave_rules_4_9() -> void:
+	# A fixture Pip with bounty 2. Any Scamp bounty would raise the bonus if it counted.
+	var fixed: Catalog = Fx.catalog_with_enemy("pip", {"bounty": 2})
 	var waves: Array = [{"groups": [Fx.group("scamp", 2, 0, 50)]}, {"groups": [Fx.group("pip", 3, 0, 50)]}, {"groups": [Fx.group("pip", 1)]}]
-	var b: Battle = Fx.battle(Fx.LINE_GRID, waves, {"start_gold": 0}, catalog)
+	var b: Battle = Fx.battle(Fx.LINE_GRID, waves, {"start_gold": 0}, fixed)
 	b.start_next_wave()
 	Fx.steps(b, 2)
 	b.start_next_wave()
 	Fx.steps(b, 3)
+	assert_eq(b.enemies.size(), 5, "both Scamps and all three Pips are on the map")
 	# Wave 1 (the newest) holds 3 Pips of bounty 2: half of 6 is 3. Wave 0's Scamps do not count.
 	assert_eq(b.next_wave_info()["refusal"], &"too_many_waves")
 	assert_eq(b.next_wave_info()["bonus"], 3)

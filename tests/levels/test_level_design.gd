@@ -10,12 +10,12 @@ const Files: GDScript = preload("res://tests/levels/fixtures/level_files.gd")
 ## gates, sockets, waves, strength, Normal starting gold, star 3 kind and value,
 ## and the kind of cell the hint highlights.
 const PLAN: Dictionary = {
-	"r1_l1": {"gates": 0, "sockets": 0, "waves": 8, "strength": 100, "gold": 200, "star3": ["no_lives_lost", 0], "highlight": "spot"},
-	"r1_l2": {"gates": 1, "sockets": 2, "waves": 8, "strength": 100, "gold": 250, "star3": ["towers_at_most", 4], "highlight": "socket"},
-	"r1_l3": {"gates": 1, "sockets": 2, "waves": 9, "strength": 100, "gold": 250, "star3": ["towers_at_most", 3], "highlight": "spot"},
-	"r1_l4": {"gates": 1, "sockets": 3, "waves": 9, "strength": 100, "gold": 300, "star3": ["gates_at_most", 0], "highlight": "spot"},
-	"r1_l5": {"gates": 1, "sockets": 3, "waves": 10, "strength": 100, "gold": 300, "star3": ["no_lives_lost", 0], "highlight": "spot"},
-	"r1_l6": {"gates": 1, "sockets": 3, "waves": 10, "strength": 110, "gold": 350, "star3": ["early_calls_at_least", 4], "highlight": "spot"},
+	"r1_l1": {"gates": 0, "sockets": 0, "waves": 8, "strength": 100, "gold": 200, "star3": ["tier_at_most", 1], "highlight": "spot"},
+	"r1_l2": {"gates": 1, "sockets": 2, "waves": 8, "strength": 100, "gold": 250, "star3": ["tier_at_most", 1], "highlight": "socket"},
+	"r1_l3": {"gates": 1, "sockets": 2, "waves": 9, "strength": 100, "gold": 250, "star3": ["towers_at_most", 2], "highlight": "spot"},
+	"r1_l4": {"gates": 1, "sockets": 3, "waves": 9, "strength": 100, "gold": 300, "star3": ["tier_at_most", 1], "highlight": "spot"},
+	"r1_l5": {"gates": 1, "sockets": 3, "waves": 10, "strength": 100, "gold": 300, "star3": ["tier_at_most", 2], "highlight": "spot"},
+	"r1_l6": {"gates": 1, "sockets": 3, "waves": 10, "strength": 100, "gold": 350, "star3": ["gates_at_most", 0], "highlight": "spot"},
 }
 
 ## RULES 12.2: the towers each level brings.
@@ -41,6 +41,10 @@ const FIRST_WAVE_COUNT: Array[int] = [3, 5]
 ## docs/ARCHITECTURE.md 2.4 spawn bound, and RULES 12.5's aim for a readable screen.
 const SPAWN_BOUND: int = 120
 const SPAWN_AIM: int = 80
+## RULES 12.5: a level lasts 5 to 10 minutes at 1x, counting the wave phases with no
+## early calls plus 15 s for each build phase.
+const LENGTH_MS: Array[int] = [5 * 60 * 1000, 10 * 60 * 1000]
+const BUILD_MS: int = 15 * 1000
 
 var catalog: Catalog = null
 var order: PackedStringArray = PackedStringArray()
@@ -223,6 +227,88 @@ func test_spawn_bound_holds() -> void:
 				total += group.count * (1 + split)
 			assert_true(total <= SPAWN_BOUND, "%s wave %d spawns %d, the bound is %d" % [id, i + 1, total, SPAWN_BOUND])
 			assert_true(total <= SPAWN_AIM, "%s wave %d spawns %d, RULES 12.5 aims for %d or fewer" % [id, i + 1, total, SPAWN_AIM])
+
+
+## Every way to place up to `left` gates on the sockets, the empty set included.
+func _gate_sets(sockets: Array[Vector2i], left: int, start: int, current: Array, out: Array[Array]) -> void:
+	out.append(current.duplicate())
+	if left == 0:
+		return
+	for i: int in range(start, sockets.size()):
+		var next: Array = current.duplicate()
+		next.append(sockets[i])
+		_gate_sets(sockets, left - 1, i + 1, next, out)
+
+
+## The most steps from each entrance to the base, over every gate placement the level
+## allows that seals nothing. Index 0 is entrance 1.
+func _longest_steps(level: LevelData) -> Array[int]:
+	var map: RoadMap = RoadMap.new(level)
+	var out: Array[int] = []
+	for i: int in level.entrances.size():
+		out.append(0)
+	var sets: Array[Array] = []
+	_gate_sets(level.sockets, level.gates, 0, [], sets)
+	for placed: Array in sets:
+		var closed: Array[Vector2i] = []
+		closed.assign(placed)
+		if map.seals(closed):
+			continue
+		var dist: PackedInt32Array = map.distances(closed)
+		for i: int in level.entrances.size():
+			out[i] = maxi(out[i], map.route(level.entrances[i], dist).size() - 1)
+	return out
+
+
+## Milliseconds to walk `steps` road cells, unslowed. Speed is hundredths of a tile a second.
+func _walk_ms(speed: int, steps: int) -> int:
+	return 0 if speed <= 0 else steps * 100 * 1000 / speed
+
+
+## The latest a creature, and anything it releases, can still be on the map after it
+## appears: it walks the whole route, waits out every gate if it breaks gates, and its
+## last release walks the whole route again.
+func _stay_ms(enemy: EnemyType, steps: int, gates: int) -> int:
+	var own: int = _walk_ms(enemy.speed, steps) + enemy.break_ms * gates
+	var after: int = 0
+	if not enemy.summon.is_empty():
+		var summoned: EnemyType = catalog.enemy(enemy.summon["enemy"])
+		if summoned != null:
+			after = maxi(after, (int(enemy.summon["count"]) - 1) * int(enemy.summon["gap_ms"]) + _walk_ms(summoned.speed, steps))
+	if not enemy.release.is_empty():
+		var released: EnemyType = catalog.enemy(enemy.release["enemy"])
+		if released != null:
+			after = maxi(after, (int(enemy.release["count"]) - 1) * int(enemy.release["gap_ms"]) + _walk_ms(released.speed, steps))
+	if enemy.split_into != &"":
+		var split: EnemyType = catalog.enemy(enemy.split_into)
+		if split != null:
+			after = maxi(after, (enemy.split_count - 1) * enemy.split_gap_ms + _walk_ms(split.speed, steps))
+	return own + after
+
+
+## RULES 12.5. The longest a level can last at 1x when nothing is slowed: no creature is
+## popped, each walks the longest route the gates can make (a flyer's straight line is
+## never longer), and every wave starts when the one before it ends. Past 10 minutes the
+## level is too long. Under 5 minutes every play would be too short. The smoke test
+## checks the 5 minute floor on a real win.
+func test_longest_unslowed_play_is_5_to_10_minutes() -> void:
+	for id: String in order:
+		var level: LevelData = _level(id)
+		if level == null:
+			continue
+		var longest: Array[int] = _longest_steps(level)
+		var total_ms: int = BUILD_MS * level.waves.size()
+		for wave: WaveData in level.waves:
+			var end_ms: int = 0
+			for group: WaveGroup in wave.groups:
+				var enemy: EnemyType = catalog.enemy(group.enemy)
+				if enemy == null or group.entrance < 0 or group.entrance >= longest.size():
+					fail("%s: a group names an unknown creature or entrance" % id)
+					continue
+				var last_ms: int = (group.at_tick + (group.count - 1) * group.every_ticks) * Sim.MS_PER_TICK
+				end_ms = maxi(end_ms, last_ms + _stay_ms(enemy, longest[group.entrance], level.gates))
+			total_ms += end_ms
+		assert_true(total_ms >= LENGTH_MS[0] and total_ms <= LENGTH_MS[1], "%s: the longest unslowed play is %.1f min, RULES 12.5 asks 5 to 10" % [id, total_ms / 60000.0])
 
 
 func test_star3_follows_rules_12_4() -> void:

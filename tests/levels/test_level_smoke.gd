@@ -4,7 +4,8 @@ extends "res://tests/base_test.gd"
 ## A smoke play of every real level on the real sim: one fixed, simple defense, every
 ## wave started from a build phase (no early calls), run to the end. It proves each
 ## level plays through with no script errors and is not lost in its first wave.
-## It does not judge balance: the balance bots in tools/balance/ do that.
+## It does not judge balance: the balance bots in tools/balance/ do that. When the
+## simple defense wins, the play must last 5 to 10 minutes at 1x (RULES 12.5).
 ## Each level prints one line: the result, lives left and ticks (20 ticks a second at 1x).
 
 const Files: GDScript = preload("res://tests/levels/fixtures/level_files.gd")
@@ -13,6 +14,8 @@ const Files: GDScript = preload("res://tests/levels/fixtures/level_files.gd")
 const TICK_CAP: int = 20 * 60 * Sim.TICKS_PER_SECOND
 ## RULES 12.5 counts 15 s for each build phase when it measures a level's length.
 const BUILD_SECONDS: int = 15
+## RULES 12.5: a level lasts 5 to 10 minutes at 1x.
+const LENGTH_MINUTES: Array[float] = [5.0, 10.0]
 
 var catalog: Catalog = null
 
@@ -87,6 +90,8 @@ func test_every_level_plays_to_the_end_with_a_simple_defense() -> void:
 			assert_eq(out["waves_cleared"], out["waves"], "%s: a win clears every wave" % id)
 		var wave_seconds: float = float(ticks) / Sim.TICKS_PER_SECOND
 		var length_minutes: float = (wave_seconds + BUILD_SECONDS * int(out["waves"])) / 60.0
+		if phase == Battle.Phase.WON:
+			assert_true(length_minutes >= LENGTH_MINUTES[0] and length_minutes <= LENGTH_MINUTES[1], "%s: a win lasts %.1f min at 1x, RULES 12.5 asks 5 to 10" % [id, length_minutes])
 		print("    %s: %s, %d lives left, %d of %d waves cleared, %d ticks (%.1f s of waves at 1x, %.1f min with %d s per build phase)" % [
 			id, "won" if phase == Battle.Phase.WON else "lost", int(out["lives_left"]), int(out["waves_cleared"]),
 			int(out["waves"]), ticks, wave_seconds, length_minutes, BUILD_SECONDS])
