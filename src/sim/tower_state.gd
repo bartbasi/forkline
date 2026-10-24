@@ -11,7 +11,7 @@ var type: StringName = &""
 var tier: int = 1                                      # 1, 2 or 3
 var spec: int = -1                                     # -1 below tier 3, else 0 or 1
 var aim: Aim = Aim.FIRST
-var reload: int = 0                                    # 1/100 ms until it may fire; 0 or less is ready
+var reload: int = 0                                    # 1/100 ms until it may fire, 0 to its reload between ticks; 0 is ready
 var spent_now: int = 0                                 # bought in the current build phase: refunded in full
 var spent_before: int = 0                              # every other purchase: refunded at the refund percent
 

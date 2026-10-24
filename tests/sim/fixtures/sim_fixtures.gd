@@ -216,3 +216,23 @@ static func ticks(entries: Array) -> Array[int]:
 ## The stat block of a tower tier (spec -1) or path, from a catalog.
 static func stats(cat: Catalog, tower: StringName, tier: int, spec: int = -1) -> TowerStats:
 	return cat.tower(tower).stats(tier, spec)
+
+
+## Each gain field (contract 2.8), as [use, effect], with the field set to "VALUE".
+const GAINS: Array = [
+	["card", {"type": "add_gold", "amount": "VALUE", "per_wave": 10}],
+	["card", {"type": "add_gold", "amount": 100, "per_wave": "VALUE"}],
+	["card", {"type": "add_lives", "amount": "VALUE"}],
+	["risk", {"type": "reward_gold", "amount": "VALUE"}],
+	["card", {"type": "interest", "pct": 10, "max": "VALUE"}],
+]
+
+
+static func gain_effect(item: Array, value: int) -> Dictionary:
+	var effect: Dictionary = (item[1] as Dictionary).duplicate()
+	for key: String in effect.keys():
+		if effect[key] is String and effect[key] == "VALUE":
+			effect[key] = value
+	return effect
+
+

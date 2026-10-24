@@ -1,10 +1,10 @@
 # Forkline. Copyright 2026 Play, Inc.
 # Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.
 extends "res://tests/base_test.gd"
-## Nothing in src/sim/ or src/save/ stays alive after its last user lets go (QA p7).
+## Nothing in src/sim/, src/save/ or src/run/ stays alive after its last user lets go (QA p7).
 
 const Fx: GDScript = preload("res://tests/sim/fixtures/sim_fixtures.gd")
-const SCRIPT_DIRS: Array[String] = ["res://src/sim/", "res://src/save/"]
+const SCRIPT_DIRS: Array[String] = ["res://src/sim/", "res://src/save/", "res://src/run/"]
 
 
 ## A script that names its own class as a value (Battle.new() inside battle.gd) holds
@@ -31,7 +31,7 @@ func test_no_script_names_its_own_class_as_a_value() -> void:
 				var code: String = line.get_slice("#", 0)
 				if as_value.search(code) != null:
 					fail("%s:%d names its own class as a value: %s" % [path, line_number, line.strip_edges()])
-	assert_true(checked >= 20, "every sim and save script was checked: %d" % checked)
+	assert_true(checked >= 20, "every sim, save and run script was checked: %d" % checked)
 
 
 ## Battle holds plain data only. A played, saved and restored battle is freed as soon

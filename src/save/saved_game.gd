@@ -75,6 +75,11 @@ static func from_data(data: Variant, game: GameData) -> SavedGame:
 			return null
 		if not saved.battle.card_effects.is_empty() or not saved.battle.risk_waiting.is_empty():
 			return null
+		# Only cards add gates, and only risk cards make a wave take a risk card or open
+		# every gate (2.8). A Twist sets the gates given, never gates_added.
+		var inner: Dictionary = top["battle"]
+		if not (inner["wave_risk"] as Array).is_empty() or int(inner["gates_added"]) != 0 or saved.battle.gates_open:
+			return null
 	elif not saved.battle.twist_effects.is_empty():
 		return null
 	if saved.mode == DAILY and saved.battle.relaxed:

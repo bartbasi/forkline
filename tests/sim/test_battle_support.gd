@@ -277,6 +277,41 @@ func test_a_saved_timer_below_0_is_refused_with_a_boost_too_rules_5_2() -> void:
 	assert_null(Battle.from_data(data, catalog), "refuses -1")
 
 
+func test_a_tower_fires_at_most_once_a_tick_and_never_banks_shots_rules_5_2() -> void:
+	# A card brings the Quickshot to the 50 ms floor, so one boosted tick takes more
+	# off the timer than the whole reload. It fires once a tick, and a timer still
+	# below 0 after a shot waits at 0. A save of that state loads; -1 still does not.
+	var b: Battle = _cluster([Fx.group("shellback", 6, 0, 300)])
+	assert_eq(b.add_effects([{"type": "tower_add", "tower": "sling_post", "stat": "reload_ms", "amount": -1000}] as Array[Dictionary], false), Battle.DONE)
+	_build(b, Vector2i(2, 1), &"sling_post", 3, 0)
+	_build(b, Vector2i(2, 2), &"bakery", 3, 0)
+	var quick: TowerState = b.tower_at(Vector2i(2, 1))
+	var reload: int = quick.stats.reload_ms * 100
+	assert_eq(quick.stats.reload_ms, 50)
+	assert_true(Sim.MS_PER_TICK * (100 + quick.got_pct) > reload, "a boosted tick drains more than one reload")
+	b.start_next_wave()
+	var shot_ticks: int = 0
+	var clamped: bool = false
+	while b.phase == Battle.Phase.WAVE and b.tick < 400:
+		b.step()
+		var shots: int = 0
+		for event: Dictionary in b.take_events():
+			if event["kind"] == &"fired" and event["cell"] == quick.cell:
+				shots += 1
+		assert_true(shots <= 1, "tick %d: %d shots" % [b.tick, shots])
+		assert_true(quick.reload >= 0 and quick.reload <= reload, "tick %d: timer %d inside 0 to %d" % [b.tick, quick.reload, reload])
+		if shots == 1:
+			shot_ticks += 1
+			clamped = clamped or quick.reload == 0
+		if b.tick == 60:
+			var data: Dictionary = JSON.parse_string(JSON.stringify(b.to_data()))
+			assert_not_null(Battle.from_data(data, catalog), "a real save loads")
+			data["towers"][0]["reload"] = -1
+			assert_null(Battle.from_data(data, catalog), "a timer below 0 never loads, even with the card")
+	assert_true(shot_ticks > 20, "it fired on %d ticks" % shot_ticks)
+	assert_true(clamped, "a shot that left the timer below 0 set it to 0")
+
+
 func test_spice_kitchen_damage_counts_before_armor_rules_5_8_and_8_3() -> void:
 	var quick: TowerStats = Fx.stats(catalog, &"sling_post", 3, 0)
 	var kitchen: TowerStats = Fx.stats(catalog, &"bakery", 3, 1)

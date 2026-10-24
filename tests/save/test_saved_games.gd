@@ -278,3 +278,36 @@ func test_a_campaign_game_holds_no_cards_and_a_run_no_twist_rules_13_and_14() ->
 	var twisted: Dictionary = as_run.duplicate(true)
 	twisted["battle"]["twist"] = [{"type": "no_selling"}]
 	assert_null(SavedGame.from_data(twisted, game), "a run has no Twist")
+
+
+## A campaign battle on 1-1 after a card or risk card the campaign never offers.
+func _after_card(effects: Array[Dictionary], risk: bool) -> Battle:
+	var battle: Battle = Battle.create(game.levels[&"r1_l1"], game.catalog, false, [])
+	battle.place_tower(battle.level.spots[0], battle.level.towers[0])
+	assert_eq(battle.add_effects(effects, risk), Battle.DONE, str(effects))
+	battle.start_next_wave()
+	for i: int in 40:
+		battle.step()
+	assert_eq(battle.phase, Battle.Phase.WAVE)
+	return battle
+
+
+func test_a_campaign_game_holds_nothing_only_cards_give_contract_2_8() -> void:
+	# Only risk cards make a wave take a risk card or open every gate, and only cards add
+	# gates. Each of these loads as a run and is refused as a campaign level.
+	var cases: Array = [
+		["a wave that took a risk card", _after_card([{"type": "reward_gold", "amount": 50}] as Array[Dictionary], true), "wave_risk"],
+		["gates standing open", _after_card([{"type": "gates_open"}] as Array[Dictionary], true), "gates_open"],
+		["gates added by a card", _after_card([{"type": "add_gates", "count": 1}] as Array[Dictionary], false), "gates_added"],
+	]
+	for item: Array in cases:
+		var battle: Battle = item[1]
+		var as_run: Dictionary = JSON.parse_string(JSON.stringify(Fx.saved(SavedGame.RUN, battle).to_data()))
+		assert_not_null(SavedGame.from_data(as_run, game), "%s loads as a run" % item[0])
+		var as_level: Dictionary = JSON.parse_string(JSON.stringify(Fx.saved(SavedGame.LEVEL, battle).to_data()))
+		var inner: Dictionary = as_level["battle"]
+		assert_true(inner[item[2]] is Array and not (inner[item[2]] as Array).is_empty() or inner[item[2]] is bool and inner[item[2]] or inner[item[2]] is float and inner[item[2]] > 0, "%s shows in %s" % [item[0], item[2]])
+		assert_true((inner["effects"] as Array).is_empty() and (inner["risk"] as Array).is_empty(), "%s keeps no card" % item[0])
+		assert_null(SavedGame.from_data(as_level, game), "%s is refused as a campaign level" % item[0])
+	var plain: Battle = Fx.battle_mid_wave(game, &"r1_l1", false, 40)
+	assert_not_null(SavedGame.from_data(JSON.parse_string(JSON.stringify(Fx.saved(SavedGame.LEVEL, plain).to_data())), game), "a plain level loads")

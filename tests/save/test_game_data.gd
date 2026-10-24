@@ -45,19 +45,31 @@ func test_real_data_loads_with_no_problems() -> void:
 	var game: GameData = GameData.load_from()
 	assert_eq(game.problems, PackedStringArray())
 	assert_not_null(game.catalog)
-	assert_eq(game.campaign.size(), 1)
+	# Regions are added phase by phase, so only region 1 is pinned here.
+	assert_true(game.campaign.size() >= 1)
 	assert_eq(game.campaign[0]["id"], &"lantern_hill")
-	var listed: Array[StringName] = game.campaign[0]["levels"]
-	assert_eq(listed.size(), 6)
-	for id: StringName in listed:
-		assert_true(game.levels.has(id), String(id))
-		assert_eq(game.levels[id].id, id)
+	assert_eq((game.campaign[0]["levels"] as Array).size(), 6)
+	assert_eq(game.levels.size(), _listed(game), "every listed level loads, and no other")
+	for region: Dictionary in game.campaign:
+		var listed: Array[StringName] = region["levels"]
+		for id: StringName in listed:
+			assert_true(game.levels.has(id), String(id))
+			assert_eq(game.levels[id].id, id)
+
+
+## The level count over every region of the campaign.
+func _listed(game: GameData) -> int:
+	var count: int = 0
+	for region: Dictionary in game.campaign:
+		count += (region["levels"] as Array).size()
+	return count
 
 
 func test_copy_in_user_folder_loads_the_same() -> void:
 	var game: GameData = GameData.load_from(root)
 	assert_eq(game.problems, PackedStringArray())
-	assert_eq(game.levels.size(), 6)
+	assert_eq(game.levels.size(), GameData.load_from().levels.size())
+	assert_eq(game.levels.size(), _listed(game))
 
 
 func test_level_id_must_equal_its_file_name() -> void:

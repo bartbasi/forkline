@@ -345,6 +345,11 @@ func test_add_effects_refusals_contract_2_8() -> void:
 		many.append({"type": "gates_stay"})
 	assert_eq(b.add_effects(_effects(many), false), Battle.DONE)
 	assert_eq(b.add_effects(_effects([{"type": "gates_stay"}]), false), &"bad_effect", "at most 64 kept")
+	for item: Array in Fx.GAINS:
+		var gold: int = b.gold
+		var lives: int = b.lives
+		assert_eq(b.add_effects(_effects([Fx.gain_effect(item, -1)]), item[0] == "risk"), &"bad_effect", "%s with -1" % str(item[1]))
+		assert_eq([b.gold, b.lives], [gold, lives], "a refusal changes nothing")
 	b.start_next_wave()
 	b.lives = 1
 	while b.phase == Battle.Phase.WAVE:
@@ -444,6 +449,34 @@ func test_flock_adds_a_group_after_the_last_group_starts_rules_14_5() -> void:
 	var clear: Dictionary = Fx.of_kind(log, &"wave_cleared")[0][1]
 	var bonus: int = Sim.pct_half_up(catalog.rules.clear_bonus + catalog.rules.clear_bonus_per_wave, 150)
 	assert_eq(clear["gold"], bonus + Sim.pct_half_up(80, 150), "the reward is paid with the clear bonus, at the wave's strength")
+
+
+func test_count_changes_skip_added_groups_rules_14_3() -> void:
+	# Twice the Wings (a Twist) and a 150% risk count change both reach the wave's own
+	# groups. The groups the risk card adds keep the counts their card states.
+	var waves: Array = [{"groups": [Fx.group("scamp", 2, 0, 300), Fx.group("flitter", 3, 0, 300)]}]
+	var b: Battle = _twist([{"type": "count_pct", "pct": 200, "flyers": true, "last_wave": false}, {"type": "set_lives", "lives": 100}], Fx.LINE_GRID, waves)
+	assert_eq(b.add_effects(_effects([
+		{"type": "count_pct", "pct": 150, "flyers": false, "last_wave": false},
+		{"type": "add_group", "enemy": "pip", "count": 3, "entrance": 1, "at_ms": 500, "every_ms": 300, "after_last": false},
+		{"type": "add_group", "enemy": "flitter", "count": 4, "entrance": 1, "at_ms": 500, "every_ms": 300, "after_last": false},
+	]), true), Battle.DONE)
+	var counts: Array = []
+	for row: Dictionary in b.wave_preview(0):
+		counts.append([row["enemy"], row["count"]])
+	assert_eq(counts, [[&"scamp", 3], [&"flitter", 9], [&"pip", 3], [&"flitter", 4]], "own groups 2 x 1.5 and 3 x 2 x 1.5; added groups as stated")
+	b.start_next_wave()
+	var log: Array = Fx.log_ticks(b, 20)
+	var copy: Battle = Fx.restored(b)
+	assert_not_null(copy)
+	log.append_array(Fx.log_ticks(b, 3000))
+	assert_eq(b.phase, Battle.Phase.WON, "the one wave ran to its end")
+	var tally: Dictionary = {}
+	for entry: Array in Fx.of_kind(log, &"spawned"):
+		tally[entry[1]["enemy"]] = int(tally.get(entry[1]["enemy"], 0)) + 1
+	assert_eq(tally, {&"scamp": 3, &"flitter": 13, &"pip": 3})
+	Fx.run_wave(copy)
+	assert_eq(Fx.snapshot(copy), Fx.snapshot(b), "a restored wave spawns the same counts")
 
 
 func test_a_waiting_risk_card_saves_and_its_wave_keeps_it_rules_14_4() -> void:

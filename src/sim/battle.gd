@@ -420,9 +420,9 @@ func add_effects(effects: Array[Dictionary], risk: bool) -> StringName:
 				gates_in_hand += gained
 				_gates_added += gained
 			"add_gold":
-				gold = mini(gold + maxi(int(effect["amount"]) + int(effect["per_wave"]) * _waves_cleared, 0), BIG)
+				gold = mini(gold + int(effect["amount"]) + int(effect["per_wave"]) * _waves_cleared, BIG)
 			"add_lives":
-				lives = mini(lives + maxi(int(effect["amount"]), 0), MAX_LIVES)
+				lives = mini(lives + int(effect["amount"]), MAX_LIVES)
 	if not kept.is_empty():
 		card_effects.append_array(kept)
 		_effects_changed()
@@ -887,6 +887,9 @@ func _tower_step() -> void:
 			tower.reload = 0
 			continue
 		tower.reload += stats.reload_ms * 100
+		# 5.2: at most one shot a tick, so a timer still below 0 after a shot waits at 0.
+		if tower.reload < 0:
+			tower.reload = 0
 		var ids: Array[int] = []
 		var at: Array[Vector2i] = []
 		for index: int in picks:
@@ -979,7 +982,7 @@ func _wave_step() -> void:
 	var interest: int = 0
 	for effect: Dictionary in card_effects:
 		if effect["type"] == "interest":
-			interest += clampi(gold * int(effect["pct"]) / 100, 0, maxi(int(effect["max"]), 0))
+			interest += mini(gold * int(effect["pct"]) / 100, int(effect["max"]))
 	if interest > 0:
 		gold = mini(gold + interest, BIG)
 		_emit({"kind": &"interest", "gold": interest})
@@ -1191,18 +1194,8 @@ func _make_mods(w: int, risk: Array) -> WaveMods:
 	var last_start: int = 0
 	for group: WaveGroup in level.waves[w].groups:
 		last_start = maxi(last_start, group.at_tick)
-	var all: Array[WaveGroup] = level.waves[w].groups.duplicate()
-	for effect: Dictionary in mods.effects:
-		if effect["type"] != "add_group":
-			continue
-		var added: WaveGroup = WaveGroup.new()
-		added.enemy = StringName(String(effect["enemy"]))
-		added.count = effect["count"]
-		added.entrance = int(effect["entrance"]) - 1
-		added.at_tick = int(effect["at_ms"]) / Sim.MS_PER_TICK + (last_start if effect["after_last"] else 0)
-		added.every_ticks = int(effect["every_ms"]) / Sim.MS_PER_TICK
-		all.append(added)
-	for group: WaveGroup in all:
+	# count_pct changes only the wave's own groups. An added group keeps its card's count (RULES 14.3).
+	for group: WaveGroup in level.waves[w].groups:
 		var count: int = Modifiers.group_count(mods.effects, group.count, catalog.enemy(group.enemy).flying, last)
 		if count == group.count:
 			mods.groups.append(group)
@@ -1214,6 +1207,16 @@ func _make_mods(w: int, risk: Array) -> WaveMods:
 		changed.at_tick = group.at_tick
 		changed.every_ticks = group.every_ticks
 		mods.groups.append(changed)
+	for effect: Dictionary in mods.effects:
+		if effect["type"] != "add_group":
+			continue
+		var added: WaveGroup = WaveGroup.new()
+		added.enemy = StringName(String(effect["enemy"]))
+		added.count = effect["count"]
+		added.entrance = int(effect["entrance"]) - 1
+		added.at_tick = int(effect["at_ms"]) / Sim.MS_PER_TICK + (last_start if effect["after_last"] else 0)
+		added.every_ticks = int(effect["every_ms"]) / Sim.MS_PER_TICK
+		mods.groups.append(added)
 	mods.speed_pct = Modifiers.speed_pct(mods.effects)
 	return mods
 
@@ -1415,7 +1418,7 @@ func _clear_bonus(w: int) -> int:
 	bonus = Modifiers.scale_all(card_effects, "clear_bonus_pct", bonus)
 	for effect: Dictionary in _wave_risk.get(w, []):
 		if effect["type"] == "reward_gold":
-			bonus += Sim.pct_half_up(maxi(int(effect["amount"]), 0), level.waves[w].strength)
+			bonus += Sim.pct_half_up(int(effect["amount"]), level.waves[w].strength)
 	return bonus
 
 
@@ -1825,30 +1828,13 @@ func _load_towers(data: Variant, chk: DataCheck) -> void:
 		else:
 			tower.aim = AIM_NAMES.find(String(aim_value)) as TowerState.Aim
 		_refresh_tower(tower)
-		tower.reload = chk.integer(item, "reload", path, _reload_floor(tower), tower.stats.reload_ms * 100)
+		# 5.2: between ticks a timer is always 0 up to the tower's own reload.
+		tower.reload = chk.integer(item, "reload", path, 0, tower.stats.reload_ms * 100)
 		tower.spent_now = chk.integer(item, "spent_now", path, 0, BIG)
 		tower.spent_before = chk.integer(item, "spent_before", path, 0, BIG)
 		if phase == Phase.WAVE and tower.spent_now != 0:
 			chk.fail(path + ".spent_now", "is 0 during a wave")
 		towers.append(tower)
-
-
-## The lowest timer a tower can hold between ticks (5.2). It starts at 0. A tick takes
-## MS_PER_TICK x (100 + rate boost) off; a shot at 0 or below adds reload_ms x 100,
-## keeping the leftover; an idle tower sets 0. So while the reload is at least the
-## largest tick a Bakery could make, the timer stays 0 or more. Every tower and Bakery
-## in the data keeps it so (the shortest reload, 0.2 s, against a 1.4 times boost).
-## If cards ever broke that, a far floor applies instead.
-func _reload_floor(tower: TowerState) -> int:
-	var most: int = 0
-	for type: StringName in catalog.tower_ids():
-		if catalog.tower(type).kind != &"boost":
-			continue
-		for key: Array in [[1, -1], [2, -1], [3, 0], [3, 1]]:
-			most = maxi(most, _tower_stats(type, key[0], key[1]).boost_pct)
-	if tower.stats.reload_ms * 100 >= Sim.MS_PER_TICK * (100 + most):
-		return 0
-	return -BIG
 
 
 func _load_enemies(data: Variant, chk: DataCheck) -> void:

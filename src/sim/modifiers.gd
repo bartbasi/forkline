@@ -20,6 +20,7 @@ const MAX_TWIST: int = 8                               # a Twist's effects (a le
 ## type: [uses, {field: rule}]. Rules: pct 1 to 1,000; refund 1 to 100 (4.6); count 1 to 200; gates 0 to
 ## max_gates; lives 1 to 1,000; cells; tower and enemy ids; tier 1 or 2; bool;
 ## time (a multiple of 50 up to 600,000); every (50 to 600,000); entrance 1 to 4;
+## gain 0 to 1,000 (gold and lives a card or risk card gives, never negative);
 ## number -1,000 to 1,000; add_stat and pct_stat (stat names).
 const TYPES: Dictionary = {
 	"start_gold_pct": [["twist"], {"pct": "pct"}],
@@ -38,7 +39,7 @@ const TYPES: Dictionary = {
 	"gates_open": [["risk"], {}],
 	"add_group": [["risk"], {"enemy": "enemy", "count": "count", "entrance": "entrance",
 		"at_ms": "time", "every_ms": "every", "after_last": "bool"}],
-	"reward_gold": [["risk"], {"amount": "number"}],
+	"reward_gold": [["risk"], {"amount": "gain"}],
 	"add_tower": [["card"], {"tower": "tower"}],
 	"tower_add": [["card"], {"tower": "tower", "stat": "add_stat", "amount": "number"}],
 	"tower_pct": [["card"], {"tower": "tower", "stat": "pct_stat", "pct": "pct"}],
@@ -47,11 +48,11 @@ const TYPES: Dictionary = {
 	"clear_bonus_pct": [["card"], {"pct": "pct"}],
 	"refund_pct": [["card"], {"pct": "refund"}],
 	"cost_add": [["card"], {"build": "number", "upgrade": "number"}],
-	"interest": [["card"], {"pct": "pct", "max": "number"}],
+	"interest": [["card"], {"pct": "pct", "max": "gain"}],
 	"gates_stay": [["card"], {}],
 	"add_gates": [["card"], {"count": "count"}],
-	"add_gold": [["card"], {"amount": "number", "per_wave": "number"}],
-	"add_lives": [["card"], {"amount": "number"}],
+	"add_gold": [["card"], {"amount": "gain", "per_wave": "gain"}],
+	"add_lives": [["card"], {"amount": "gain"}],
 }
 
 
@@ -114,6 +115,8 @@ static func _check_one(data: Variant, path: String, catalog: Catalog, use: Strin
 				chk.whole(value, field_path, 0 if key == "at_ms" else 50, 600000, 50)
 			"every":
 				chk.whole(value, field_path, 50, 600000, 50)
+			"gain":
+				chk.whole(value, field_path, 0, 1000)      # 2.8: a negative gain is refused, not counted as 0
 			"number":
 				chk.whole(value, field_path, -1000, 1000)
 			"bool":

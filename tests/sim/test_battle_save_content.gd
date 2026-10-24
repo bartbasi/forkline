@@ -305,6 +305,39 @@ func test_hostile_effect_fields_are_refused() -> void:
 	])
 
 
+## Where a saved gain sits: [label, path to the effect's Dictionary, field].
+func _gain_slots(data: Dictionary) -> Array:
+	var slots: Array = []
+	for i: int in (data["effects"] as Array).size():
+		if data["effects"][i]["type"] == "interest":
+			slots.append(["kept interest max", ["effects", i], "max"])
+	for i: int in (data["wave_risk"][0]["effects"] as Array).size():
+		if data["wave_risk"][0]["effects"][i]["type"] == "reward_gold":
+			slots.append(["a wave's risk reward", ["wave_risk", 0, "effects", i], "amount"])
+	slots.append(["a waiting risk reward", ["risk", 0], "amount"])
+	return slots
+
+
+func test_a_negative_gain_in_a_save_is_refused_contract_2_8() -> void:
+	var data: Dictionary = _data_when([], func(b: Battle) -> bool: return b.gates_open and not b._wave_risk.is_empty())
+	data["risk"] = [{"type": "reward_gold", "amount": 100}]
+	assert_not_null(Battle.from_data(data, catalog), "the base data with a waiting risk card is valid")
+	var slots: Array = _gain_slots(data)
+	assert_eq(slots.size(), 3, "an interest card, a wave's reward and a waiting reward")
+	for slot: Array in slots:
+		for value: int in [-1, 0, 1000, 1001]:
+			var copy: Dictionary = data.duplicate(true)
+			var node: Variant = copy
+			for key: Variant in slot[1]:
+				node = node[key]
+			(node as Dictionary)[slot[2]] = value
+			var b: Battle = Battle.from_data(copy, catalog)
+			if value >= 0 and value <= 1000:
+				assert_not_null(b, "%s %d is accepted" % [slot[0], value])
+			else:
+				assert_null(b, "%s %d is refused" % [slot[0], value])
+
+
 func test_hostile_twist_fields_are_refused() -> void:
 	var data: Dictionary = _data_when(TWIST, func(b: Battle) -> bool: return b.enemies.size() > 3)
 	var s: int = _index_of(data, "scamp")

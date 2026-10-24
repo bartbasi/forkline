@@ -108,6 +108,14 @@ func test_ranges_ids_and_types_are_checked() -> void:
 		assert_false(Modifiers.check([item[1]], catalog, StringName(item[0])).is_empty(), str(item[1]))
 
 
+func test_gold_and_lives_gains_are_0_to_1000_contract_2_8() -> void:
+	for item: Array in Fx.GAINS:
+		for value: int in [0, 1, 1000]:
+			assert_eq(Modifiers.check([Fx.gain_effect(item, value)], catalog, StringName(item[0])).size(), 0, "%s accepts %d" % [str(item[1]), value])
+		for value: int in [-1, -1000, 1001]:
+			assert_false(Modifiers.check([Fx.gain_effect(item, value)], catalog, StringName(item[0])).is_empty(), "%s refuses %d" % [str(item[1]), value])
+
+
 func test_a_refund_card_never_pays_a_profit_rules_4_6() -> void:
 	for pct: int in [1, 90, 100]:
 		assert_eq(Modifiers.check([{"type": "refund_pct", "pct": pct}], catalog, &"card").size(), 0, "refund %d%%" % pct)
