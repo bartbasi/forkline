@@ -34,6 +34,12 @@ static func button(text: String, variation: StringName = &"Button") -> TapButton
 	return b
 
 
+## Lets a button's text wrap, so a long label never pushes its panel wider.
+static func wrapped(b: TapButton) -> TapButton:
+	b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	return b
+
+
 ## A square icon-only button (the settings gear, the back arrow).
 static func icon_button(kind: StringName) -> TapButton:
 	var b: TapButton = TapButton.new()
@@ -81,6 +87,18 @@ static func section() -> VBoxContainer:
 	column.add_theme_constant_override(&"separation", 16)
 	panel.add_child(column)
 	return column
+
+
+## A flat rounded box in the theme's look, for a state the theme has no type for
+## (a chosen card, a dimmed card). Colors are Palette tokens.
+static func box(fill: Color, edge: Color, border: int, radius: int = UiTheme.RADIUS, margin: int = 32) -> StyleBoxFlat:
+	var b: StyleBoxFlat = StyleBoxFlat.new()
+	b.bg_color = fill
+	b.border_color = edge
+	b.set_border_width_all(border)
+	b.set_corner_radius_all(radius)
+	b.set_content_margin_all(margin)
+	return b
 
 
 ## A fixed gap.

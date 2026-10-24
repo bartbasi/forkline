@@ -72,6 +72,7 @@ func _run() -> void:
 	await _front_door()
 	await _taps()
 	await _about_first_screenful()
+	await _battle_panels()
 	await _app()
 	Links.opener = Callable()
 	print("%d checks, %d failed" % [checks, failures])
@@ -261,6 +262,166 @@ func _about_first_screenful() -> void:
 		_touch(vp, screen.source_button.get_global_rect().get_center())
 		check(recorder.urls == ([Links.SOURCE_URL] as Array[String]), "the source link hands the source address over once, got %s" % [recorder.urls])
 		vp.queue_free()
+
+
+# The battle panels: real Battle objects, at both Fold5 sizes.
+
+const BattleFixtures: GDScript = preload("res://tests/ui/battle_fixtures.gd")
+
+
+## A themed host with a column the width a layout gives the panels: the whole safe
+## width in portrait, a side panel of 760 in landscape.
+func _panel_host(size: Vector2, wide: bool) -> Array:
+	var vp: SubViewport = _viewport(size)
+	var holder: Control = Control.new()
+	holder.set_anchors_preset(Control.PRESET_FULL_RECT)
+	holder.theme = UiTheme.build()
+	vp.add_child(holder)
+	var column: VBoxContainer = VBoxContainer.new()
+	column.add_theme_constant_override(&"separation", 16)
+	var width: float = 1008.0 if wide else 760.0
+	column.position = Vector2(36.0 if wide else size.x - 36.0 - width, 132.0 if wide else 36.0)
+	column.custom_minimum_size = Vector2(width, 0.0)
+	column.size = Vector2(width, 100.0)
+	holder.add_child(column)
+	return [vp, column, width]
+
+
+func _battle_panels() -> void:
+	for pair: Array in [[COVER, true], [INNER, false]]:
+		var size: Vector2 = pair[0]
+		var wide: bool = pair[1]
+		for state: String in ["hud", "build", "build six", "tower 1", "paths", "path picked", "tier 3", "creature", "preview", "strip", "preview boss", "strip many", "hud wave", "boss creature"]:
+			var host: Array = _panel_host(size, wide)
+			var vp: SubViewport = host[0]
+			var column: VBoxContainer = host[1]
+			var width: float = host[2]
+			var b: Battle = BattleFixtures.battle(&"r1_l6")
+			b.gold = 900
+			var cell: Vector2i = b.level.spots[0]
+			var hud: BattleHud = BattleHud.new()
+			hud.set_wide(wide)
+			hud.refresh(b)
+			var panel: BattlePanel = null
+			match state:
+				"build", "build six":
+					if state == "build six":
+						b = BattleFixtures.all_towers_battle(&"r1_l6")
+						b.gold = 900
+					var build: BuildPanel = BuildPanel.new()
+					build.setup(b)
+					build.set_wide(wide)
+					build.show_spot(cell)
+					panel = build
+				"tower 1", "paths", "path picked", "tier 3":
+					b.place_tower(cell, &"pumpkin_catapult")
+					if state != "tower 1":
+						b.upgrade_tower(cell)
+					if state == "tier 3":
+						b.upgrade_tower(cell, 1)
+					var tower: TowerPanel = TowerPanel.new()
+					tower.setup(b)
+					tower.set_wide(wide)
+					tower.show_tower(cell)
+					if state == "path picked":
+						tower.pick_path(0)
+					panel = tower
+				"creature":
+					b.start_next_wave()
+					for i: int in 10:
+						b.step()
+					var enemy: EnemyPanel = EnemyPanel.new()
+					enemy.setup(b)
+					enemy.set_wide(wide)
+					enemy.show_enemy(b.enemies[0].id)
+					panel = enemy
+				"preview", "strip", "preview boss", "strip many":
+					if state == "strip":
+						b.start_next_wave()
+					if state == "preview boss" or state == "strip many":
+						b.waves_started = b.wave_count() - 1
+					if state == "strip many":
+						b.phase = Battle.Phase.WAVE
+					var preview: WavePreview = WavePreview.new()
+					preview.set_wide(wide)
+					var unseen: Array[StringName] = [&"grumblesack", &"flitter", &"scamp"]
+					preview.set_unseen(unseen)
+					preview.setup(b)
+					if state == "preview boss":
+						preview.toggle_row(&"scamp")
+					panel = preview
+				"hud wave":
+					b.start_next_wave()
+					for i: int in 120:
+						b.step()
+					hud.refresh()
+					hud.set_paused(true)
+					hud.set_speed(3)
+				"boss creature":
+					b = BattleFixtures.battle_with_first_wave([{"enemy": "grumblesack", "count": 1, "entrance": 1, "at_ms": 0, "every_ms": 1000}], &"r1_l6")
+					b.start_next_wave()
+					for i: int in 10:
+						b.step()
+					b.enemies[0].slow_pct = 40
+					b.enemies[0].slow_ticks = 30
+					var boss: EnemyPanel = EnemyPanel.new()
+					boss.setup(b)
+					boss.set_wide(wide)
+					boss.show_enemy(b.enemies[0].id)
+					hud.refresh(b)
+					panel = boss
+			column.add_child(hud)
+			if panel != null:
+				column.add_child(panel)
+			await _frames()
+			var where: String = "%s at %s" % [state, size]
+			var column_rect: Rect2 = Rect2(column.global_position, Vector2(width, column.size.y))
+			for node: Node in column.find_children("*", "BaseButton", true, false):
+				var button: BaseButton = node as BaseButton
+				if not button.is_visible_in_tree():
+					continue
+				var rect: Rect2 = button.get_global_rect()
+				var label: String = "%s: button '%s'" % [where, str((button as Button).text)]
+				check(rect.size.x >= Layout.MIN_TOUCH - 0.5 and rect.size.y >= Layout.MIN_TOUCH - 0.5, "%s is under 48 dp (%s)" % [label, rect.size])
+				check(rect.position.x >= column_rect.position.x - 0.5 and rect.end.x <= column_rect.end.x + 0.5, "%s sticks out of the panel column %s" % [label, rect])
+			# Nothing may lie outside the screen: every visible control, at any depth.
+			var screen: Rect2 = Rect2(Vector2.ZERO, size)
+			for node: Node in column.find_children("*", "Control", true, false):
+				var control: Control = node as Control
+				if not control.is_visible_in_tree() or control.size.x <= 0.0 or control.size.y <= 0.0:
+					continue
+				var box: Rect2 = control.get_global_rect()
+				check(screen.grow(0.5).encloses(box), "%s: %s (%s) lies outside the screen %s" % [where, control.get_class(), control.name, box])
+			for part: Control in [hud, panel]:
+				if part != null:
+					check(part.size.x <= width + 0.5, "%s: a panel is wider than its column (%s)" % [where, part.size.x])
+					check(part.get_global_rect().end.y <= size.y, "%s: a panel runs off the screen bottom (%s)" % [where, part.get_global_rect().end.y])
+			vp.queue_free()
+	# A real tap on the Build button builds, and a real tap on Sell twice sells.
+	var host: Array = _panel_host(COVER, true)
+	var tap_vp: SubViewport = host[0]
+	var tap_column: VBoxContainer = host[1]
+	var live: Battle = BattleFixtures.battle()
+	var spot: Vector2i = live.level.spots[0]
+	var build_panel: BuildPanel = BuildPanel.new()
+	build_panel.setup(live)
+	build_panel.show_spot(spot)
+	tap_column.add_child(build_panel)
+	await _frames()
+	_touch(tap_vp, build_panel.build_button.get_global_rect().get_center())
+	check(live.tower_at(spot) != null, "a real tap on Build builds the tower")
+	var tower_panel: TowerPanel = TowerPanel.new()
+	tower_panel.setup(live)
+	tower_panel.show_tower(spot)
+	tap_column.remove_child(build_panel)
+	tap_column.add_child(tower_panel)
+	await _frames()
+	_touch(tap_vp, tower_panel.sell_button.get_global_rect().get_center())
+	check(live.tower_at(spot) != null, "the first real tap on Sell only asks")
+	await _frames()
+	_touch(tap_vp, tower_panel.sell_button.get_global_rect().get_center())
+	check(live.tower_at(spot) == null, "the second real tap on Sell sells")
+	tap_vp.queue_free()
 
 
 # The App.

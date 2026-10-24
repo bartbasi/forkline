@@ -3,7 +3,8 @@
 class_name IconTex
 extends RefCounted
 ## Small white icons for buttons, drawn in code (no image files). A button tints
-## them with its icon colors. Kinds: cup, gear, back, lock.
+## them with its icon colors. Kinds: cup, gear, back, lock, check, arrow, close,
+## pause, play.
 
 const SAMPLES: int = 3
 
@@ -43,6 +44,16 @@ static func _inside(kind: StringName, u: float, v: float) -> bool:
 			return _back(u, v)
 		&"lock":
 			return _lock(u, v)
+		&"check":
+			return _check(u, v)
+		&"arrow":
+			return _arrow(u, v)
+		&"close":
+			return _close(u, v)
+		&"pause":
+			return _pause(u, v)
+		&"play":
+			return _play(u, v)
 	return false
 
 
@@ -96,6 +107,40 @@ static func _lock(u: float, v: float) -> bool:
 		return true
 	var ring: float = Vector2(u, v).distance_to(Vector2(0.5, 0.40))
 	return v < 0.46 and ring <= 0.25 and ring >= 0.13
+
+
+static func _check(u: float, v: float) -> bool:
+	var p: Vector2 = Vector2(u, v)
+	var a: Vector2 = Vector2(0.20, 0.54)
+	var b: Vector2 = Vector2(0.42, 0.76)
+	var c: Vector2 = Vector2(0.82, 0.28)
+	return _near_segment(p, a, b, 0.075) or _near_segment(p, b, c, 0.075)
+
+
+## A right pointing arrow: a shaft and an open head.
+static func _arrow(u: float, v: float) -> bool:
+	var p: Vector2 = Vector2(u, v)
+	var tip: Vector2 = Vector2(0.86, 0.5)
+	return _near_segment(p, Vector2(0.10, 0.5), tip, 0.065) 		or _near_segment(p, Vector2(0.56, 0.22), tip, 0.065) 		or _near_segment(p, Vector2(0.56, 0.78), tip, 0.065)
+
+
+static func _close(u: float, v: float) -> bool:
+	var p: Vector2 = Vector2(u, v)
+	return _near_segment(p, Vector2(0.26, 0.26), Vector2(0.74, 0.74), 0.07) 		or _near_segment(p, Vector2(0.74, 0.26), Vector2(0.26, 0.74), 0.07)
+
+
+static func _pause(u: float, v: float) -> bool:
+	if v < 0.22 or v > 0.78:
+		return false
+	return (u >= 0.27 and u <= 0.43) or (u >= 0.57 and u <= 0.73)
+
+
+## A triangle pointing right.
+static func _play(u: float, v: float) -> bool:
+	if u < 0.30 or u > 0.80:
+		return false
+	var half: float = 0.30 * (0.80 - u) / 0.50
+	return absf(v - 0.5) <= half
 
 
 static func _near_segment(p: Vector2, a: Vector2, b: Vector2, radius: float) -> bool:
