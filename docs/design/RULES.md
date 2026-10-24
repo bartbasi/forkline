@@ -4,6 +4,8 @@ Approved by Bart at hard stop A, 2026-10-23. Owner: game designer.
 
 Phase 4 additions, 2026-10-23. No number changed. Added: the Puff's card line and the word "pop" (6.6), tower plurals (5.9), and the answers to the contract's open points: pausing on a size change (4.7), leaving and coming back (4.10), early calls in runs (4.9, 14.4), where released creatures appear (6.2, 6.3), Gateless Night (14.5) and Iron Gate (7.6, 14.6).
 
+Clarifications, 2026-10-23, after the sim was built. No number changed. Settled: a level or run is won only when no wave is left running (4.1, 8.1, 14.1); an upgrade or a reload card never leaves a reload timer above the new reload time (4.6, 5.2); a refund never pays back more than was paid (4.6); and a Bell that slows flyers slows every flyer, the Moon Moth included (5.5, 5.11, 6.3, 6.5, 14.6).
+
 Names follow docs/art/NAMES.md as the game designer reviewed it on 2026-10-23. Bart still has to see the final name list. The tables in 5.1, 5.3 to 5.8, 6.1, 6.3 and 12.1 give each tower, tier 3 path, creature, boss and region its id from that list, so the data files have one source. In each tower's tier table, the first tier 3 row is spec 0 and the second is spec 1.
 
 This file holds every game rule and number for version 1. The sim engineer, level designer, roguelite engineer, balance analyst and UI engineer build from it. If something here is unclear or seems to conflict with docs/ARCHITECTURE.md, ask the DM. Do not guess.
@@ -133,10 +135,12 @@ Rounding:
 1. The level starts in a build phase with the starting gold and lives.
 2. The player starts the next wave. A wave phase begins.
 3. Creatures come down the roads and fly toward the base. Each one that reaches the base costs lives.
-4. When every creature of every started wave is gone, and nothing is left to spawn:
-   - If the final wave was among them and lives are above 0, the level is won.
+4. When every creature of every started wave is gone, defeated or through, and nothing is left to spawn:
+   - If the final wave has started and lives are above 0, the level is won.
    - Otherwise a new build phase begins.
 5. If lives reach 0 or less at any moment, the level is lost at once.
+
+Clearing the final wave is not enough on its own. After an early call (4.9), an older wave can still be on the map when the final wave is cleared. Then the level is won only when that older wave is gone too. The tick order (8.1) and runs (14.1) use this same rule.
 
 ### 4.2 Build phase
 
@@ -185,13 +189,16 @@ Upgrading:
 - Every tower has three tiers. Tier 1 is the build. Tier 2 is one upgrade.
 - At tier 3 the player picks one of two specializations. The choice is permanent for that tower. Selling the tower is the only way to choose again.
 - Every upgrade shows its cost and its before and after numbers before the player confirms (9.5).
+- An upgrade changes the tower's numbers at once, even during a wave. What happens to its reload timer is in 5.2.
 
 Selling:
 
 - Selling removes the tower at once.
 - Each purchase on a tower (the build and each upgrade) is remembered with the phase it was made in.
-- Refund = the full price of every purchase on that tower made in the current build phase, plus 70% of every other purchase on it, rounded down.
+- Refund = the full price paid for every purchase on that tower made in the current build phase, plus 70% of the price paid for every other purchase on it, rounded down.
 - A purchase made during a wave phase, even while paused, never refunds in full.
+- Refunds always use the price paid. If a run card changes prices later (Bargain, 14.6), a sale still pays back from what was actually paid.
+- Selling never makes a profit. In runs, Fair Trade raises the 70% to 90% (14.5). No card or rule ever raises it above 100%.
 
 Examples:
 
@@ -251,6 +258,9 @@ All prices are multiples of 10, so 70% is always a whole number.
 - A creature is in range when the distance from the tower's center to the creature's center is no more than the range.
 - An attack hits on the tick it fires. Attacks never miss. Projectiles are only drawn. The render may hold a hit's flash or puff until the drawn projectile arrives, but the sim never waits.
 - Every attacking tower has a reload timer. Each tick the timer goes down by the tick length times the tower's rate multiplier (1, or more with a Bakery boost). When the timer is 0 or less and a target is in range, the tower fires and adds its reload time to the timer, keeping any leftover. When the timer is 0 or less and no target is in range, the timer is set to 0 and waits there, so a tower never saves up shots. This keeps every rate exact at any tick length.
+- Upgrading keeps the reload timer running, but never above the new reload time. If more is left on the timer than the new reload time, the timer drops to the new reload time. Otherwise it is unchanged. So an upgraded tower never waits longer for its next shot than its new numbers say, and an upgrade never gives a free shot.
+- Example: a tier 2 Pumpkin Catapult has 1.8 s left on its timer. Upgraded to a Jam Pot (reload 1.5 s), its timer drops to 1.5 s. Upgraded to a Prize Pumpkin (reload 2.5 s) instead, it keeps 1.8 s.
+- A run card that changes reload times (Steady Aim, Heavy Pumpkins, Long Fuse) follows the same rule for every tower it changes, at the moment it is taken.
 - The rate shown on screen is the rate multiplier divided by the reload time, to one decimal.
 - Damage is always a whole number.
 
@@ -296,7 +306,7 @@ Makes walkers in its ring drowsy and slow. Deals no damage. Has no reload and no
 - The slow lingers 1.0 s after a creature leaves the ring (8.5).
 - A slowed Gatecrasher also breaks gates slower by the same percent (7.7).
 - Hush Bell: the strongest slow in the game.
-- Night Bell: a wider ring, and the only way to slow flyers.
+- Night Bell: a wider ring, and the only path that slows flyers. In runs, the Frost Chime card lets every Lullaby Bell slow flyers (14.6).
 
 ### 5.6 Longbow Loft
 
@@ -425,7 +435,7 @@ These pairings are designed in. They are the moments the brief calls out.
 | Gates and the Longbow Loft | A gate bends the road back past one long-range spot several times. |
 | Lullaby Bell and the Gatecrasher | A drowsy Gatecrasher breaks gates slower, which buys time to defeat it. |
 | Jam Pot and anything | Its slow lingers 3.0 s, so towers further down the road get more time. |
-| Night Bell and Firework Tower | The only way to keep flyers under fire longer. |
+| Night Bell and Firework Tower | Drowsy flyers stay in the bursts longer. In the campaign, nothing else slows flyers. |
 
 ## 6. Creatures
 
@@ -484,7 +494,7 @@ Breaks gates (Gatecrasher): see 7.7.
 
 ### 6.3 Bosses
 
-A boss always comes in the final wave of its level or run. A boss that reaches the base costs 20 lives, which loses any Normal game. Bosses can be slowed. The Moon Moth can be slowed only by a Night Bell.
+A boss always comes in the final wave of its level or run. A boss that reaches the base costs 20 lives, which loses any Normal game. Bosses can be slowed, with no exception for any boss. The Moon Moth is a flyer, so the flyer rule decides (6.5): a Night Bell slows it, and in runs so does any Lullaby Bell with the Frost Chime card (14.6).
 
 | Boss | Id | Region | Health | Armor | Speed | Moves | Lives lost | Bounty | Special |
 |---|---|---|---|---|---|---|---|---|---|
@@ -517,7 +527,7 @@ Example: a Shellback at strength 150 has 135 health, armor 4, speed 0.7, and pay
 
 - A flyer appears at its entrance and flies in a straight line to the center of the base at its speed. A flyer released by a boss starts from the spot where its release began (6.2).
 - Flyers ignore roads, gates and gate sockets. They never open or break a gate.
-- Only the Sling Post (every tier) and the Firework Tower (every tier) can hit flyers. The Pumpkin Catapult and Longbow Loft cannot. Bells slow flyers only as a Night Bell.
+- Only the Sling Post (every tier) and the Firework Tower (every tier) can hit flyers. The Pumpkin Catapult and Longbow Loft cannot. Bells slow flyers only as a Night Bell, or in runs with the Frost Chime card (14.6). A Bell that slows flyers slows every flyer in its ring, bosses included.
 - A flyer that reaches the base costs lives like a walker.
 - Flyers appear from level 1-5 on, so gates are never a complete answer.
 - When the next wave has flyers, the map shows their straight line during the build phase (7.5).
@@ -621,7 +631,7 @@ The sim runs on a fixed timestep (docs/ARCHITECTURE.md). Each tick runs these st
 4. Movement. Creatures move. A creature that reaches the base is removed and costs its lives. If lives are 0 or less, the game is lost at once.
 5. Towers. Attacking towers act in spot order, row by row from the top (3.4). Each runs down its reload timer, picks targets, fires, and its hits land at once (8.3, 8.4). A creature at 0 health or less is defeated at once and cannot be targeted again.
 6. Defeats and boss events. Bounties are paid. Puffballs queue their Puffs. Boss health events happen: Ironshell's speed rises from the next tick, Old Tusk's moths appear on the next tick.
-7. Wave checks. A wave runs from the moment it starts until it is cleared. A running wave with nothing left on the map and nothing left to spawn is cleared and pays its clear bonus. If the final wave is cleared and lives are above 0, the game is won. Otherwise, if no wave is running, the build phase begins.
+7. Wave checks. A wave runs from the moment it starts until it is cleared. A running wave with nothing left on the map and nothing left to spawn is cleared and pays its clear bonus. Then, if no wave is still running, one of two things happens: if every wave has started and lives are above 0, the game is won (4.1); if not, the build phase begins. While any wave is still running, neither happens, even if the final wave is already cleared.
 
 Combat never uses randomness. The campaign uses no randomness at all. Runs use seeded randomness only to build the run and draw cards (14).
 
@@ -989,7 +999,7 @@ Star 2 on every level: "Keep 15 lives."
 | Starting towers | The Sling Post only. Other towers come from cards. |
 | Gates | 1 at the start, up to 3 from cards. |
 | Cards | One draft after each of waves 1 to 17. |
-| End | The run is won when wave 18 is cleared with lives above 0. It is lost when lives reach 0. |
+| End | The run is won like a level (4.1): when wave 18 has started and no wave is still running, with lives above 0. Clearing wave 18 is not enough while an older wave is still on the map. It is lost when lives reach 0. |
 
 All core rules (4 to 9) apply in runs: phases, pause, speeds, early calls, selling, gates, the route line and the wave preview.
 
@@ -1095,7 +1105,7 @@ Risk (5). Each changes the next wave only.
 |---|---|---|---|
 | Twin Pebbles | Tower perk, Sling Post | Hits 2 targets per shot, but deals 2 less damage per hit. Once. | Reach wave 6 in a run |
 | Heavy Pumpkins | Tower perk, Pumpkin Catapult | Deals 10 more damage, but reloads 0.5 s slower. Once. | Reach wave 12 in a run |
-| Frost Chime | Tower perk, Lullaby Bell | Also slows flyers, but its range is 0.5 tiles shorter. Once. | Finish a daily challenge, won or lost |
+| Frost Chime | Tower perk, Lullaby Bell | Also slows flyers, the Moon Moth included, but its range is 0.5 tiles shorter. Once. | Finish a daily challenge, won or lost |
 | Volley | Tower perk, Longbow Loft | Hits one more target per shot, but each arrow deals 40% less damage, rounded half up. Once. | Win a run |
 | Long Fuse | Tower perk, Firework Tower | Reaches 1 tile further, but reloads 0.5 s slower. Once. | Win a run on Normal |
 | Spice Rack | Tower perk, Bakery | Also adds 2 damage per hit to the towers it reaches, but its speed boost is 10 points smaller. 25% becomes 15%. Once. | Earn 24 stars |
@@ -1107,6 +1117,7 @@ Risk (5). Each changes the next wave only.
 | Pip Parade | Risk | Next wave: a crowd of 24 Pips joins from entrance A, 0.3 s apart, starting 1.0 s after the wave starts. Reward: 100 gold. | Earn 72 stars |
 
 - Daily runs count as runs for these conditions.
+- Frost Chime changes every tier and path of the Lullaby Bell, like every tower perk. Its Bells slow every flyer in their ring, the Moon Moth included (6.3), so a Hush Bell with Frost Chime slows the Moon Moth by 60%. A Night Bell already slows flyers, so for it the card only shortens the ring.
 - Unlock progress is kept in these counters: `best_run_wave` (the highest wave reached in any run; it only goes up), `runs_won`, `runs_won_normal`, `dailies_finished` and `risky_wins` (runs won after taking 3 or more risk cards in them). Stars and Twist clears come from the level records (16).
 - Iron Gate locks nothing at the moment it is taken. In that build phase every gate can still be placed, moved and removed, so a mistaken drop can be fixed. From then on, each time a wave starts, every gate on a socket locks there for the rest of the run and can never be moved or removed again. That includes gates placed before the card was taken. Gates still in the tray stay free until they are placed and a wave starts. A locked gate can still be broken by a Gatecrasher or Old Tusk, and it mends on its socket as usual (7.6).
 
