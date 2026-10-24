@@ -872,7 +872,7 @@ func record_twist(id: StringName) -> void
 func mark_seen(id: StringName) -> void
 func bump(counter: StringName, amount: int) -> void    # adds, saturating at the ceiling
 func raise(counter: StringName, value: int) -> void    # keeps the larger value, for best_run_wave
-func stars() -> int                                    # star marks over campaign levels
+func stars() -> int                                    # star marks over every recorded level, unknown ids included (5.5)
 func cleared(id: StringName) -> bool                   # the level was won at least once (star bit 1)
 func level_open(game: GameData, id: StringName) -> bool   # RULES 16
 func region_open(game: GameData, index: int) -> bool
@@ -1187,7 +1187,7 @@ Ceilings are far above anything a real player reaches. Counters saturate at thei
  "counters": {"best_run_wave": 9, "runs_won": 1, "runs_won_normal": 0, "dailies_finished": 2, "risky_wins": 0}}
 ```
 
-- `levels`: at most 512 entries, keys in id form, values 0 to 7. Unknown but well formed ids are kept and ignored, so a later version's progress survives.
+- `levels`: at most 512 entries, keys in id form, values 0 to 7. Unknown but well formed ids are kept, so a later version's progress survives, and `stars()` counts them too. Only an edited file or a downgrade can add them, and the 512 entry cap holds the total to 1,536 stars.
 - `twists`, `seen`: at most 512 ids each, no repeats.
 - `counters`: the five names of RULES 14.6, each 0 to 1,000,000,000. A missing one is 0, and an unknown one is dropped.
 
