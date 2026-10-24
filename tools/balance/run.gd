@@ -1,0 +1,475 @@
+# Forkline. Copyright 2026 Play, Inc.
+# Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.
+extends SceneTree
+## The balance runner. One level and one job per run, so many can run side by side.
+##
+##   godot --headless --path . --script res://tools/balance/run.gd -- mode=spread level=r1_l1 seed=101 n=300 out=PATH
+##   godot --headless --path . --script X02 evals=3000 only=any out=PATH
+##   godot --headless --path . --script res://tools/balance/run.gd -- mode=det level=r1_l1 seed=303 out=PATH
+##   godot --headless --path . --script res://tools/balance/run.gd -- mode=recipes level=r1_l1 out=PATH
+##
+## mode=spread: n random strategies in each style (casual, typical, skilled), each played on
+##   Normal and on Relaxed. Reports win, two star and three star rates.
+## mode=search: a seeded search for the best strategy, from random starts and small edits
+##   (docs/balance/README.md). `only` is `any` or a comma list of tower ids the strategy may use.
+## mode=recipes: a few plain recipes a new player might follow (no seed; nothing is random),
+##   each played on Normal and Relaxed with no gate and with a gate on every socket.
+## mode=det: the same strategies played twice, played again with a save and load in the middle
+##   of a wave, and the same search run twice, must all match.
+## mode=search also takes early=off: no strategy calls a wave early (the star 3 of 1-6 is then out of reach).
+## Any mode also takes stat=pumpkin_catapult.splash:+25 (a what-if on tower numbers; see _apply_stat).
+## Any mode also takes tweak=gold:300,count_pct:120 (a what-if; see _apply_tweak).
+## The result is one JSON object, written to `out` when given and always printed after "RESULT ".
+## Every random draw comes from a generator seeded with `seed` plus a fixed offset, so the same
+## command line always gives the same output.
+
+const Bot: GDScript = preload("res://tools/balance/bot.gd")
+
+var _args: Dictionary = {}
+var _waves: int = 0
+
+
+func _initialize() -> void:
+	for argument: String in OS.get_cmdline_user_args():
+		var parts: PackedStringArray = argument.split("=", true, 1)
+		if parts.size() == 2:
+			_args[parts[0]] = parts[1]
+	var game: GameData = GameData.load_from("res://data")
+	if not game.problems.is_empty():
+		printerr("data problems: %s" % ", ".join(game.problems))
+		quit(2)
+		return
+	var level_id: StringName = StringName(String(_args.get("level", "r1_l1")))
+	if not game.levels.has(level_id):
+		printerr("unknown level %s" % level_id)
+		quit(2)
+		return
+	var stat: String = String(_args.get("stat", ""))
+	if stat != "" and not _apply_stat(game, level_id, stat):
+		return
+	var tweak: String = String(_args.get("tweak", ""))
+	if tweak != "" and not _apply_tweak(game, level_id, tweak):
+		return
+	var ctx: Dictionary = Bot.context(game, level_id)
+	_waves = ctx["level"].waves.size()
+	var seed_value: int = int(_args.get("seed", "1"))
+	var mode: String = String(_args.get("mode", "spread"))
+	var started: int = Time.get_ticks_msec()
+	var result: Dictionary = {}
+	if mode == "spread":
+		result = _spread(ctx, seed_value, int(_args.get("n", "200")))
+	elif mode == "search":
+		result = _search(ctx, seed_value, int(_args.get("evals", "2000")), _allowed(ctx, String(_args.get("only", "any"))))
+		result["only"] = String(_args.get("only", "any"))
+	elif mode == "det":
+		result = _det(ctx, seed_value)
+	elif mode == "recipes":
+		result = _recipes(ctx)
+	else:
+		printerr("unknown mode %s" % mode)
+		quit(2)
+		return
+	result["level"] = String(level_id)
+	result["mode"] = mode
+	result["seed"] = seed_value
+	result["seconds"] = (Time.get_ticks_msec() - started) / 1000.0
+	var text: String = JSON.stringify(result)
+	print("RESULT " + text)
+	var out: String = String(_args.get("out", ""))
+	if out != "":
+		var file: FileAccess = FileAccess.open(out, FileAccess.WRITE)
+		if file == null:
+			printerr("cannot write %s" % out)
+			quit(2)
+			return
+		file.store_string(JSON.stringify(result, "  "))
+		file.close()
+	quit(0)
+
+
+## A what-if for a suggestion in a report. `tweak` is a comma list of name:value pairs:
+##   gold:N          starting gold on Normal
+##   count_pct:N     every group's count times N / 100, rounded up (bosses are left alone)
+##   strength:N      every wave's strength
+##   add_spot:C;R    scenery cell (column C, row R) becomes a build spot; drop_spot:C;R turns a spot into scenery
+##   last_strength:N the final wave's strength
+## The level is rebuilt through LevelData.from_data, so the usual checks still apply.
+func _apply_tweak(game: GameData, level_id: StringName, tweak: String) -> bool:
+	var data: Dictionary = game.levels[level_id].to_data()
+	for pair: String in tweak.split(",", false):
+		var kv: PackedStringArray = pair.split(":")
+		var value: int = int(kv[1])
+		match kv[0]:
+			"add_spot", "drop_spot":
+				# The cell is written column;row, for example add_spot:4;5. A scenery cell becomes
+				# a build spot, or a build spot becomes scenery.
+				var xy: PackedStringArray = kv[1].split(";")
+				var row: String = data["grid"][int(xy[1])]
+				var col: int = int(xy[0])
+				data["grid"][int(xy[1])] = row.substr(0, col) + ("o" if kv[0] == "add_spot" else ".") + row.substr(col + 1)
+			"gold":
+				data["start_gold"] = value
+			"strength":
+				for wave: Dictionary in data["waves"]:
+					wave["strength"] = value
+			"last_strength":
+				data["waves"][data["waves"].size() - 1]["strength"] = value
+			"count_pct":
+				for wave: Dictionary in data["waves"]:
+					for group: Dictionary in wave["groups"]:
+						if not game.catalog.enemy(StringName(group["enemy"])).boss:
+							group["count"] = (int(group["count"]) * value + 99) / 100
+	var changed: LevelData = LevelData.from_data(data, game.catalog)
+	if changed == null:
+		printerr("tweak %s is refused: %s" % [tweak, ", ".join(LevelData.check(data, game.catalog))])
+		quit(2)
+		return false
+	game.levels[level_id] = changed
+	return true
+
+
+## A what-if on tower numbers. `stat` is a list joined with ~ of tower.field:change, for example
+## pumpkin_catapult.splash:+25~sling_post.damage:x80. The change is +N, -N or xP (P percent of the
+## number, rounded half up). It applies to every tier and tier 3 path that has the field (a field
+## of 0, such as splash on a Sling Post, is left alone). The catalog is rebuilt through
+## Catalog.from_data, so the usual checks still apply. Data files on disk are never touched.
+func _apply_stat(game: GameData, level_id: StringName, stat: String) -> bool:
+	var towers: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://data/stats/towers.json"))
+	var enemies: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://data/stats/enemies.json"))
+	var rules: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://data/stats/rules.json"))
+	for change: String in stat.split("~", false):
+		var halves: PackedStringArray = change.split(":")
+		var name_parts: PackedStringArray = halves[0].split(".")
+		var how: String = halves[1]
+		for tower: Dictionary in towers["towers"]:
+			if tower["id"] != name_parts[0]:
+				continue
+			var blocks: Array = []
+			blocks.append_array(tower["tiers"])
+			blocks.append_array(tower["specs"])
+			for block: Dictionary in blocks:
+				if not block.has(name_parts[1]) or int(block[name_parts[1]]) == 0:
+					continue
+				var old: int = int(block[name_parts[1]])
+				if how.begins_with("x"):
+					block[name_parts[1]] = (old * int(how.substr(1)) + 50) / 100
+				else:
+					block[name_parts[1]] = old + int(how)
+	var catalog: Catalog = Catalog.from_data(towers, enemies, rules)
+	if catalog == null:
+		printerr("stat %s is refused: %s" % [stat, ", ".join(Catalog.check(towers, enemies, rules))])
+		quit(2)
+		return false
+	var changed: LevelData = LevelData.from_data(game.levels[level_id].to_data(), catalog)
+	game.catalog = catalog
+	game.levels[level_id] = changed
+	return true
+
+
+func _allowed(ctx: Dictionary, only: String) -> Array[StringName]:
+	var level: LevelData = ctx["level"]
+	if only == "any":
+		return level.towers.duplicate()
+	var out: Array[StringName] = []
+	for id: String in only.split(",", false):
+		if level.towers.has(StringName(id)):
+			out.append(StringName(id))
+	return out
+
+
+# Spread: how strategies of each style fare.
+
+func _spread(ctx: Dictionary, seed_value: int, n: int) -> Dictionary:
+	var level: LevelData = ctx["level"]
+	var allowed: Array[StringName] = level.towers.duplicate()
+	var styles: Dictionary = {}
+	var share_bins: Dictionary = {}
+	var size_bins: Dictionary = {}
+	var peak_max: int = 0
+	var peak_strategy: Dictionary = {}
+	for s: int in Bot.STYLES.size():
+		var style: StringName = Bot.STYLES[s]
+		var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+		rng.seed = seed_value + 7919 * (s + 1)
+		var rows: Dictionary = {"normal": _tally(), "relaxed": _tally()}
+		for i: int in n:
+			var strat: Dictionary = Bot.random_strategy(ctx, rng, style, allowed)
+			for mode: String in ["normal", "relaxed"]:
+				var res: Dictionary = Bot.play(ctx, strat, mode == "relaxed")
+				_add(rows[mode], res)
+				if mode == "normal" and int(res["peak"]) > peak_max:
+					peak_max = int(res["peak"])
+					peak_strategy = Bot.to_data(strat)
+				# Win rate by how much of the build is the first offered tower, and by tower count.
+				var firsts: int = 0
+				for t: Dictionary in strat["towers"]:
+					if t["type"] == allowed[0]:
+						firsts += 1
+				var share: int = firsts * 4 / maxi(strat["towers"].size(), 1)
+				_add(_bin(share_bins, "%s|%s_quarters_%d" % [mode, allowed[0], share]), res)
+				_add(_bin(size_bins, "%s|%d_towers" % [mode, strat["towers"].size()]), res)
+		styles[String(style)] = rows
+	return {"n_per_style": n, "styles": styles, "by_first_tower_share": share_bins, "by_tower_count": size_bins,
+		"peak_max": peak_max, "peak_strategy": peak_strategy}
+
+
+func _tally() -> Dictionary:
+	return {"n": 0, "won": 0, "two": 0, "three": 0, "lives_sum": 0, "ticks_sum": 0, "stuck": 0, "final": 0, "died_at": {}}
+
+
+func _bin(bins: Dictionary, key: String) -> Dictionary:
+	if not bins.has(key):
+		bins[key] = _tally()
+	return bins[key]
+
+
+func _add(t: Dictionary, res: Dictionary) -> void:
+	t["n"] = int(t["n"]) + 1
+	if bool(res["stuck"]):
+		t["stuck"] = int(t["stuck"]) + 1
+	if res["lives_at"].size() >= _waves:
+		t["final"] = int(t["final"]) + 1                    # the final wave started
+	if not bool(res["won"]):
+		var key: String = str(int(res["cleared"]) + 1)      # the wave (1 based) the run was lost in
+		var died: Dictionary = t["died_at"]
+		died[key] = int(died.get(key, 0)) + 1
+	if bool(res["won"]):
+		t["won"] = int(t["won"]) + 1
+		t["lives_sum"] = int(t["lives_sum"]) + int(res["lives"])
+		t["ticks_sum"] = int(t["ticks_sum"]) + int(res["ticks"])
+		var stars: int = int(res["stars"])
+		if (stars & 2) != 0:
+			t["two"] = int(t["two"]) + 1
+		if stars == 7:
+			t["three"] = int(t["three"]) + 1
+
+
+# Search.
+
+func _search(ctx: Dictionary, seed_value: int, evals: int, allowed: Array[StringName]) -> Dictionary:
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = seed_value + 104729
+	var pool: Array = []                                    # [{strat, res, fit}] best first
+	var seen: Dictionary = {}
+	var played: int = 0
+	var wins: int = 0
+	var star_counts: Dictionary = {"lost": 0, "1": 0, "2": 0, "3": 0}
+	var threes: Array = []
+	var best_win: Dictionary = {}
+	var first_three: int = -1
+	var peak_max: int = 0
+	var attempts: int = 0
+	var start_count: int = evals / 3
+	var level: LevelData = ctx["level"]
+	while played < evals and attempts < evals * 20:
+		attempts += 1
+		var strat: Dictionary
+		if played < start_count or pool.is_empty() or rng.randf() < 0.1:
+			var style: StringName = &"typical" if rng.randf() < 0.4 else &"skilled"
+			strat = Bot.random_strategy(ctx, rng, style, allowed)
+		else:
+			var parent: Dictionary = _tournament(pool, rng)
+			strat = Bot.mutate(ctx, parent["strat"], rng, allowed)
+		if _args.get("early", "on") == "off":
+			strat["early"]["on"] = false
+		var sig: String = Bot.signature(strat)
+		if seen.has(sig):
+			continue
+		seen[sig] = true
+		played += 1
+		var res: Dictionary = Bot.play(ctx, strat, false)
+		peak_max = maxi(peak_max, int(res["peak"]))
+		var fit: int = Bot.fitness(res)
+		if bool(res["won"]):
+			wins += 1
+			var stars: int = int(res["stars"])
+			var key: String = "3" if stars == 7 else ("2" if (stars & 2) != 0 else "1")
+			star_counts[key] = int(star_counts[key]) + 1
+			if stars == 7:
+				if first_three < 0:
+					first_three = played
+				threes.append({"strat": strat, "res": _slim(res)})
+			if best_win.is_empty() or fit > int(best_win["fit"]):
+				best_win = {"fit": fit, "strat": strat, "res": res}
+		else:
+			star_counts["lost"] = int(star_counts["lost"]) + 1
+		pool.append({"strat": strat, "res": res, "fit": fit})
+		pool.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["fit"]) > int(b["fit"]))
+		if pool.size() > 40:
+			pool.resize(40)
+	# The best three star wins first, by lives left, then fewer towers.
+	threes.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var la: int = int(a["res"]["lives"])
+		var lb: int = int(b["res"]["lives"])
+		if la != lb:
+			return la > lb
+		return Bot.signature(a["strat"]) < Bot.signature(b["strat"]))
+	var out: Dictionary = {"evals": played, "wins": wins, "outcomes": star_counts, "first_three_star_eval": first_three,
+		"three_star_found": threes.size(), "peak_max": peak_max, "allowed": _names(allowed)}
+	# Tower use across every three star win found.
+	var use: Dictionary = {}
+	for item: Dictionary in threes:
+		var inventory: Dictionary = Bot.inventory(ctx, item["strat"])
+		for key: String in inventory:
+			use[key] = int(use.get(key, 0)) + 1
+	out["three_star_builds_using"] = use
+	var listed: Array = []
+	for i: int in mini(threes.size(), 12):
+		var strat2: Dictionary = threes[i]["strat"]
+		listed.append({"strategy": Bot.to_data(strat2), "result": threes[i]["res"], "inventory": Bot.inventory(ctx, strat2),
+			"text": Bot.describe(ctx, strat2)})
+	out["three_star_best"] = listed
+	var small: Array = []
+	for item: Dictionary in threes:
+		small.append({"inventory": Bot.inventory(ctx, item["strat"]), "lives": item["res"]["lives"], "towers": item["res"]["towers"],
+			"early": item["res"]["early"], "gate": String(str(item["strat"]["gate"]))})
+	out["three_star_all"] = small if small.size() <= 400 else small.slice(0, 400)
+	if not best_win.is_empty():
+		var bs: Dictionary = best_win["strat"]
+		out["best_win"] = {"strategy": Bot.to_data(bs), "result": _slim(best_win["res"]), "text": Bot.describe(ctx, bs),
+			"inventory": Bot.inventory(ctx, bs)}
+	# The best fit even when nothing won: shows how close a restricted search came.
+	if not pool.is_empty():
+		var top: Dictionary = pool[0]
+		out["top"] = {"strategy": Bot.to_data(top["strat"]), "result": _slim(top["res"]), "text": Bot.describe(ctx, top["strat"])}
+	out["level_towers"] = _names(level.towers)
+	return out
+
+
+func _tournament(pool: Array, rng: RandomNumberGenerator) -> Dictionary:
+	var best: int = rng.randi_range(0, pool.size() - 1)
+	for i: int in 2:
+		best = mini(best, rng.randi_range(0, pool.size() - 1))
+	return pool[best]
+
+
+func _names(ids: Array[StringName]) -> Array:
+	var out: Array = []
+	for id: StringName in ids:
+		out.append(String(id))
+	return out
+
+
+## The numbers worth keeping from one play.
+func _slim(res: Dictionary) -> Dictionary:
+	return {"waves": _waves, "won": res["won"], "stars": res["stars"], "lives": res["lives"], "cleared": res["cleared"], "ticks": res["ticks"],
+		"peak": res["peak"], "early": res["early"], "towers": res["towers"], "max_tier": res["max_tier"], "kinds": _names(res["kinds"]),
+		"gold_at": res["gold_at"], "lives_at": res["lives_at"], "spent_at": res["spent_at"], "wave_ticks": res["wave_ticks"],
+		"end_gold": res["end_gold"], "boss_hp": res["boss_hp"], "boss_steps": res["boss_steps"], "digest": res["digest"]}
+
+
+# Recipes.
+
+## Plain recipes. Each is [name, type pattern, depth, spec, spot order]. The pattern is the tower
+## ids for spot 1, 2, 3 and so on, repeated. Spot order is "cell" (top row first) or "road" (the
+## spots that see the most road first). None of them targets, calls early or buys during waves.
+const RECIPES: Array = [
+	["sling x all, no upgrades", ["sling_post"], 0, 0, "cell"],
+	["sling x all, tier 2", ["sling_post"], 1, 0, "cell"],
+	["sling x all, 3 Quickshots", ["sling_post"], 2, 0, "cell"],
+	["sling x all, 3 Stone Slings", ["sling_post"], 2, 1, "cell"],
+	["catapult x all, no upgrades", ["pumpkin_catapult"], 0, 0, "cell"],
+	["catapult x all, tier 2", ["pumpkin_catapult"], 1, 0, "cell"],
+	["catapult x all, 3 Prize Pumpkins", ["pumpkin_catapult"], 2, 0, "cell"],
+	["catapult x all, 3 Jam Pots", ["pumpkin_catapult"], 2, 1, "cell"],
+	["sling, catapult, alternating, road order, Quickshots and Prize Pumpkins on the first 3", ["sling_post", "pumpkin_catapult"], 2, 0, "road"],
+	["sling, catapult, alternating, road order, Stone Slings and Jam Pots on the first 3", ["sling_post", "pumpkin_catapult"], 2, 1, "road"],
+	["sling, catapult, alternating, no upgrades", ["sling_post", "pumpkin_catapult"], 0, 0, "cell"],
+	["sling, catapult, alternating, tier 2", ["sling_post", "pumpkin_catapult"], 1, 0, "cell"],
+	["sling, catapult, alternating, road order, no upgrades", ["sling_post", "pumpkin_catapult"], 0, 0, "road"],
+	["sling, catapult, alternating, road order, tier 2", ["sling_post", "pumpkin_catapult"], 1, 0, "road"],
+	["sling x all, road order, no upgrades", ["sling_post"], 0, 0, "road"],
+	["sling x all, road order, tier 2", ["sling_post"], 1, 0, "road"],
+]
+
+
+func _recipes(ctx: Dictionary) -> Dictionary:
+	var level: LevelData = ctx["level"]
+	var weights: Array[int] = ctx["weights"]
+	var gates: Array = [Bot.NO_CELL]
+	if level.gates > 0:
+		gates.append_array(ctx["gate_options"])
+	var rows: Array = []
+	for recipe: Array in RECIPES:
+		var spots: Array[Vector2i] = level.spots.duplicate()
+		if recipe[4] == "road":
+			var order: Array = []
+			for i: int in spots.size():
+				order.append([-weights[i], i])
+			order.sort()
+			spots = []
+			for item: Array in order:
+				spots.append(level.spots[int(item[1])])
+		var pattern: Array = recipe[1]
+		var towers: Array = []
+		var seq: Array = []
+		for i: int in spots.size():
+			var type: StringName = StringName(String(pattern[i % pattern.size()]))
+			if not level.towers.has(type):
+				type = level.towers[0]
+			# A depth 2 recipe takes only its first three towers to tier 3, the rest stop at tier 2.
+			var depth: int = mini(int(recipe[2]), 1 if i >= 3 else 2)
+			towers.append({"cell": spots[i], "type": type, "depth": depth, "spec": int(recipe[3]), "aim": TowerState.Aim.FIRST})
+		# Breadth first: every build, then every tier 2 upgrade, then the tier 3 upgrades.
+		for step: int in int(recipe[2]) + 1:
+			for i: int in towers.size():
+				if int(towers[i]["depth"]) >= step:
+					seq.append(i)
+		var per_gate: Array = []
+		var summary: Dictionary = {}
+		for mode: String in ["normal", "relaxed"]:
+			var wins: int = 0
+			var best: Dictionary = {}
+			var worst: Dictionary = {}
+			for gate: Vector2i in gates:
+				var strat: Dictionary = {"towers": towers, "seq": seq, "gate": gate, "early": {"on": false, "from": 1, "live": 0, "max": 99}, "wave_buy": false}
+				var res: Dictionary = Bot.play(ctx, strat, mode == "relaxed")
+				if bool(res["won"]):
+					wins += 1
+				var fit: int = Bot.fitness(res)
+				var slim: Dictionary = {"gate": "none" if gate == Bot.NO_CELL else "%d,%d" % [gate.x, gate.y], "won": res["won"], "stars": res["stars"],
+					"lives": res["lives"], "cleared": res["cleared"]}
+				if best.is_empty() or fit > int(best["fit"]):
+					best = {"fit": fit, "res": slim}
+				if worst.is_empty() or fit < int(worst["fit"]):
+					worst = {"fit": fit, "res": slim}
+				per_gate.append({"mode": mode, "gate": slim["gate"], "won": res["won"], "stars": res["stars"], "lives": res["lives"], "cleared": res["cleared"]})
+			summary[mode] = {"gates_tried": gates.size(), "wins": wins, "best": best["res"], "worst": worst["res"]}
+		rows.append({"recipe": recipe[0], "summary": summary, "per_gate": per_gate})
+	return {"recipes": rows, "waves": level.waves.size()}
+
+
+# Determinism.
+
+func _det(ctx: Dictionary, seed_value: int) -> Dictionary:
+	var allowed: Array[StringName] = ctx["level"].towers.duplicate()
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = seed_value
+	var same: int = 0
+	var checked: int = 0
+	var restores: int = 0
+	var restores_same: int = 0
+	var chain: String = ""
+	for i: int in 24:
+		var style: StringName = Bot.STYLES[i % 3]
+		var strat: Dictionary = Bot.random_strategy(ctx, rng, style, allowed)
+		var relaxed: bool = i % 4 == 3
+		var a: Dictionary = Bot.play(ctx, strat, relaxed)
+		var b: Dictionary = Bot.play(ctx, strat, relaxed)
+		var c: Dictionary = Bot.play(ctx, Bot.from_data(Bot.to_data(strat)), relaxed, true)
+		checked += 1
+		for at: int in [300, 900, 1700]:
+			var d: Dictionary = Bot.play(ctx, strat, relaxed, false, at)
+			restores += 1
+			if d["digest"] == a["digest"] and d["stars"] == a["stars"] and d["ticks"] == a["ticks"] and d["lives"] == a["lives"]:
+				restores_same += 1
+		if a["digest"] == b["digest"] and a["digest"] == c["digest"] and a["ticks"] == b["ticks"] and a["stars"] == b["stars"] \
+				and a["lives"] == b["lives"] and a["stars"] == c["stars"] and a["ticks"] == c["ticks"]:
+			same += 1
+		chain += "%d:%d:%d;" % [a["digest"], a["stars"], a["ticks"]]
+	var s1: Dictionary = _search(ctx, seed_value, 60, allowed)
+	var s2: Dictionary = _search(ctx, seed_value, 60, allowed)
+	var search_same: bool = JSON.stringify(s1) == JSON.stringify(s2)
+	return {"plays_checked": checked, "plays_identical": same, "restores_checked": restores, "restores_identical": restores_same,
+		"search_repeat_identical": search_same,
+		"chain_hash": chain.hash(), "search_hash": JSON.stringify(s1).hash()}
