@@ -32,5 +32,7 @@
     {"groups": [{"enemy": "pip", "count": 30, "entrance": 1, "at_ms": 0, "every_ms": 100}, {"enemy": "flitter", "count": 7, "entrance": 1, "at_ms": 2000, "every_ms": 400}, {"enemy": "scamp", "count": 6, "entrance": 1, "at_ms": 12000, "every_ms": 1200}]},
     {"groups": [{"enemy": "scamp", "count": 8, "entrance": 1, "at_ms": 0, "every_ms": 1000}, {"enemy": "pip", "count": 34, "entrance": 1, "at_ms": 8000, "every_ms": 100}, {"enemy": "flitter", "count": 7, "entrance": 1, "at_ms": 10000, "every_ms": 400}, {"enemy": "scamp", "count": 4, "entrance": 1, "at_ms": 16000, "every_ms": 1000}]},
     {"strength": 50, "groups": [{"enemy": "grumblesack", "count": 1, "entrance": 1, "at_ms": 0, "every_ms": 1000}]}
-  ]
+  ],
+  "twist": {"name": "Double Trouble", "text": "The final wave is twice as big, with two bosses.",
+            "effects": [{"type": "count_pct", "pct": 200, "flyers": false, "last_wave": true}]}
 }

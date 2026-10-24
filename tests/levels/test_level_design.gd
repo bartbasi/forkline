@@ -16,11 +16,37 @@ const PLAN: Dictionary = {
 	"r1_l4": {"gates": 1, "sockets": 3, "waves": 9, "strength": 100, "gold": 300, "star3": ["tier_at_most", 1], "highlight": "spot"},
 	"r1_l5": {"gates": 1, "sockets": 3, "waves": 10, "strength": 100, "gold": 300, "star3": ["tier_at_most", 2], "highlight": "spot"},
 	"r1_l6": {"gates": 1, "sockets": 3, "waves": 10, "strength": 100, "gold": 350, "star3": ["gates_at_most", 0], "highlight": "spot"},
+	"r2_l1": {"gates": 1, "sockets": 3, "waves": 10, "strength": 130, "gold": 350, "star3": ["early_calls_at_least", 6], "highlight": "call"},
+	"r2_l2": {"gates": 1, "sockets": 3, "waves": 10, "strength": 135, "gold": 400, "star3": ["towers_at_most", 6], "highlight": "spot"},
+	"r2_l3": {"gates": 1, "sockets": 3, "waves": 10, "strength": 140, "gold": 400, "star3": ["tier_at_most", 2], "highlight": "spot"},
+	"r2_l4": {"gates": 2, "sockets": 4, "waves": 11, "strength": 145, "gold": 450, "star3": ["gates_at_most", 1], "highlight": "socket"},
+	"r2_l5": {"gates": 2, "sockets": 4, "waves": 11, "strength": 150, "gold": 450, "star3": ["tower_ban", "longbow_loft"], "highlight": "spot"},
+	"r2_l6": {"gates": 2, "sockets": 5, "waves": 12, "strength": 160, "gold": 500, "star3": ["kinds_at_most", 3], "highlight": "spot"},
+}
+
+## docs/ARCHITECTURE.md 2.8 and RULES 13: each level's Twist as effects. The level designer picks
+## the sockets of Stuck Gate and Stuck Gates. 1-3 is Tier 2 Cap (DM decision, 2026-10-24),
+## because No Upgrades could not be won on Normal (TUNING_R1.md S4).
+const TWISTS: Dictionary = {
+	"r1_l1": [{"type": "start_gold_pct", "pct": 50}],
+	"r1_l2": [{"type": "fixed_gates", "cells": [[6, 5]]}],
+	"r1_l3": [{"type": "tier_cap", "tier": 2}],
+	"r1_l4": [{"type": "ban_tower", "tower": "pumpkin_catapult"}],
+	"r1_l5": [{"type": "count_pct", "pct": 200, "flyers": true, "last_wave": false}],
+	"r1_l6": [{"type": "count_pct", "pct": 200, "flyers": false, "last_wave": true}],
+	"r2_l1": [{"type": "speed_pct", "pct": 120}],
+	"r2_l2": [{"type": "ban_tower", "tower": "lullaby_bell"}],
+	"r2_l3": [{"type": "armor_add", "amount": 2}],
+	"r2_l4": [{"type": "set_gates", "count": 0}],
+	"r2_l5": [{"type": "all_bubbles"}],
+	"r2_l6": [{"type": "fixed_gates", "cells": [[1, 3], [5, 8]]}],
 }
 
 ## RULES 12.2: the towers each level brings.
 const NEW_TOWERS: Dictionary = {
 	"r1_l1": ["sling_post", "pumpkin_catapult"],
+	"r2_l2": ["lullaby_bell"],
+	"r2_l3": ["longbow_loft"],
 }
 
 ## RULES 12.2 and 12.3: the creature each level brings and its first wave, 1 based.
@@ -29,12 +55,16 @@ const NEW_CREATURES: Dictionary = {
 	"r1_l4": ["pip", 3],
 	"r1_l5": ["flitter", 3],
 	"r1_l6": ["grumblesack", 10],
+	"r2_l1": ["skitter", 2],
+	"r2_l3": ["shellback", 3],
+	"r2_l5": ["bubbler", 2],
+	"r2_l6": ["ironshell", 12],
 }
 
-## RULES 3.1 and 3.4: map rows and build spots per region, and region 1's one entrance (12.3).
+## RULES 3.1 and 3.4: map rows and build spots per region, and entrances per region (12.3).
 const REGION_ROWS: Dictionary = {"lantern_hill": [8, 11], "millbrook": [10, 13], "willow_fen": [10, 13], "moonspire_keep": [10, 13]}
 const REGION_SPOTS: Dictionary = {"lantern_hill": [5, 7], "millbrook": [7, 9], "willow_fen": [8, 10], "moonspire_keep": [9, 11]}
-const REGION_ENTRANCES: Dictionary = {"lantern_hill": [1, 1]}
+const REGION_ENTRANCES: Dictionary = {"lantern_hill": [1, 1], "millbrook": [1, 2]}
 
 ## RULES 12.5: a new creature's first wave holds 3 to 5 of it. A boss comes alone.
 const FIRST_WAVE_COUNT: Array[int] = [3, 5]
@@ -42,7 +72,7 @@ const FIRST_WAVE_COUNT: Array[int] = [3, 5]
 const SPAWN_BOUND: int = 120
 const SPAWN_AIM: int = 80
 ## RULES 12.5: a level lasts 5 to 10 minutes at 1x, counting the wave phases with no
-## early calls plus 15 s for each build phase.
+## early calls plus 15 s for each build phase. Only the floor is checked here.
 const LENGTH_MS: Array[int] = [5 * 60 * 1000, 10 * 60 * 1000]
 const BUILD_MS: int = 15 * 1000
 
@@ -288,10 +318,11 @@ func _stay_ms(enemy: EnemyType, steps: int, gates: int) -> int:
 
 ## RULES 12.5. The longest a level can last at 1x when nothing is slowed: no creature is
 ## popped, each walks the longest route the gates can make (a flyer's straight line is
-## never longer), and every wave starts when the one before it ends. Past 10 minutes the
-## level is too long. Under 5 minutes every play would be too short. The smoke test
-## checks the 5 minute floor on a real win.
-func test_longest_unslowed_play_is_5_to_10_minutes() -> void:
+## never longer), and every wave starts when the one before it ends. Under 5 minutes every
+## play would be too short. This bound counts no kills at all, so on the long roads and slow
+## creatures of region 2 it runs past any real play; the smoke test checks the 10 minute
+## ceiling on the plain mixed recipe's real win instead (RULES 12.6).
+func test_longest_unslowed_play_is_at_least_5_minutes() -> void:
 	for id: String in order:
 		var level: LevelData = _level(id)
 		if level == null:
@@ -308,7 +339,7 @@ func test_longest_unslowed_play_is_5_to_10_minutes() -> void:
 				var last_ms: int = (group.at_tick + (group.count - 1) * group.every_ticks) * Sim.MS_PER_TICK
 				end_ms = maxi(end_ms, last_ms + _stay_ms(enemy, longest[group.entrance], level.gates))
 			total_ms += end_ms
-		assert_true(total_ms >= LENGTH_MS[0] and total_ms <= LENGTH_MS[1], "%s: the longest unslowed play is %.1f min, RULES 12.5 asks 5 to 10" % [id, total_ms / 60000.0])
+		assert_true(total_ms >= LENGTH_MS[0], "%s: the longest unslowed play is %.1f min, RULES 12.5 asks at least 5" % [id, total_ms / 60000.0])
 
 
 func test_star3_follows_rules_12_4() -> void:
@@ -318,7 +349,10 @@ func test_star3_follows_rules_12_4() -> void:
 			continue
 		var planned: Array = PLAN[id]["star3"]
 		assert_eq(level.star3.get("kind"), StringName(planned[0]), "%s star 3 kind" % id)
-		assert_eq(level.star3.get("value", 0), int(planned[1]), "%s star 3 value" % id)
+		if planned[1] is String:
+			assert_eq(level.star3.get("tower", &""), StringName(planned[1]), "%s star 3 tower" % id)
+		else:
+			assert_eq(level.star3.get("value", 0), int(planned[1]), "%s star 3 value" % id)
 
 
 func test_star3_leaves_two_kinds_of_attacking_tower_usable() -> void:
@@ -350,7 +384,83 @@ func test_hint_highlights_the_planned_kind_of_cell() -> void:
 		if level == null or not PLAN.has(id):
 			continue
 		assert_false(level.hint_text.is_empty(), "%s has a hint (RULES 9.6)" % id)
+		if PLAN[id]["highlight"] == "call":
+			# RULES 12.4 and contract 7.4: level 2-1 highlights the call button, not a cell.
+			assert_eq(level.hint_button, &"call", "%s highlights the call button" % id)
+			assert_eq(level.hint_cell, Vector2i(-1, -1), "%s highlights no cell" % id)
+			continue
 		assert_eq(level.hint_button, &"", "%s highlights a cell, not a button" % id)
 		assert_true(level.hint_cell.x >= 0 and level.hint_cell.y >= 0, "%s highlights a cell" % id)
 		var planned: String = PLAN[id]["highlight"]
 		assert_eq(level.kind_at(level.hint_cell), kinds[planned], "%s: the hint cell %s is a %s" % [id, level.hint_cell, planned])
+
+
+## docs/ARCHITECTURE.md 2.4 and 7.4, RULES 3.1: the bottom row of a 13 row map is scenery only,
+## so the folded wave preview on the Fold5 cover never hides a spot, socket, entrance or home.
+func test_a_13_row_maps_bottom_row_is_scenery() -> void:
+	var tall: int = 0
+	for id: String in order:
+		var level: LevelData = _level(id)
+		if level == null or level.rows != Sim.MAP_ROWS_MAX:
+			continue
+		tall += 1
+		assert_eq(level.grid[level.rows - 1], ".".repeat(Sim.MAP_COLUMNS), "%s: the bottom row of a 13 row map is all scenery" % id)
+	assert_true(tall >= 1, "some level has 13 rows, so the rule is exercised")
+
+
+## RULES 13 and docs/ARCHITECTURE.md 2.8: every level has its planned Twist.
+func test_every_level_has_its_planned_twist() -> void:
+	for id: String in order:
+		var level: LevelData = _level(id)
+		if level == null:
+			continue
+		assert_true(TWISTS.has(id), "%s has a planned Twist" % id)
+		assert_false(level.twist_name.is_empty(), "%s has a Twist name" % id)
+		assert_false(level.twist_text.is_empty(), "%s has a Twist card text" % id)
+		if TWISTS.has(id):
+			assert_eq(JSON.stringify(level.twist_effects, "", true), JSON.stringify(TWISTS[id], "", true), "%s Twist effects" % id)
+
+
+## RULES 13: Stuck Gate and Stuck Gates fix every gate the level gives, each on a socket,
+## and the fixed gates leave every entrance a way to the base.
+func test_stuck_gates_fix_every_gate_on_sockets() -> void:
+	for id: String in order:
+		var level: LevelData = _level(id)
+		if level == null:
+			continue
+		var fixed: Array[Vector2i] = []
+		for effect: Dictionary in level.twist_effects:
+			if effect["type"] == "fixed_gates":
+				for cell: Array in effect["cells"]:
+					fixed.append(Vector2i(int(cell[0]), int(cell[1])))
+		if fixed.is_empty():
+			continue
+		assert_eq(fixed.size(), level.gates, "%s: the Twist fixes every gate the level gives" % id)
+		for cell: Vector2i in fixed:
+			assert_true(level.sockets.has(cell), "%s: fixed gate %s is on a socket" % [id, cell])
+		assert_false(RoadMap.new(level).seals(fixed), "%s: the fixed gates seal no entrance" % id)
+
+
+## docs/ARCHITECTURE.md 2.4: with its Twist applied, a wave spawns at most 120 creatures.
+func test_spawn_bound_holds_with_the_twist() -> void:
+	for id: String in order:
+		var level: LevelData = _level(id)
+		if level == null:
+			continue
+		for i: int in level.waves.size():
+			var total: int = 0
+			for group: WaveGroup in level.waves[i].groups:
+				var enemy: EnemyType = catalog.enemy(group.enemy)
+				if enemy == null:
+					continue
+				var count: int = group.count
+				for effect: Dictionary in level.twist_effects:
+					if effect["type"] != "count_pct":
+						continue
+					if bool(effect["flyers"]) and not enemy.flying:
+						continue
+					if bool(effect["last_wave"]) and i != level.waves.size() - 1:
+						continue
+					count = ceili(count * int(effect["pct"]) / 100.0)
+				total += count * (1 + enemy.split_count)
+			assert_true(total <= SPAWN_BOUND, "%s wave %d spawns %d with its Twist, the bound is %d" % [id, i + 1, total, SPAWN_BOUND])

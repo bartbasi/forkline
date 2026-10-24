@@ -1,12 +1,12 @@
 # Forkline. Copyright 2026 Play, Inc.
 # Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.
 extends "res://tests/base_test.gd"
-## A smoke play of every real level on the real sim: one fixed, simple defense, every
-## wave started from a build phase (no early calls), run to the end. It proves each
-## level plays through with no script errors and is not lost in its first wave.
-## It does not judge balance: the balance bots in tools/balance/ do that. When the
-## simple defense wins, the play must last 5 to 10 minutes at 1x (RULES 12.5).
-## Each level prints one line: the result, lives left and ticks (20 ticks a second at 1x).
+## Every real level played on the real sim by the plain mixed recipe of RULES 12.6: the stand-in
+## for a thoughtful first try. It is played once for every gate placement the level allows, and
+## its best placement must win on Normal, last 5 to 10 minutes at 1x (RULES 12.5) and be
+## repeatable. It proves each level plays through with no script errors. It does not judge
+## balance beyond that: the balance bots in tools/balance/ do that.
+## Each level prints one line: the best placement, lives left and the length.
 
 const Files: GDScript = preload("res://tests/levels/fixtures/level_files.gd")
 
@@ -16,6 +16,10 @@ const TICK_CAP: int = 20 * 60 * Sim.TICKS_PER_SECOND
 const BUILD_SECONDS: int = 15
 ## RULES 12.5: a level lasts 5 to 10 minutes at 1x.
 const LENGTH_MINUTES: Array[float] = [5.0, 10.0]
+## RULES 12.6 step 4: the attacking towers in turn.
+const TURN: Array[StringName] = [&"sling_post", &"pumpkin_catapult", &"longbow_loft", &"firework_tower"]
+## RULES 12.6 step 1: road seen within 2.5 tiles.
+const SEEN_REACH: int = 250
 
 var catalog: Catalog = null
 
@@ -24,74 +28,186 @@ func before_each() -> void:
 	catalog = Files.catalog()
 
 
-## The fixed defense, before every wave: fill empty spots in cell order, taking the
-## level's towers in turn by spot index, while gold lasts; then take every tier 1 tower
-## to tier 2 in cell order. No gates, no tier 3, no selling.
-func _plan(battle: Battle) -> void:
-	var spots: Array[Vector2i] = battle.level.spots
-	var offered: Array[StringName] = battle.level.towers
-	for i: int in spots.size():
-		if battle.tower_at(spots[i]) == null:
-			battle.place_tower(spots[i], offered[i % offered.size()])
-	for tower: TowerState in battle.towers.duplicate():
-		if tower.tier == 1:
-			battle.upgrade_tower(tower.cell)
+## RULES 12.6 steps 1 to 5: [{"cell", "type", "top"}] in build order, where top is the highest
+## tier the recipe buys. In region 1 it stops at tier 2.
+func _recipe(level: LevelData, first_region: bool) -> Array[Dictionary]:
+	var ranked: Array[Vector2i] = _spot_order(level)
+	var bakery_cell: Vector2i = Vector2i(-1, -1)
+	if level.towers.has(&"bakery"):
+		var best: int = 1
+		for spot: Vector2i in ranked:
+			var near: int = 0
+			for other: Vector2i in level.spots:
+				if other != spot and absi(other.x - spot.x) <= 1 and absi(other.y - spot.y) <= 1:
+					near += 1
+			if near > best:
+				best = near
+				bakery_cell = spot
+	var attackers: Array[StringName] = []
+	for type: StringName in TURN:
+		if level.towers.has(type) and (type != &"firework_tower" or _brings_flyers(level)):
+			attackers.append(type)
+	var out: Array[Dictionary] = []
+	var bell_done: bool = not level.towers.has(&"lullaby_bell")
+	var turn: int = 0
+	for i: int in ranked.size():
+		var cell: Vector2i = ranked[i]
+		if cell == bakery_cell:
+			continue
+		var bell_index: int = 3 if bakery_cell == ranked[mini(2, ranked.size() - 1)] else 2
+		if not bell_done and i == bell_index:
+			out.append({"cell": cell, "type": &"lullaby_bell", "top": 2})
+			bell_done = true
+			continue
+		out.append({"cell": cell, "type": attackers[turn % attackers.size()], "top": 2 if first_region else 3})
+		turn += 1
+	if bakery_cell != Vector2i(-1, -1):
+		out.append({"cell": bakery_cell, "type": &"bakery", "top": 2})
+	return out
 
 
-## Plays one level to the end. Returns the result with "ticks", "wave1_lives",
-## "towers_at_wave1" and "refusal" (the first refused wave start, or &"").
-func _play(level: LevelData) -> Dictionary:
+## Spots by road seen, most first; ties keep cell order (RULES 3.4, 12.6 step 1).
+func _spot_order(level: LevelData) -> Array[Vector2i]:
+	var keyed: Array = []
+	for i: int in level.spots.size():
+		var spot: Vector2i = level.spots[i]
+		var seen: int = 0
+		for r: int in level.rows:
+			for c: int in Sim.MAP_COLUMNS:
+				var dx: int = (c - spot.x) * 100
+				var dy: int = (r - spot.y) * 100
+				if level.is_road(Vector2i(c, r)) and dx * dx + dy * dy <= SEEN_REACH * SEEN_REACH:
+					seen += 1
+		keyed.append([-seen, i])
+	keyed.sort()
+	var out: Array[Vector2i] = []
+	for item: Array in keyed:
+		out.append(level.spots[int(item[1])])
+	return out
+
+
+func _brings_flyers(level: LevelData) -> bool:
+	for wave: WaveData in level.waves:
+		for group: WaveGroup in wave.groups:
+			var enemy: EnemyType = catalog.enemy(group.enemy)
+			if enemy == null:
+				continue
+			if enemy.flying:
+				return true
+			var released: Array = [enemy.summon.get("enemy", ""), enemy.release.get("enemy", "")]
+			for other: Variant in released:
+				var type: EnemyType = catalog.enemy(StringName(str(other)))
+				if type != null and type.flying:
+					return true
+	return false
+
+
+## Every placement of up to the level's gates that seals nothing, the empty one first.
+func _placements(level: LevelData) -> Array[Array]:
+	var out: Array[Array] = []
+	_collect(level, RoadMap.new(level), 0, [], out)
+	return out
+
+
+func _collect(level: LevelData, map: RoadMap, start: int, current: Array, out: Array[Array]) -> void:
+	var closed: Array[Vector2i] = []
+	closed.assign(current)
+	if map.seals(closed):
+		return
+	out.append(current.duplicate())
+	if current.size() >= level.gates:
+		return
+	for i: int in range(start, level.sockets.size()):
+		var next: Array = current.duplicate()
+		next.append(level.sockets[i])
+		_collect(level, map, i + 1, next, out)
+
+
+## RULES 12.6 step 6: buy strictly in order, only in build phases, waiting when too poor.
+func _buy(battle: Battle, plan: Array[Dictionary], cursor: Array[int]) -> void:
+	while cursor[0] < plan.size() * 3:
+		var step: int = cursor[0] / plan.size()
+		var item: Dictionary = plan[cursor[0] % plan.size()]
+		if step + 1 > int(item["top"]):
+			cursor[0] += 1
+			continue
+		var cell: Vector2i = item["cell"]
+		var done: StringName
+		if step == 0:
+			done = battle.place_tower(cell, item["type"])
+		elif step == 1:
+			done = battle.upgrade_tower(cell)
+		else:
+			done = battle.upgrade_tower(cell, 0)
+		if done == &"too_poor":
+			return
+		cursor[0] += 1
+
+
+## One play: {"won", "lives", "cleared", "ticks", "waves", "wave1_lives", "digest"}.
+func _play(level: LevelData, plan: Array[Dictionary], gates: Array) -> Dictionary:
 	var battle: Battle = Battle.create(level, catalog, false, [])
 	if battle == null:
 		return {}
 	battle.record_events = false
+	for cell: Vector2i in gates:
+		battle.place_gate(cell)
+	var cursor: Array[int] = [0]
 	var wave1_lives: int = -1
-	var towers_at_wave1: int = -1
-	var refusal: StringName = &""
 	while battle.phase == Battle.Phase.BUILD and battle.tick < TICK_CAP:
-		_plan(battle)
-		if towers_at_wave1 < 0:
-			towers_at_wave1 = battle.towers.size()
-		var started: StringName = battle.start_next_wave()
-		if started != Battle.DONE:
-			refusal = started
+		_buy(battle, plan, cursor)
+		if battle.start_next_wave() != Battle.DONE:
 			break
 		while battle.phase == Battle.Phase.WAVE and battle.tick < TICK_CAP:
 			battle.step()
 		if wave1_lives < 0:
 			wave1_lives = battle.lives
-	var out: Dictionary = battle.result()
-	out["phase"] = battle.phase
-	out["ticks"] = battle.tick
-	out["wave1_lives"] = wave1_lives
-	out["towers_at_wave1"] = towers_at_wave1
-	out["refusal"] = refusal
-	out["waves"] = battle.wave_count()
-	return out
+	var result: Dictionary = battle.result()
+	return {"won": battle.phase == Battle.Phase.WON, "lost": battle.phase == Battle.Phase.LOST,
+		"lives": int(result["lives_left"]), "cleared": int(result["waves_cleared"]), "ticks": battle.tick,
+		"waves": battle.wave_count(), "wave1_lives": wave1_lives, "digest": JSON.stringify(battle.to_data()).hash()}
 
 
-func test_every_level_plays_to_the_end_with_a_simple_defense() -> void:
+func _better(a: Dictionary, b: Dictionary) -> bool:
+	if b.is_empty():
+		return true
+	if bool(a["won"]) != bool(b["won"]):
+		return bool(a["won"])
+	if bool(a["won"]):
+		return int(a["lives"]) > int(b["lives"])
+	return int(a["cleared"]) > int(b["cleared"])
+
+
+func test_the_plain_mixed_recipe_wins_every_level_in_5_to_10_minutes() -> void:
+	var regions: Dictionary = Files.region_of()
+	var first_region: String = str(regions.get("r1_l1", ""))
 	for id: String in Files.campaign_order():
 		var level: LevelData = Files.level(id, catalog)
 		assert_not_null(level, "%s loads" % id)
 		if level == null:
 			continue
-		var out: Dictionary = _play(level)
-		assert_false(out.is_empty(), "%s: Battle.create gives a battle" % id)
-		if out.is_empty():
+		var plan: Array[Dictionary] = _recipe(level, str(regions.get(id, "")) == first_region)
+		var best: Dictionary = {}
+		var best_gates: Array = []
+		for gates: Array in _placements(level):
+			var out: Dictionary = _play(level, plan, gates)
+			assert_false(out.is_empty(), "%s: Battle.create gives a battle" % id)
+			if out.is_empty():
+				continue
+			assert_true(bool(out["won"]) or bool(out["lost"]), "%s with gates %s: the battle ends within %d ticks" % [id, gates, TICK_CAP])
+			if _better(out, best):
+				best = out
+				best_gates = gates
+		if best.is_empty():
 			continue
-		var phase: int = out["phase"]
-		var ticks: int = out["ticks"]
-		assert_eq(out["refusal"], &"", "%s: every wave starts from its build phase" % id)
-		assert_true(phase == Battle.Phase.WON or phase == Battle.Phase.LOST, "%s: the battle ends within %d ticks" % [id, TICK_CAP])
-		assert_true(int(out["towers_at_wave1"]) >= 1, "%s: starting gold builds a tower" % id)
-		assert_true(int(out["wave1_lives"]) > 0, "%s: the simple defense survives wave 1" % id)
-		if phase == Battle.Phase.WON:
-			assert_eq(out["waves_cleared"], out["waves"], "%s: a win clears every wave" % id)
-		var wave_seconds: float = float(ticks) / Sim.TICKS_PER_SECOND
-		var length_minutes: float = (wave_seconds + BUILD_SECONDS * int(out["waves"])) / 60.0
-		if phase == Battle.Phase.WON:
-			assert_true(length_minutes >= LENGTH_MINUTES[0] and length_minutes <= LENGTH_MINUTES[1], "%s: a win lasts %.1f min at 1x, RULES 12.5 asks 5 to 10" % [id, length_minutes])
-		print("    %s: %s, %d lives left, %d of %d waves cleared, %d ticks (%.1f s of waves at 1x, %.1f min with %d s per build phase)" % [
-			id, "won" if phase == Battle.Phase.WON else "lost", int(out["lives_left"]), int(out["waves_cleared"]),
-			int(out["waves"]), ticks, wave_seconds, length_minutes, BUILD_SECONDS])
+		var minutes: float = (float(best["ticks"]) / Sim.TICKS_PER_SECOND + BUILD_SECONDS * int(best["waves"])) / 60.0
+		assert_true(bool(best["won"]), "%s: the plain mixed recipe wins on Normal at its best gates (RULES 12.6)" % id)
+		assert_true(int(best["wave1_lives"]) > 0, "%s: the recipe survives wave 1" % id)
+		if bool(best["won"]):
+			assert_eq(int(best["cleared"]), int(best["waves"]), "%s: a win clears every wave" % id)
+			assert_true(minutes >= LENGTH_MINUTES[0] and minutes <= LENGTH_MINUTES[1], "%s: the recipe's win lasts %.1f min at 1x, RULES 12.5 asks 5 to 10" % [id, minutes])
+		var again: Dictionary = _play(level, plan, best_gates)
+		assert_eq(again.get("digest", 0), best["digest"], "%s: the same play gives the same battle" % id)
+		print("    %s: %s with gates %s, %d lives left, %d of %d waves cleared, %.1f min at 1x with %d s per build phase" % [
+			id, "won" if bool(best["won"]) else "lost", best_gates, int(best["lives"]), int(best["cleared"]),
+			int(best["waves"]), minutes, BUILD_SECONDS])
