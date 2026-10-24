@@ -150,9 +150,34 @@ static func refusal(reason: StringName, need: int = 0) -> String:
 			return "Too many waves on the map."
 		&"risk_waiting":
 			return "A risk card is already waiting."
+		&"draft_waiting":
+			return "Pick a card first."
 		&"bad_effect":
 			return "That card cannot be used."
 	return "That did not work."
+
+
+## The sentence for a call that waits for a card (RULES 14.4): during a wave, or in a build phase.
+static func draft_wait_text(in_wave: bool) -> String:
+	return "Pick your card after this wave." if in_wave else "Pick a card first."
+
+
+## The sentence for a card that was not taken. A card that is not on offer is not a tower
+## the level lacks, so it does not use the build text.
+static func pick_refusal(reason: StringName) -> String:
+	if reason == &"not_offered":
+		return "That card is not on offer."
+	return refusal(reason)
+
+
+## Drafts a run owes now: the cleared waves among waves 1 to 17, less the picks made
+## (docs/ARCHITECTURE.md 3.4). The same count RunSession works out for itself.
+static func drafts_owed(run: RunSession) -> int:
+	var cleared: int = 0
+	for w: int in mini(run.battle.waves_started, RunSession.DRAFTS):
+		if not run.battle.running.has(w):
+			cleared += 1
+	return maxi(cleared - run.picks.size(), 0)
 
 
 ## The message when a wave is cleared (event wave_cleared, 0 based wave, the clear bonus).

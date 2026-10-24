@@ -289,10 +289,12 @@ func _fill_mode(screen: ModeScreen) -> void:
 	screen.set_continue("Continue", _saved_text(saved_games[0]))
 
 
-## "Level 1-2, The Fork. Wave 3 of 8." for the Continue card.
+## "Level 1-2, The Fork. Wave 3 of 8." for the Continue card. A Twist says so: "Level 1-2 Twist".
 func _saved_text(saved: SavedGame) -> String:
 	var level: LevelData = saved.battle.level
 	var text: String = "Level %s, %s" % [CampaignText.number(game, saved.level_id), level.name]
+	if saved.twist:
+		text = "Level %s Twist, %s" % [CampaignText.number(game, saved.level_id), level.name]
 	if saved.battle.waves_started == 0:
 		text += ". Ready to start."
 	else:
@@ -536,43 +538,61 @@ func open_level_card(id: StringName) -> void:
 		return
 	var saved: SavedGame = saved_game(SavedGame.LEVEL)
 	var is_saved: bool = saved != null and saved.level_id == id
-	var card: LevelCard = LevelCard.new(game, progress, id, is_saved, is_saved and saved.battle.relaxed)
+	var card: LevelCard = LevelCard.new(game, progress, id, is_saved, is_saved and saved.battle.relaxed, is_saved and saved.twist)
 	card.play_requested.connect(request_start.bind(id))
+	card.twist_requested.connect(request_start.bind(id, true))
 	card.resume_requested.connect(func() -> void: resume_game(saved_game(SavedGame.LEVEL)))
+	card.twist_resume_requested.connect(func() -> void: resume_game(saved_game(SavedGame.LEVEL)))
 	push_screen(card)
 
 
-## Starts a level. A saved level game ends first, and asks before it does.
-func request_start(relaxed: bool, id: StringName) -> void:
+## Starts a level, or its Twist. A saved level game ends first, and asks before it does.
+func request_start(relaxed: bool, id: StringName, twist: bool = false) -> void:
 	var saved: SavedGame = saved_game(SavedGame.LEVEL)
 	if saved == null:
-		start_level(id, relaxed)
+		start_level(id, relaxed, twist)
 		return
 	var dialog: ConfirmDialog = ConfirmDialog.new("Start a new game?",
-		"Your saved game on level %s ends. Nothing from it is recorded." % CampaignText.number(game, saved.level_id),
+		"Your saved game on %s ends. Nothing from it is recorded." % _saved_name(saved),
 		"Start new game", "Keep saved game")
-	dialog.confirmed.connect(func() -> void: start_level(id, relaxed))
+	dialog.confirmed.connect(func() -> void: start_level(id, relaxed, twist))
 	open_modal(dialog)
 
 
-## Starts a fresh level. Any saved level game is ended first.
-func start_level(id: StringName, relaxed: bool) -> void:
+## "level 1-2" or "the Twist of level 1-2", for the question above.
+func _saved_name(saved: SavedGame) -> String:
+	if saved.twist:
+		return "the Twist of level %s" % CampaignText.number(game, saved.level_id)
+	return "level %s" % CampaignText.number(game, saved.level_id)
+
+
+## Starts a fresh level, or its Twist with the Twist's effects (docs/ARCHITECTURE.md 3.6). A Twist
+## needs the level's three stars. Any saved level game is ended first.
+func start_level(id: StringName, relaxed: bool, twist: bool = false) -> void:
 	if damaged or _battle_screen != null or not game.levels.has(id):
 		return
-	var battle: Battle = Battle.create(game.levels[id], game.catalog, relaxed, [] as Array[Dictionary])
+	var level: LevelData = game.levels[id]
+	var effects: Array[Dictionary] = [] as Array[Dictionary]
+	if twist:
+		if level.twist_effects.is_empty() or not progress.twist_open(id):
+			return
+		effects = level.twist_effects
+	var battle: Battle = Battle.create(level, game.catalog, relaxed, effects)
 	if battle == null:
 		return
 	_end_saved(SavedGame.LEVEL)
 	var saved: SavedGame = SavedGame.new()
 	saved.mode = SavedGame.LEVEL
 	saved.level_id = id
+	saved.twist = twist
 	saved.battle = battle
 	_begin(saved, false)
 
 
 ## Opens a saved game on the Pause menu, at the exact moment it was left.
 func resume_game(saved: SavedGame) -> void:
-	if saved == null or _battle_screen != null or damaged:
+	# Runs and the daily resume from phase 7's App flow (U3); until then only levels do.
+	if saved == null or _battle_screen != null or damaged or saved.mode != SavedGame.LEVEL:
 		return
 	_begin(saved, true)
 
@@ -630,9 +650,13 @@ func _on_battle_ended(result: Dictionary) -> void:
 	var id: StringName = saved.level_id
 	var previous: int = progress.levels.get(id, 0)
 	if bool(result.get("won", false)):
-		progress.record_level(id, int(result.get("stars", 0)))
+		if saved.twist:
+			# A won Twist is cleared on either difficulty and earns no stars (RULES 13).
+			progress.record_twist(id)
+		else:
+			progress.record_level(id, int(result.get("stars", 0)))
 		save_progress()
-	_end = {"result": result, "level": id, "previous": previous}
+	_end = {"result": result, "level": id, "previous": previous, "twist": saved.twist}
 	_end_wait = end_delay
 	if end_delay <= 0.0 or not is_inside_tree():
 		_show_end()
@@ -653,9 +677,13 @@ func _show_end() -> void:
 	close_all_modals()
 	var id: StringName = pending["level"]
 	var result: Dictionary = pending["result"]
-	var panel: EndPanel = EndPanel.new(game, id, result, int(pending["previous"]), CampaignText.next_level(game, id))
+	var twist: bool = bool(pending.get("twist", false))
+	result["twist"] = twist
+	# A Twist leads nowhere new: no next level, only a replay or the list.
+	var next_id: StringName = &"" if twist else CampaignText.next_level(game, id)
+	var panel: EndPanel = EndPanel.new(game, id, result, int(pending["previous"]), next_id)
 	panel.next_requested.connect(_end_next.bind(id))
-	panel.retry_requested.connect(_end_retry.bind(id, bool(result.get("relaxed", false))))
+	panel.retry_requested.connect(_end_retry.bind(id, bool(result.get("relaxed", false)), twist))
 	panel.levels_requested.connect(_end_levels)
 	open_modal(panel)
 	if audio != null and bool(result.get("won", false)):
@@ -673,10 +701,10 @@ func _end_next(id: StringName) -> void:
 		open_level_card(next)
 
 
-func _end_retry(id: StringName, relaxed: bool) -> void:
+func _end_retry(id: StringName, relaxed: bool, twist: bool = false) -> void:
 	if _battle_screen != null and current_screen() == _battle_screen:
 		pop_screen()
-	start_level(id, relaxed)
+	start_level(id, relaxed, twist)
 
 
 ## The front door, the mode screen and the level list, with the lists up to date.

@@ -5,13 +5,16 @@ extends Modal
 ## The end of a level, won or lost. A win shows the three stars with a word for each
 ## ("New star", "Earned", "Earned before" or "Not earned"), so color is never the only
 ## signal, and offers the next level, a replay and the level list. A loss offers
-## another try. The back button goes to the level list.
+## another try. The back button goes to the level list. A Twist (`result["twist"]`) has no
+## stars: a win says the Twist is cleared, and a loss does not point to Relaxed.
 
 signal next_requested()
 signal retry_requested()
 signal levels_requested()
 
 var won: bool = false
+## True when the game was a Twist: no stars, no next level.
+var twist: bool = false
 var next_button: TapButton
 var retry_button: TapButton
 var levels_button: TapButton
@@ -22,16 +25,26 @@ var summary_label: Label
 var relaxed_label: Label
 
 
-## `result` is Battle.result() plus "relaxed". `previous_bits` are the stars the level
+## `result` is Battle.result() plus "relaxed" and "twist". `previous_bits` are the stars the level
 ## already had before this try. `next_id` is the next level of the region, or &"".
 func _init(game: GameData, level_id: StringName, result: Dictionary, previous_bits: int, next_id: StringName) -> void:
 	won = bool(result.get("won", false))
-	super("Level won" if won else "Level lost")
+	twist = bool(result.get("twist", false))
+	var title_text: String = "Level won" if won else "Level lost"
+	if twist:
+		title_text = "Twist cleared" if won else "Twist lost"
+	super(title_text)
 	var level: LevelData = game.levels[level_id]
 	var name_label: Label = UiKit.label(CampaignText.title(game, level_id), &"Label")
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	body.add_child(name_label)
-	if won:
+	if twist:
+		var twist_label: Label = UiKit.label("Twist: %s" % level.twist_name, &"SoftLabel")
+		twist_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		body.add_child(twist_label)
+	if twist and won:
+		summary_label = UiKit.label("The Twist is cleared. Lives left: %d" % int(result.get("lives_left", 0)))
+	elif won:
 		_add_stars(game, level, int(result.get("stars", 0)), previous_bits)
 		summary_label = UiKit.label("Lives left: %d" % int(result.get("lives_left", 0)))
 		if bool(result.get("relaxed", false)):

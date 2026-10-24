@@ -7,11 +7,19 @@ extends PageFrame
 ## is always chosen when the card opens; the card never remembers Relaxed (Bart, hard
 ## stop A). A level with a saved game offers Resume first and says which difficulty
 ## that game is on; the choice below it is for starting over.
+##
+## Once the level has three stars and a Twist (RULES 13), a Twist block follows: its name and
+## text, whether it is cleared, its own Normal or Relaxed choice (Normal first) and a button to
+## play it. A saved game of the Twist offers Resume there. A Twist has no stars.
 
 ## Start the level. `relaxed` is the choice on the card.
 signal play_requested(relaxed: bool)
 ## Go back to the saved game of this level.
 signal resume_requested()
+## Start the level's Twist. `relaxed` is the choice in the Twist block.
+signal twist_requested(relaxed: bool)
+## Go back to the saved game of this level's Twist.
+signal twist_resume_requested()
 
 var level_id: StringName
 var relaxed: bool = false
@@ -28,15 +36,30 @@ var hint_label: Label
 var waves_label: Label
 var gates_label: Label
 
+## The Twist block. All null when the level has no Twist or it is not open yet.
+var twist_relaxed: bool = false
+var twist_title_label: Label
+var twist_text_label: Label
+var twist_state_label: Label
+var twist_normal_button: TapButton
+var twist_relaxed_button: TapButton
+var twist_difficulty_label: Label
+var twist_play_button: TapButton
+var twist_resume_button: TapButton
+
 var _normal_text: String = ""
 var _relaxed_text: String = ""
+var _twist_normal_text: String = ""
+var _twist_relaxed_text: String = ""
 
 
-## `saved` is true when this level has a saved game, and `saved_relaxed` is that game's difficulty.
-func _init(game: GameData, progress: Progress, id: StringName, saved: bool, saved_relaxed: bool = false) -> void:
+## `saved` is true when this level has a saved game, `saved_relaxed` is that game's difficulty and
+## `saved_twist` says the saved game is the Twist's (a level and its Twist are different games).
+func _init(game: GameData, progress: Progress, id: StringName, has_saved: bool, saved_relaxed: bool = false, saved_twist: bool = false) -> void:
 	var level: LevelData = game.levels[id]
 	super("Level %s" % CampaignText.number(game, id))
 	level_id = id
+	var saved: bool = has_saved and not saved_twist
 	var name_label: Label = UiKit.label(level.name, &"TitleLabel")
 	column.add_child(name_label)
 	column.add_child(_facts(level))
@@ -56,6 +79,8 @@ func _init(game: GameData, progress: Progress, id: StringName, saved: bool, save
 	play_button.custom_minimum_size.y = 200.0
 	play_button.tapped.connect(func() -> void: play_requested.emit(relaxed))
 	column.add_child(play_button)
+	if not level.twist_name.is_empty() and progress.twist_open(id):
+		column.add_child(_twist(game, progress, level, has_saved and saved_twist, saved_relaxed))
 
 
 ## Chooses Normal or Relaxed, as a tap on its button does.
@@ -64,6 +89,14 @@ func choose(is_relaxed: bool) -> void:
 	BattlePanel.mark_chosen(normal_button, not relaxed)
 	BattlePanel.mark_chosen(relaxed_button, relaxed)
 	difficulty_label.text = _relaxed_text if relaxed else _normal_text
+
+
+## Chooses Normal or Relaxed for the Twist, as a tap on its button does.
+func choose_twist(is_relaxed: bool) -> void:
+	twist_relaxed = is_relaxed
+	BattlePanel.mark_chosen(twist_normal_button, not twist_relaxed)
+	BattlePanel.mark_chosen(twist_relaxed_button, twist_relaxed)
+	twist_difficulty_label.text = _twist_relaxed_text if twist_relaxed else _twist_normal_text
 
 
 func _facts(level: LevelData) -> Control:
@@ -131,4 +164,56 @@ func _difficulty(game: GameData, level: LevelData, saved: bool) -> Control:
 	difficulty_label = UiKit.label(_normal_text, &"SoftLabel")
 	box.add_child(difficulty_label)
 	choose(false)
+	return box.get_parent() as Control
+
+
+func _twist(game: GameData, progress: Progress, level: LevelData, saved_twist: bool, saved_relaxed: bool) -> Control:
+	var box: VBoxContainer = UiKit.section()
+	var cleared: bool = progress.twists.has(level.id)
+	twist_title_label = UiKit.heading("Twist: %s" % level.twist_name)
+	box.add_child(twist_title_label)
+	twist_text_label = UiKit.label(level.twist_text)
+	box.add_child(twist_text_label)
+	var state: HBoxContainer = HBoxContainer.new()
+	state.add_theme_constant_override(&"separation", 14)
+	if cleared:
+		var mark: TextureRect = TextureRect.new()
+		mark.texture = IconTex.make(&"check", 64)
+		mark.custom_minimum_size = Vector2(48.0, 48.0)
+		mark.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		mark.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		mark.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		mark.modulate = Palette.HONEY
+		mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		state.add_child(mark)
+	twist_state_label = UiKit.label("Cleared. No stars on a Twist." if cleared else "Not cleared yet. A win on Normal or Relaxed clears it.", &"Label" if cleared else &"SoftLabel")
+	twist_state_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	state.add_child(twist_state_label)
+	box.add_child(state)
+	var row: HBoxContainer = HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 16)
+	twist_normal_button = UiKit.button("Normal")
+	twist_normal_button.tapped.connect(choose_twist.bind(false))
+	row.add_child(twist_normal_button)
+	twist_relaxed_button = UiKit.button("Relaxed")
+	twist_relaxed_button.tapped.connect(choose_twist.bind(true))
+	row.add_child(twist_relaxed_button)
+	box.add_child(row)
+	var normal: Battle = Battle.create(level, game.catalog, false, level.twist_effects)
+	var easy: Battle = Battle.create(level, game.catalog, true, level.twist_effects)
+	_twist_normal_text = "Normal: %d lives and %d gold." % [normal.lives, normal.gold]
+	_twist_relaxed_text = "Relaxed: %d lives and %d gold." % [easy.lives, easy.gold]
+	twist_difficulty_label = UiKit.label(_twist_normal_text, &"SoftLabel")
+	box.add_child(twist_difficulty_label)
+	choose_twist(false)
+	if saved_twist:
+		var saved_label: Label = UiKit.label("Your saved Twist game is on %s." % ("Relaxed" if saved_relaxed else "Normal"), &"Label")
+		box.add_child(saved_label)
+		twist_resume_button = UiKit.button("Resume the Twist", &"PrimaryButton")
+		twist_resume_button.tapped.connect(func() -> void: twist_resume_requested.emit())
+		box.add_child(twist_resume_button)
+	twist_play_button = UiKit.button("Start the Twist over" if saved_twist else "Play the Twist")
+	twist_play_button.custom_minimum_size.y = 200.0
+	twist_play_button.tapped.connect(func() -> void: twist_requested.emit(twist_relaxed))
+	box.add_child(twist_play_button)
 	return box.get_parent() as Control

@@ -17,8 +17,13 @@ signal abandon_confirmed()
 ## The three star lines, when this game has stars (RULES 10.6). Empty otherwise.
 var star_lines: Array[StarLine] = []
 
+## The Twist's name and text label, when this game is a Twist (RULES 13). Null otherwise.
+var twist_name_label: Label = null
+var twist_text_label: Label = null
+
 var _confirm: ConfirmDialog = null
 var _stars_box: VBoxContainer = null
+var _twist_box: VBoxContainer = null
 var _window_size: Vector2 = Vector2.ZERO
 var _safe: Rect2 = Rect2()
 
@@ -64,6 +69,28 @@ func set_stars(entries: Array[Dictionary]) -> void:
 		_stars_box.add_child(line)
 	body.add_child(_stars_box)
 	body.move_child(_stars_box, 1)
+
+
+## Shows the Twist's rule under the title, in place of the star lines: a Twist has no stars.
+## An empty name takes it away.
+func set_twist(twist_name: String, twist_text: String) -> void:
+	if _twist_box != null:
+		body.remove_child(_twist_box)
+		_twist_box.free()
+		_twist_box = null
+		twist_name_label = null
+		twist_text_label = null
+	if twist_name.is_empty():
+		return
+	_twist_box = VBoxContainer.new()
+	_twist_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_twist_box.add_theme_constant_override(&"separation", 8)
+	twist_name_label = UiKit.heading("Twist: %s" % twist_name)
+	_twist_box.add_child(twist_name_label)
+	twist_text_label = UiKit.label(twist_text)
+	_twist_box.add_child(twist_text_label)
+	body.add_child(_twist_box)
+	body.move_child(_twist_box, 1)
 
 
 func apply_layout(window_size: Vector2, safe: Rect2) -> void:

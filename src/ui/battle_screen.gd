@@ -23,6 +23,11 @@ extends ScreenFrame
 ## numbers, and a tap on a gate socket places or takes back a gate. A gate can also be
 ## dragged (from the strip or from a socket) with the route lines showing the result,
 ## and a drop that would close every road is refused with the crossed out gate.
+##
+## A run or daily (set_run) adds the card draft. It opens by itself whenever the run owes a
+## card in a build phase, as a sheet like the build panel, and only taking a card closes it:
+## taps on the map do nothing while it is open and the back button opens Pause. A waiting risk
+## card shows first in the wave preview. A Twist shows its rule as the first hint and in Pause.
 
 ## The game should be saved: a build phase began, or the game was paused.
 signal save_requested()
@@ -73,7 +78,10 @@ var preview: WavePreview
 var build_panel: BuildPanel
 var tower_panel: TowerPanel
 var enemy_panel: EnemyPanel
+var draft_panel: DraftPanel
 var ghost: GateGhost
+## The run or daily around the battle, or null in a campaign level (set_run).
+var run: RunSession = null
 
 var _stage: Control
 var _flow: BoxContainer
@@ -98,6 +106,9 @@ var _card: InfoCard = null
 var _modals: Array[Modal] = []
 ## Closed modals of a screen that is not in a scene tree; freed with the screen.
 var _modals_gone: Array[Modal] = []
+## The cards of the run files, for names and texts. Set by set_run.
+var _run_data: RunData = null
+var _twist_hint_shown: bool = false
 var _routes_sig: Array = []
 var _finished: bool = false
 ## Creatures whose card the player closed in this build phase. They keep their "New"
@@ -190,7 +201,8 @@ func _build_panels() -> void:
 	build_panel = BuildPanel.new()
 	tower_panel = TowerPanel.new()
 	enemy_panel = EnemyPanel.new()
-	for panel: BattlePanel in [build_panel, tower_panel, enemy_panel]:
+	draft_panel = DraftPanel.new()
+	for panel: BattlePanel in [build_panel, tower_panel, enemy_panel, draft_panel]:
 		panel.visible = false
 
 
@@ -233,13 +245,14 @@ func _connect_panels() -> void:
 	pause_strip.menu_requested.connect(_on_strip_menu)
 	hint_banner.closed.connect(_on_hint_closed)
 	preview.build_began.connect(_start_fit)
-	for panel: BattlePanel in [hud, gate_tray, build_panel, tower_panel]:
+	for panel: BattlePanel in [hud, gate_tray, build_panel, tower_panel, draft_panel]:
 		panel.refused.connect(_on_refused)
 	build_panel.range_changed.connect(_on_range_changed)
 	tower_panel.range_changed.connect(_on_range_changed)
 	build_panel.built.connect(_on_built)
-	for panel: BattlePanel in [build_panel, tower_panel, enemy_panel]:
+	for panel: BattlePanel in [build_panel, tower_panel, enemy_panel, draft_panel]:
 		panel.closed.connect(_on_panel_closed.bind(panel))
+	draft_panel.picked.connect(_on_draft_picked)
 	enemy_panel.gone.connect(func(_id: int) -> void: enemy_panel.close())
 	gate_tray.drag_began.connect(_on_tray_drag_began)
 	gate_tray.drag_moved.connect(move_drag)
@@ -255,13 +268,29 @@ func setup(new_battle: Battle, new_audio: AudioService, new_progress: Progress) 
 	hud.refresh(battle)
 	hud.set_speed(clock.speed)
 	_sync_warnings()
-	for panel: BattlePanel in [gate_tray, preview, build_panel, tower_panel, enemy_panel]:
+	for panel: BattlePanel in [gate_tray, preview, build_panel, tower_panel, enemy_panel, draft_panel]:
 		panel.setup(battle)
 	_refresh_new_tags()
 	if probe != null:
 		probe.watch(battle, map_view)
 	_fit_map()
 	_check_sights()
+
+
+## Makes this screen a run or a daily around `new_run` (docs/ARCHITECTURE.md 3.6). Call it after
+## setup(). The run has no stars. `data` holds the cards' names and texts; a screen opened by the
+## App takes them from the game when it is not given.
+func set_run(new_run: RunSession, data: RunData = null) -> void:
+	run = new_run
+	_run_data = data
+	if _run_data == null and host != null and host.game != null:
+		_run_data = host.game.run
+	stars_in_play = false
+	hud.run = run
+	hud.refresh()
+	_sync_warnings()
+	_sync_risk()
+	_sync_draft()
 
 
 # The clock.
@@ -312,6 +341,8 @@ func _open_pause_menu() -> void:
 	pause_strip.visible = false
 	_pause_panel = PausePanel.new()
 	_pause_panel.set_stars(star_entries())
+	if not battle.twist_effects.is_empty():
+		_pause_panel.set_twist(battle.level.twist_name, battle.level.twist_text)
 	_pause_panel.resume_requested.connect(resume)
 	_pause_panel.info_requested.connect(_open_info)
 	_pause_panel.settings_requested.connect(_open_settings)
@@ -346,6 +377,7 @@ func _on_abandon() -> void:
 	var result: Dictionary = battle.result()
 	result["abandoned"] = true
 	result["relaxed"] = battle.relaxed
+	result["twist"] = not battle.twist_effects.is_empty()
 	ended.emit(result)
 
 
@@ -397,7 +429,7 @@ func apply_layout(new_window_size: Vector2, new_safe: Rect2) -> void:
 func _relayout() -> void:
 	_arrange()
 	var wide: bool = not landscape
-	for panel: BattlePanel in [hud, gate_tray, pause_strip, hint_banner, preview, build_panel, tower_panel, enemy_panel]:
+	for panel: BattlePanel in [hud, gate_tray, pause_strip, hint_banner, preview, build_panel, tower_panel, enemy_panel, draft_panel]:
 		panel.set_wide(wide)
 	if not landscape:
 		for panel: BattlePanel in [pause_strip, hint_banner, preview]:
@@ -424,7 +456,7 @@ func _arrange() -> void:
 	if mode == _arranged:
 		return
 	_arranged = mode
-	for node: Control in [hud, hud.feedback_box, gate_tray, gate_tray.feedback_box, pause_strip, hint_banner, preview, build_panel, tower_panel, enemy_panel, map_area, _top_wrap, _side]:
+	for node: Control in [hud, hud.feedback_box, gate_tray, gate_tray.feedback_box, pause_strip, hint_banner, preview, build_panel, tower_panel, enemy_panel, draft_panel, map_area, _top_wrap, _side]:
 		var parent: Node = node.get_parent()
 		if parent != null:
 			parent.remove_child(node)
@@ -469,7 +501,7 @@ func _place_context() -> void:
 
 func _context_parent_changed() -> void:
 	# Panels leave their old parent in _arrange; the open one is put back by _place_context.
-	for panel: BattlePanel in [build_panel, tower_panel, enemy_panel]:
+	for panel: BattlePanel in [build_panel, tower_panel, enemy_panel, draft_panel]:
 		var parent: Node = panel.get_parent()
 		if parent != null:
 			parent.remove_child(panel)
@@ -736,6 +768,8 @@ func frame(delta: float) -> void:
 	if _context != null:
 		_context.refresh()
 	_handle(events)
+	_sync_draft()
+	_sync_risk()
 	_watch_sights()
 	_sync_warnings()
 	_step_fit()
@@ -770,6 +804,7 @@ func _handle(events: Array[Dictionary]) -> void:
 		var result: Dictionary = battle.result()
 		result["abandoned"] = false
 		result["relaxed"] = battle.relaxed
+		result["twist"] = not battle.twist_effects.is_empty()
 		ended.emit(result)
 
 
@@ -834,7 +869,13 @@ func _check_sights() -> void:
 		var id: StringName = entry["enemy"]
 		if not progress.seen.has(id) and not _has_item(items, id):
 			items.append({"kind": &"enemy", "id": id, "wave": next})
-	if fresh and not battle.level.hint_text.is_empty() and not progress.seen.has(battle.level.id) and not hint_banner.visible:
+	if fresh and not battle.twist_effects.is_empty():
+		# A Twist's rule is its first hint, once per screen. It is not remembered as read, so
+		# every fresh start of a Twist says it again (RULES 13).
+		if not _twist_hint_shown and not hint_banner.visible:
+			_twist_hint_shown = true
+			hint_banner.show_hint("Twist: %s" % battle.level.twist_text)
+	elif fresh and not battle.level.hint_text.is_empty() and not progress.seen.has(battle.level.id) and not hint_banner.visible:
 		hint_banner.show_hint(battle.level.hint_text)
 		_hint_cell = battle.level.hint_cell
 		map_view.show_hint(_hint_cell)
@@ -934,7 +975,7 @@ func _refresh_new_tags() -> void:
 func _on_hint_closed() -> void:
 	_hint_cell = NO_CELL
 	map_view.show_hint(NO_CELL)
-	if battle != null and progress != null and not progress.seen.has(battle.level.id):
+	if battle != null and progress != null and battle.twist_effects.is_empty() and not progress.seen.has(battle.level.id):
 		progress.mark_seen(battle.level.id)
 		progress_changed.emit()
 
@@ -989,6 +1030,7 @@ func _open_context(panel: BattlePanel, cell: Vector2i) -> void:
 
 
 func _close_panel(panel: BattlePanel) -> void:
+	# The draft is not closed from here: only taking a card ends it.
 	if panel is BuildPanel:
 		(panel as BuildPanel).close()
 	elif panel is TowerPanel:
@@ -998,17 +1040,87 @@ func _close_panel(panel: BattlePanel) -> void:
 
 
 func close_context() -> void:
-	if _context != null:
+	if _context != null and _context != draft_panel:
 		_close_panel(_context)
 
 
 ## The back button: closes the open build, tower or creature panel and says so, so the
 ## next press can open Pause. False when no panel is open.
 func close_panel_for_back() -> bool:
-	if _context == null:
+	# The draft never closes on back: the next press opens Pause instead (docs/ARCHITECTURE.md 3.6).
+	if _context == null or _context == draft_panel:
 		return false
 	_close_panel(_context)
 	return true
+
+
+# The card draft of a run (RULES 14.4).
+
+## True while the draft is open. The map, the gates and the other panels wait for it.
+func draft_is_open() -> bool:
+	return _context != null and _context == draft_panel
+
+
+## The card of the run files with this id; {} when unknown.
+func _card_of(id: StringName) -> Dictionary:
+	return _run_data.card(id) if _run_data != null else {}
+
+
+## Opens the draft when the run owes a card in a build phase, and puts it away when it does not.
+## It opens by itself, one draft after another, so a draft cannot be skipped.
+func _sync_draft() -> void:
+	if run == null:
+		return
+	var owed: bool = run.draft_open()
+	if owed and not draft_is_open():
+		_open_draft()
+	elif not owed and draft_is_open():
+		draft_panel.close()
+
+
+func _open_draft() -> void:
+	var offers: Array[Dictionary] = []
+	for id: StringName in run.offers():
+		var card: Dictionary = _card_of(id)
+		if card.is_empty():
+			card = {"id": id, "kind": &"economy", "tower": &"", "name": String(id), "text": ""}
+		offers.append(card)
+	if offers.is_empty():
+		return
+	if _drag_active:
+		cancel_drag()
+	draft_panel.show_offers(offers, "Wave %d cleared. Pick a card." % (run.picks.size() + 1))
+	_open_context(draft_panel, NO_CELL)
+
+
+## The player took a card. The run adds it, the draft closes, the game is saved, and a new
+## tower gets its first sight card. The next draft owed opens on the next frame.
+func _on_draft_picked(card_id: StringName) -> void:
+	if run == null or not draft_is_open():
+		return
+	var card: Dictionary = _card_of(card_id)
+	var result: StringName = run.pick(card_id)
+	if result != Battle.DONE:
+		draft_panel.reject(result)
+		return
+	draft_panel.close()
+	save_requested.emit()
+	if card.get("kind", &"") == &"tower" and progress != null:
+		var tower: StringName = card.get("tower", &"")
+		if tower != &"" and not progress.seen.has(tower):
+			_show_card([{"kind": &"tower", "id": tower, "wave": 0}] as Array[Dictionary])
+
+
+## The waiting risk card shows first in the wave preview, as a row and as a chip (RULES 9.1).
+func _sync_risk() -> void:
+	if run == null:
+		return
+	var id: StringName = run.risk_card()
+	if id == &"":
+		preview.set_risk("", "")
+		return
+	var card: Dictionary = _card_of(id)
+	preview.set_risk(String(card.get("name", String(id))), String(card.get("text", "")))
 
 
 # Taps.
@@ -1045,7 +1157,7 @@ func _on_map_input(event: InputEvent) -> void:
 
 ## A tap at a cell, with the creature under the finger (-1 for none). Public so tests can tap.
 func tap_at(cell: Vector2i, enemy_id: int = -1) -> void:
-	if battle == null:
+	if battle == null or draft_is_open():
 		return
 	var kind: LevelData.Kind = battle.level.kind_at(cell) if cell.x >= 0 else LevelData.Kind.SCENERY
 	if enemy_id >= 0:
@@ -1066,22 +1178,30 @@ func tap_at(cell: Vector2i, enemy_id: int = -1) -> void:
 
 
 func show_build(cell: Vector2i) -> void:
+	if draft_is_open():
+		return
 	_open_context(build_panel, cell)
 	build_panel.show_spot(cell)
 
 
 func show_tower(cell: Vector2i) -> void:
+	if draft_is_open():
+		return
 	_open_context(tower_panel, cell)
 	tower_panel.show_tower(cell)
 
 
 func show_enemy(id: int) -> void:
+	if draft_is_open():
+		return
 	_open_context(enemy_panel, NO_CELL)
 	enemy_panel.show_enemy(id)
 
 
 ## A tap on a socket: place a gate there, or take the gate on it back (RULES 7.2).
 func tap_socket(cell: Vector2i) -> void:
+	if draft_is_open():
+		return
 	close_context()
 	if battle.level.gates == 0 and battle.gates.is_empty():
 		return
@@ -1119,7 +1239,7 @@ func _gate_at(cell: Vector2i) -> GateState:
 # The gate drag.
 
 func _maybe_begin_drag(where: Vector2) -> void:
-	if battle.phase != Battle.Phase.BUILD:
+	if battle.phase != Battle.Phase.BUILD or draft_is_open():
 		return
 	if battle.level.kind_at(_press_cell) != LevelData.Kind.SOCKET:
 		return
@@ -1133,14 +1253,14 @@ func _maybe_begin_drag(where: Vector2) -> void:
 
 
 func _on_tray_drag_began(where: Vector2) -> void:
-	if battle.phase == Battle.Phase.BUILD and battle.gates_in_hand > 0:
+	if battle.phase == Battle.Phase.BUILD and battle.gates_in_hand > 0 and not draft_is_open():
 		begin_drag(NO_CELL, where)
 
 
 ## Starts carrying a gate. `from` is the socket it was lifted from, or (-1, -1) for a
 ## new gate from the hand.
 func begin_drag(from: Vector2i, where: Vector2) -> void:
-	if battle == null or battle.phase != Battle.Phase.BUILD:
+	if battle == null or battle.phase != Battle.Phase.BUILD or draft_is_open():
 		return
 	close_context()
 	_drag_active = true
@@ -1268,7 +1388,7 @@ func _notification(what: int) -> void:
 		# Parts that are not in the tree when the screen goes (the other layout's, the
 		# closed panels) are freed here so nothing leaks.
 		# One may hold another (the HUD holds its message box), so each is checked as it comes.
-		for part: Variant in [hud, hud.feedback_box, gate_tray, gate_tray.feedback_box, pause_strip, hint_banner, preview, build_panel, tower_panel, enemy_panel, map_area, _top_wrap, _side, ghost, _sheet]:
+		for part: Variant in [hud, hud.feedback_box, gate_tray, gate_tray.feedback_box, pause_strip, hint_banner, preview, build_panel, tower_panel, enemy_panel, draft_panel, map_area, _top_wrap, _side, ghost, _sheet]:
 			if is_instance_valid(part) and (part as Control).get_parent() == null:
 				(part as Control).free()
 		for modal: Modal in _modals + _modals_gone:

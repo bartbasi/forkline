@@ -30,6 +30,9 @@ var call_ring: CallRing
 
 var speed: int = 1
 var paused: bool = false
+## The run around the battle, or null in a campaign level. A run's calls go through it, because
+## a draft that is owed blocks the next wave (docs/ARCHITECTURE.md 3.4).
+var run: RunSession = null
 
 ## How long the lives pulse lasts, how far the heart and number grow at the peak, and
 ## the tint the pair takes on at the peak.
@@ -245,12 +248,18 @@ func _refresh_call() -> void:
 	var refusal: StringName = info["refusal"]
 	var next_number: int = battle.waves_started + 1
 	var text: String
+	# A card that is owed comes first: the call button says so and wears a lock, and a tap
+	# explains (RULES 14.4).
+	var owes_card: bool = run != null and refusal != &"over" and refusal != &"no_more_waves" and BattleText.drafts_owed(run) > 0
 	# Honey only for "Start wave N" in a build phase. An early call keeps the plain look with
 	# its "+N", so a new player does not take it for the next step (FUN_REVIEW_R1 item 3).
 	var primary: bool = false
 	var locked: bool = false
 	var early: bool = false
-	if battle.phase == Battle.Phase.BUILD and refusal == &"":
+	if owes_card:
+		text = "Pick a card first" if battle.phase == Battle.Phase.BUILD else "Card due after this wave"
+		locked = true
+	elif battle.phase == Battle.Phase.BUILD and refusal == &"":
 		text = "Start wave %d" % next_number
 		primary = true
 	elif refusal == &"":
@@ -265,7 +274,7 @@ func _refresh_call() -> void:
 	else:
 		text = "Call wave %d" % next_number
 		locked = true
-	call_ring.visible = early and not _called_early and battle.level.hint_button == &"call"
+	call_ring.visible = early and not owes_card and not _called_early and battle.level.hint_button == &"call"
 	var state: String = "%s|%s" % [text, primary]
 	if state == _call_state:
 		return
@@ -295,7 +304,13 @@ func _on_call() -> void:
 	if battle == null:
 		return
 	var early: bool = battle.phase == Battle.Phase.WAVE
-	var result: StringName = battle.start_next_wave()
+	var result: StringName = battle.start_next_wave() if run == null else run.start_next_wave()
+	if result == &"draft_waiting":
+		# A card is owed. The sentence says when to pick it (RULES 14.4).
+		var wait_text: String = BattleText.draft_wait_text(early)
+		show_feedback(wait_text)
+		refused.emit(result, wait_text)
+		return
 	if finish(result):
 		if early:
 			_called_early = true

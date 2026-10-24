@@ -19,6 +19,7 @@ const WATCHDOG_SECONDS: float = 400.0
 ## The Fold5 cover: 1080 logical px across 344 dp (docs/ARCHITECTURE.md 7.4).
 const COVER_PX_PER_DP: float = 3.14
 const BattleFixtures: GDScript = preload("res://tests/ui/battle_fixtures.gd")
+const RunFx: GDScript = preload("res://tests/run/fixtures/run_fixtures.gd")
 
 
 ## Stands in for the phone: remembers every address handed to it.
@@ -81,6 +82,7 @@ func _run() -> void:
 	await _battle_screens()
 	await _cell_floor()
 	await _u1_real()
+	await _u2_real()
 	Links.opener = Callable()
 	Fx.remove_all()
 	print("%d checks, %d failed" % [checks, failures])
@@ -1013,7 +1015,8 @@ func _preview_decision(screen: BattleScreen, where: String) -> void:
 	await _frames(3)
 
 
-func _dock_level(id: StringName, b: Battle) -> void:
+func _dock_level(id: StringName, b: Battle, hint_text: String = "") -> void:
+	var hint: String = hint_text if not hint_text.is_empty() else b.level.hint_text
 	b.gold = 5000
 	for cell: Vector2i in b.level.spots:
 		b.place_tower(cell, b.level.towers[0])
@@ -1022,8 +1025,10 @@ func _dock_level(id: StringName, b: Battle) -> void:
 	screen.setup(b, null, _all_seen())
 	await _hosted(vp, screen, COVER, COVER_SAFE)
 	await _frames(6)
+	# A Twist says its rule as a hint at its fresh start. The default build state has none.
+	screen.hint_banner.dismiss()
 	var must: Array[Vector2i] = _must_see(b)
-	check(screen.gate_tray.visible == (b.level.gates > 0), "%s: the gate chip shows when the level has gates" % id)
+	check(screen.gate_tray.visible == (b.gates_in_hand + b.gates.size() > 0), "%s: the gate chip shows when the battle has gates" % id)
 	if screen.gate_tray.visible:
 		var chip: Rect2 = screen.gate_tray.get_global_rect()
 		check(screen.hud.get_global_rect().encloses(chip), "%s: the gate chip is inside the HUD" % id)
@@ -1044,7 +1049,7 @@ func _dock_level(id: StringName, b: Battle) -> void:
 	await _frames(screen.FIT_FRAMES + 3)
 	# 2. With the hint: at the top of the dock when that stays under the map, else on a free
 	# band of rows, else at the top of the dock. It never covers what matters.
-	screen.hint_banner.show_hint(b.level.hint_text)
+	screen.hint_banner.show_hint(hint)
 	screen.map_view.show_hint(b.level.hint_cell)
 	screen._start_fit()
 	await _frames(screen.FIT_FRAMES + 3)
@@ -1064,11 +1069,6 @@ func _dock_level(id: StringName, b: Battle) -> void:
 		for cell: Vector2i in important:
 			if hint_rect.intersects(_cell_rect(screen, cell)):
 				hint_hit = "cell %s is covered by the hint in the dock %s" % [cell, hint_rect]
-	if not hint_hit.is_empty() and not screen._hint_has_room(screen._dock_steady_height()):
-		# No place covers nothing, even next to a folded strip: the hint sits at the top of the
-		# dock (docs/ARCHITECTURE.md 7.4, place 3) and one tap puts it away.
-		print("NOTE %s: the hint must cover part of the map until it is tapped (%s)" % [id, hint_hit])
-		hint_hit = ""
 	check(hint_hit.is_empty(), "%s with the hint: %s" % [id, hint_hit])
 	check(hint_rect.size.y >= 150.0, "%s: the hint is a 48 dp target (%s)" % [id, hint_rect.size.y])
 	check(COVER_SAFE.encloses(hint_rect), "%s: the hint is inside the safe area (%s)" % [id, hint_rect])
@@ -1182,6 +1182,12 @@ func _stays_in_sight() -> void:
 		check(b != null, "%s makes a battle" % id)
 		if b != null:
 			await _dock_level(id, b)
+			# The Twist of the level, with its rule as the first hint (RULES 13).
+			if not b.level.twist_effects.is_empty():
+				var twist: Battle = Battle.create(b.level, BattleFixtures.game().catalog, false, b.level.twist_effects)
+				check(twist != null, "%s makes a Twist battle" % id)
+				if twist != null:
+					await _dock_level(StringName("%s twist" % id), twist, "Twist: %s" % b.level.twist_text)
 	await _dock_many_groups()
 	await _dock_tall()
 
@@ -1313,4 +1319,233 @@ func _u1_chip_and_fold() -> void:
 	check(tall.battle.phase == Battle.Phase.BUILD and tall.battle.waves_started == 0, "fold: nothing else changed")
 	vp2.queue_free()
 	Fx.wipe("real_cover_u1")
+	await _frames(2)
+
+
+# Task U2 in a real tree: the Twist and run pages at both sizes, the draft sheet and its real
+# touches, and the dock test on run maps (13 rows with a scenery bottom row) played through
+# 18 waves with their cards, risk chips included.
+
+func _u2_real() -> void:
+	await _u2_pages()
+	await _u2_draft()
+	await _dock_runs()
+
+
+## Every visible button is 48 dp and nothing runs off the sides. A page scrolls, so its height is free.
+func _sides_and_buttons(root: Node, size: Vector2, where: String) -> void:
+	var found: int = 0
+	for node: Node in root.find_children("*", "BaseButton", true, false):
+		var button: BaseButton = node as BaseButton
+		if not button.is_visible_in_tree() or button.size.x <= 0.0:
+			continue
+		found += 1
+		check(button.size.x >= Layout.MIN_TOUCH - 0.5 and button.size.y >= Layout.MIN_TOUCH - 0.5, "%s: a button is under 48 dp (%s)" % [where, button.size])
+		var rect: Rect2 = button.get_global_rect()
+		check(rect.position.x >= -0.5 and rect.end.x <= size.x + 0.5, "%s: a button runs off the side %s" % [where, rect])
+	check(found > 0, "%s has buttons" % where)
+
+
+func _u2_pages() -> void:
+	var game: GameData = BattleFixtures.game()
+	var data: RunData = RunFx.run_data()
+	var open: Progress = Progress.new()
+	open.record_level(&"r1_l2", 7)
+	var cleared: Progress = Progress.new()
+	cleared.record_level(&"r1_l2", 7)
+	cleared.record_twist(&"r1_l2")
+	var twist_win: Dictionary = {"won": true, "stars": 0, "lives_left": 12, "waves_cleared": 8, "abandoned": false, "relaxed": false, "twist": true}
+	var twist_loss: Dictionary = {"won": false, "stars": 0, "lives_left": 0, "waves_cleared": 3, "abandoned": false, "relaxed": false, "twist": true}
+	var run_win: Dictionary = {"won": true, "waves": 18, "lives": 9, "reached": 18, "risks": 2}
+	var run_loss: Dictionary = {"won": false, "waves": 7, "lives": 0, "reached": 8, "risks": 0}
+	var best: Dictionary = {"won": false, "waves": 9, "lives": 0}
+	var pages: Array[Array] = [
+		["twist card", true, func() -> Control: return LevelCard.new(game, open, &"r1_l2", false)],
+		["twist card cleared", true, func() -> Control: return LevelCard.new(game, cleared, &"r1_l2", false)],
+		["twist card saved", true, func() -> Control: return LevelCard.new(game, open, &"r1_l2", true, true, true)],
+		["run card", true, func() -> Control: return RunCard.new(game, data)],
+		["run card saved", true, func() -> Control: return RunCard.new(game, data, false, "", {}, 0, "Your saved run is on wave 4 of 18.")],
+		["daily card", true, func() -> Control: return RunCard.new(game, data, true, "2026-10-24", best, 3)],
+		["daily card bad date", true, func() -> Control: return RunCard.new(game, data, true, "", {}, 0)],
+		["twist end win", false, func() -> Control: return EndPanel.new(game, &"r1_l2", twist_win, 0, &"")],
+		["twist end loss", false, func() -> Control: return EndPanel.new(game, &"r1_l2", twist_loss, 0, &"")],
+		["run end win", false, func() -> Control: return RunEndPanel.new(game, run_win)],
+		["run end loss", false, func() -> Control: return RunEndPanel.new(game, run_loss)],
+		["daily end", false, func() -> Control: return RunEndPanel.new(game, run_loss, false, "2026-10-24", best, 3)],
+	]
+	for pair: Array in [[COVER, COVER_SAFE], [INNER, INNER_SAFE]]:
+		var size: Vector2 = pair[0]
+		for page: Array in pages:
+			var vp: SubViewport = _viewport(size)
+			var made: Callable = page[2]
+			var screen: Control = made.call()
+			await _hosted(vp, screen, size, pair[1])
+			var where: String = "%s at %s" % [page[0], size]
+			_sides_and_buttons(screen, size, where)
+			if not bool(page[1]):
+				_inside_and_big(screen, size, where)
+				check((pair[1] as Rect2).grow(0.6).encloses((screen as Modal).card.get_global_rect()), "%s: the card is inside the safe area" % where)
+			vp.queue_free()
+			await _frames(1)
+
+
+## A run on the fixture data in a real battle screen, with its first card owed.
+func _run_screen(vp: SubViewport, size: Vector2, safe: Rect2, run_seed: int) -> BattleScreen:
+	var data: RunData = RunFx.run_data()
+	var session: RunSession = RunSession.start(run_seed, "", false, data.pool({}), data, RunFx.catalog())
+	check(session != null, "the fixture run %d starts" % run_seed)
+	var screen: BattleScreen = BattleScreen.new()
+	screen.setup(session.battle, null, _all_seen())
+	screen.set_run(session, data)
+	await _hosted(vp, screen, size, safe)
+	await _frames(4)
+	return screen
+
+
+## Starts the next wave with the HUD button and plays it out with plenty of lives.
+func _play_run_wave(screen: BattleScreen) -> void:
+	var b: Battle = screen.battle
+	var started: int = b.waves_started
+	screen.hud.call_button.tapped.emit()
+	check(b.waves_started == started + 1, "wave %d started from the HUD button" % (started + 1))
+	b.lives = 99
+	var guard: int = 0
+	while b.phase == Battle.Phase.WAVE and guard < 40000:
+		b.step()
+		guard += 1
+	await _frames(3)
+
+
+func _u2_draft() -> void:
+	for pair: Array in [[COVER, COVER_SAFE], [INNER, INNER_SAFE]]:
+		var size: Vector2 = pair[0]
+		var safe: Rect2 = pair[1]
+		var vp: SubViewport = _viewport(size)
+		var screen: BattleScreen = await _run_screen(vp, size, safe, 5)
+		var where: String = "draft at %s" % size
+		check(not screen.draft_is_open(), "%s: no card is owed before the first wave" % where)
+		await _play_run_wave(screen)
+		check(screen.draft_is_open(), "%s: the draft opens after the first wave" % where)
+		var panel: DraftPanel = screen.draft_panel
+		check(panel.offered().size() == 3, "%s: three cards (%d)" % [where, panel.offered().size()])
+		check(panel.is_visible_in_tree(), "%s: the panel shows" % where)
+		var rect: Rect2 = panel.get_global_rect()
+		check(safe.grow(0.6).encloses(rect), "%s: the draft is inside the safe area (%s)" % [where, rect])
+		if not screen.landscape:
+			check(rect.position.y >= screen.hud.get_global_rect().end.y - 1.0, "%s: the sheet never covers the HUD" % where)
+			check(not screen._dock_wrap.visible, "%s: the dock waits while the sheet is open" % where)
+		else:
+			check(screen.hud.get_global_rect().end.y <= rect.position.y + 1.0, "%s: the side column puts the draft under the HUD" % where)
+		for id: StringName in panel.offered():
+			var row: Rect2 = panel.rows[id].get_global_rect()
+			check(row.size.y >= Layout.MIN_TOUCH, "%s: a card is a 48 dp target (%.0f px)" % [where, row.size.y])
+			check(rect.grow(1.0).encloses(row), "%s: a card is inside the panel" % where)
+		_sides_and_buttons(panel, size, where)
+		# Real touches: a tap on a card chooses it, a tap on Take adds it.
+		var first: StringName = panel.offered()[1]
+		_touch(vp, panel.rows[first].get_global_rect().get_center())
+		await _frames(2)
+		check(panel.selected == first, "%s: a real tap chooses a card" % where)
+		check(screen.run.picks.is_empty(), "%s: and takes nothing yet" % where)
+		check(panel.take_button.theme_type_variation == &"PrimaryButton", "%s: Take turns honey" % where)
+		_touch(vp, panel.take_button.get_global_rect().get_center())
+		await _frames(3)
+		check(screen.run.picks == ([first] as Array[StringName]), "%s: a real tap on Take adds the card (%s)" % [where, screen.run.picks])
+		check(not screen.draft_is_open(), "%s: the draft closes" % where)
+		# The back button never closes a draft that is owed.
+		await _play_run_wave(screen)
+		check(screen.draft_is_open(), "%s: the second draft opens" % where)
+		check(not screen.close_panel_for_back(), "%s: back does not close the draft" % where)
+		vp.queue_free()
+		await _frames(2)
+	await _u2_draft_fold()
+
+
+## Folding with a draft open and a half-made choice keeps everything.
+func _u2_draft_fold() -> void:
+	var vp: SubViewport = _viewport(COVER)
+	var screen: BattleScreen = await _run_screen(vp, COVER, COVER_SAFE, 5)
+	await _play_run_wave(screen)
+	var offers: Array[StringName] = screen.draft_panel.offered()
+	screen.draft_panel.select(offers[2])
+	var before: String = JSON.stringify(screen.battle.to_data()) + JSON.stringify(screen.run.to_data())
+	vp.size = Vector2i(INNER)
+	await _frames(3)
+	screen.apply_layout(INNER, INNER_SAFE)
+	await _frames(4)
+	check(screen.landscape and screen.draft_is_open(), "fold: the draft stays open on the inner screen")
+	check(screen.draft_panel.offered() == offers and screen.draft_panel.selected == offers[2], "fold: same offers, same choice")
+	check(INNER_SAFE.grow(0.6).encloses(screen.draft_panel.get_global_rect()), "fold: the draft is inside the safe area")
+	vp.size = Vector2i(COVER)
+	await _frames(3)
+	screen.apply_layout(COVER, COVER_SAFE)
+	await _frames(4)
+	check(not screen.landscape and screen.draft_is_open() and screen.draft_panel.selected == offers[2], "fold: and back again")
+	check(JSON.stringify(screen.battle.to_data()) + JSON.stringify(screen.run.to_data()) == before, "fold: nothing else changed")
+	vp.queue_free()
+	await _frames(2)
+
+
+func _dock_runs() -> void:
+	for run_seed: int in [3, 11, 29]:
+		await _dock_run(run_seed)
+
+
+func _is_risk_card(id: StringName) -> bool:
+	return String(RunFx.run_data().card(id).get("kind", "")) == "risk"
+
+
+## A fixture run on the cover: every build phase of an 18 wave run, with its cards picked
+## through the draft (a risk card on some waves, whenever one is offered), checked as the dock
+## test checks a level: the home, spots, sockets, entrances and towers stay in sight, the folded
+## strip is one line, and a waiting risk card shows first.
+func _dock_run(run_seed: int) -> void:
+	var vp: SubViewport = _viewport(COVER)
+	var screen: BattleScreen = await _run_screen(vp, COVER, COVER_SAFE, run_seed)
+	var b: Battle = screen.battle
+	var tag: String = "run %d" % run_seed
+	check(b.level.rows == 13, "%s: a run map has 13 rows" % tag)
+	for x: int in Sim.MAP_COLUMNS:
+		check(b.level.kind_at(Vector2i(x, b.level.rows - 1)) == LevelData.Kind.SCENERY, "%s: the bottom row is scenery at column %d" % [tag, x])
+	var must: Array[Vector2i] = _must_see(b)
+	var saw_risk: bool = false
+	for wave: int in 18:
+		var where: String = "%s wave %d" % [tag, wave + 1]
+		# The cards owed: the sheet is open and the dock waits; pick one after the other.
+		var guard: int = 0
+		while screen.draft_is_open() and guard < 6:
+			guard += 1
+			var offers: Array[StringName] = screen.draft_panel.offered()
+			check(not screen._dock_wrap.visible, "%s: the dock waits for the card" % where)
+			check(COVER_SAFE.grow(0.6).encloses(screen.draft_panel.get_global_rect()), "%s: the draft sheet is inside the safe area (%s)" % [where, screen.draft_panel.get_global_rect()])
+			var choice: StringName = offers[0]
+			for id: StringName in offers:
+				if wave % 3 == 1 and _is_risk_card(id):
+					choice = id
+			screen.draft_panel.rows[choice].tapped.emit()
+			screen.draft_panel.take_button.tapped.emit()
+			await _frames(2)
+		check(not screen.draft_is_open(), "%s: every owed card was picked" % where)
+		b.gold = 20000
+		for cell: Vector2i in b.level.spots:
+			b.place_tower(cell, &"sling_post")
+		# The default build state has no message: "Wave N cleared" is gone after its 3 s.
+		screen.hud.clear_feedback()
+		screen.gate_tray.clear_feedback()
+		await _frames(screen.FIT_FRAMES + 3)
+		await _preview_decision(screen, where)
+		var hit: String = _first_hit(screen, must, _dock_rects(screen))
+		check(hit.is_empty(), "%s: %s" % [where, hit])
+		if screen.run.risk_card() != &"":
+			saw_risk = true
+			check(screen.preview.risk_name != "", "%s: a waiting risk card shows in the preview" % where)
+			if screen.preview.expanded:
+				check(screen.preview.risk_row != null and screen.preview.get_global_rect().encloses(screen.preview.risk_row.get_global_rect()), "%s: the risk row is inside the open preview" % where)
+			elif screen.preview.strip != null:
+				check(screen.preview.strip.chips()[0] == screen.preview.risk_chip and screen.preview.risk_chip.visible, "%s: the risk chip comes first and shows" % where)
+		await _play_run_wave(screen)
+		if b.phase == Battle.Phase.WON or b.phase == Battle.Phase.LOST:
+			break
+	check(saw_risk, "%s: a risk card waited at least once" % tag)
+	vp.queue_free()
 	await _frames(2)
