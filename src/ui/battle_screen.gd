@@ -7,10 +7,11 @@ extends ScreenFrame
 ##
 ## Portrait: the HUD above the map and the map under it, top aligned, as big as the
 ## width allows. Nothing else takes height from the map, so cells stay 48 dp on the
-## Fold5 cover whatever is showing. The hint, the gate strip, the Paused strip and the
-## wave preview form a dock that floats over the lower edge of the map, in the free
-## room under it, and covers the lowest rows only on a tall map. Each part of the dock
-## can be put away with one tap. The tower, build and creature panels are a bottom
+## Fold5 cover whatever is showing. The gate strip is a small chip in the HUD's first
+## row. The Paused strip, the messages and the wave preview form a dock that floats over
+## the lower edge of the map, in the free room under it, and covers the lowest rows only
+## on a tall map or a Paused strip. The hint floats over a map row with nothing in it to
+## see or tap. Each of these can be put away with one tap. The tower, build and creature panels are a bottom
 ## sheet over the lower map. The sheet never covers the HUD, and the map slides up so
 ## the tapped cell stays in sight. Landscape: the map on the left and one side column
 ## with the HUD, the open panel and the preview.
@@ -216,7 +217,7 @@ func _connect_panels() -> void:
 	hud.speed_selected.connect(func(speed: int) -> void: clock.speed = speed)
 	hud.pause_requested.connect(freeze)
 	hud.resume_requested.connect(resume)
-	pause_strip.menu_requested.connect(_open_pause_menu)
+	pause_strip.menu_requested.connect(_on_strip_menu)
 	hint_banner.closed.connect(_on_hint_closed)
 	for panel: BattlePanel in [hud, gate_tray, build_panel, tower_panel]:
 		panel.refused.connect(_on_refused)
@@ -281,6 +282,13 @@ func _freeze_clock() -> void:
 	hud.set_paused(true)
 	if _drag_active:
 		cancel_drag()
+
+
+## The Paused strip's Menu button: whatever was built, upgraded or sold while frozen is
+## saved first, as for the pause button and the back button.
+func _on_strip_menu() -> void:
+	save_requested.emit()
+	_open_pause_menu()
 
 
 func _open_pause_menu() -> void:

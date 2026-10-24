@@ -410,6 +410,22 @@ func test_the_pause_button_freezes_and_saves() -> void:
 	assert_false(screen.pause_strip.visible)
 
 
+func test_the_paused_strips_menu_saves_what_was_built_while_frozen() -> void:
+	var made: App = _app()
+	var screen: BattleScreen = _midwave(made)
+	screen.hud.pause_button.tapped.emit()
+	var cell: Vector2i = screen.battle.level.spots[1]
+	screen.battle.gold = 500
+	assert_true(Fx.build(screen, cell, &"pumpkin_catapult"), "building works while frozen")
+	var before: SavedGame = _saved_on_disk()[0]
+	assert_null(before.battle.tower_at(cell), "the build is not on disk yet")
+	screen.pause_strip.menu_button.tapped.emit()
+	assert_true(screen.pause_menu_open())
+	var after: SavedGame = _saved_on_disk()[0]
+	assert_not_null(after.battle.tower_at(cell), "Menu saved the game with the new tower")
+	assert_eq(after.battle.tower_at(cell).type, &"pumpkin_catapult")
+
+
 func test_losing_focus_pauses_a_running_wave_and_saves() -> void:
 	for what: int in [Node.NOTIFICATION_APPLICATION_FOCUS_OUT, Node.NOTIFICATION_APPLICATION_PAUSED, Node.NOTIFICATION_WM_CLOSE_REQUEST]:
 		var made: App = _app()

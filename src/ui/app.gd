@@ -21,7 +21,8 @@ extends Control
 
 ## The player turned sound on or off in Settings.
 signal sound_changed(on: bool)
-## Taps on the mode screen. The App also answers them itself.
+## Taps on the mode screen. The App answers Continue and Campaign itself. Roguelite and
+## Daily have no answer until the run mode exists (their cards are locked until then).
 signal continue_requested()
 signal campaign_requested()
 signal roguelite_requested()
@@ -113,8 +114,6 @@ func build() -> void:
 	set_process(false)
 	continue_requested.connect(_on_continue)
 	campaign_requested.connect(_on_campaign)
-	roguelite_requested.connect(_on_run_tapped)
-	daily_requested.connect(_on_run_tapped)
 	_boot()
 	apply_layout(_window, _safe)
 
@@ -529,11 +528,6 @@ func _on_campaign() -> void:
 func _fill_levels(screen: LevelSelect) -> void:
 	var saved: SavedGame = saved_game(SavedGame.LEVEL)
 	screen.populate(game, progress, saved.level_id if saved != null else &"")
-
-
-## Roguelite and Daily are not built yet; they stay out of reach with a short word.
-func _on_run_tapped() -> void:
-	open_modal(NoticeDialog.new("Not ready yet", "This mode is coming in a later version of Forkline."))
 
 
 ## Pushes the card of an open level.
