@@ -1,0 +1,349 @@
+# Forkline. Copyright 2026 Play, Inc.
+# Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.
+extends "res://tests/base_test.gd"
+## The real run segments and wave packs in data/segments/ (docs/ARCHITECTURE.md 2.9, 2.12;
+## RULES 14.2, 14.3). Every file is listed, the files pass RunData.check, every stack of
+## segments that fit is a valid run map with a gate worth placing, every bottom segment
+## keeps its last row scenery, and every choice of packs keeps the new creature rule.
+
+const SEGMENT_DIR: String = "res://data/segments/"
+const RUN_PATH: String = "res://data/runs/run.json"
+const CARDS_PATH: String = "res://data/cards/cards.json"
+const INDEX_FILE: String = "index.json"
+const PACKS_FILE: String = "packs.json"
+## Size caps of 2.12.
+const SEGMENT_CAP: int = 16 * 1024
+const INDEX_CAP: int = 16 * 1024
+const PACKS_CAP: int = 256 * 1024
+const RUN_CAP: int = 16 * 1024
+const CARDS_CAP: int = 256 * 1024
+## RULES 12.5: aim for 80 or fewer creatures a wave, and 4 groups or fewer so the folded
+## preview strip shows the whole wave.
+const SPAWN_AIM: int = 80
+const GROUPS_AIM: int = 4
+## Seeds assembled into whole runs.
+const SEEDS: int = 50
+
+var catalog: Catalog = null
+var files: Dictionary = {}
+var data: RunData = null
+
+
+func before_each() -> void:
+	catalog = _catalog()
+	files = _files()
+	data = RunData.from_data(files, catalog)
+
+
+static func _read(path: String, cap: int) -> Variant:
+	var got: Dictionary = JsonFile.read(path, cap)
+	if got["status"] != JsonFile.OK_STATUS:
+		return null
+	return got["data"]
+
+
+static func _catalog() -> Catalog:
+	var cap: int = 256 * 1024
+	return Catalog.from_data(_read("res://data/stats/towers.json", cap), _read("res://data/stats/enemies.json", cap), _read("res://data/stats/rules.json", cap))
+
+
+## The ids index.json lists, in its order. Empty when it has the wrong shape.
+static func _listed() -> Array[String]:
+	var out: Array[String] = []
+	var index: Variant = _read(SEGMENT_DIR + INDEX_FILE, INDEX_CAP)
+	if typeof(index) != TYPE_DICTIONARY or typeof((index as Dictionary).get("segments", null)) != TYPE_ARRAY:
+		return out
+	for id: Variant in (index as Dictionary)["segments"]:
+		if DataCheck.is_id(id):
+			out.append(String(id))
+	return out
+
+
+## The parsed files keyed by their path under data/, as GameData hands them to RunData (2.12).
+static func _files() -> Dictionary:
+	var out: Dictionary = {
+		"runs/run.json": _read(RUN_PATH, RUN_CAP),
+		"cards/cards.json": _read(CARDS_PATH, CARDS_CAP),
+		"segments/index.json": _read(SEGMENT_DIR + INDEX_FILE, INDEX_CAP),
+		"segments/packs.json": _read(SEGMENT_DIR + PACKS_FILE, PACKS_CAP),
+	}
+	for id: String in _listed():
+		out["segments/%s.json" % id] = _read(SEGMENT_DIR + id + ".json", SEGMENT_CAP)
+	return out
+
+
+## Every segment file name in the folder, without ".json". index.json and packs.json are left out.
+static func _segment_files() -> Array[String]:
+	var out: Array[String] = []
+	for file_name: String in DirAccess.get_files_at(SEGMENT_DIR):
+		if file_name.ends_with(".json") and file_name != INDEX_FILE and file_name != PACKS_FILE:
+			out.append(file_name.trim_suffix(".json"))
+	out.sort()
+	return out
+
+
+## Every stack MapAssembler can pick: [top, middle, bottom] segment ids.
+func _stacks() -> Array[Array]:
+	var out: Array[Array] = []
+	if data == null:
+		return out
+	for top: Dictionary in data.segments_of(&"top"):
+		for middle: Dictionary in data.segments_under(top["id"]):
+			for bottom: Dictionary in data.segments_under(middle["id"]):
+				out.append([top["id"], middle["id"], bottom["id"]])
+	return out
+
+
+## One pack per band, the first of each, so a stack can be built into a level.
+func _first_packs() -> Array[StringName]:
+	var out: Array[StringName] = []
+	for band: int in range(1, RunData.BANDS + 1):
+		out.append(data.packs_of(band)[0]["id"])
+	return out
+
+
+func _build(stack: Array) -> LevelData:
+	return MapAssembler.build(data, catalog, stack[0], stack[1], stack[2], _first_packs())
+
+
+static func _text(cells: Array[Vector2i]) -> String:
+	var parts: PackedStringArray = PackedStringArray()
+	for cell: Vector2i in cells:
+		parts.append("%d,%d" % [cell.x, cell.y])
+	return " ".join(parts)
+
+
+# Files
+
+func test_every_segment_file_is_listed_once_and_every_listed_file_exists() -> void:
+	var listed: Array[String] = _listed()
+	assert_true(listed.size() > 0, "index.json lists segments")
+	var on_disk: Array[String] = _segment_files()
+	for id: String in on_disk:
+		assert_eq(listed.count(id), 1, "%s.json is listed exactly once in index.json" % id)
+	for id: String in listed:
+		assert_true(on_disk.has(id), "index.json lists %s, which has a file" % id)
+	assert_true(FileAccess.file_exists(SEGMENT_DIR + PACKS_FILE), "packs.json exists")
+
+
+func test_files_are_plain_ascii_with_lf_endings_and_under_their_caps() -> void:
+	var paths: Dictionary = {SEGMENT_DIR + INDEX_FILE: INDEX_CAP, SEGMENT_DIR + PACKS_FILE: PACKS_CAP}
+	for id: String in _segment_files():
+		paths[SEGMENT_DIR + id + ".json"] = SEGMENT_CAP
+	for path: String in paths:
+		var bytes: PackedByteArray = FileAccess.get_file_as_bytes(path)
+		assert_true(bytes.size() > 0, "%s is not empty" % path)
+		assert_true(bytes.size() <= int(paths[path]), "%s is under its size cap" % path)
+		var bad: int = 0
+		for b: int in bytes:
+			if b >= 0x80 or b == 0 or b == 13:
+				bad += 1
+		assert_eq(bad, 0, "%s: bytes outside plain ASCII, or a CR" % path)
+
+
+func test_the_real_run_files_pass_run_data_check() -> void:
+	var found: PackedStringArray = RunData.check(files, catalog)
+	assert_eq(found, PackedStringArray(), "\n".join(found))
+	assert_not_null(data, "RunData.from_data")
+
+
+func test_game_data_loads_the_run_files() -> void:
+	var game: GameData = GameData.load_from()
+	assert_eq(game.problems, PackedStringArray(), "GameData problems")
+	assert_not_null(game.run, "GameData.run")
+
+
+func test_segment_ids_equal_their_file_names() -> void:
+	for id: String in _listed():
+		var raw: Variant = files.get("segments/%s.json" % id, null)
+		assert_true(raw is Dictionary, "%s.json parses to an object" % id)
+		if raw is Dictionary:
+			assert_eq(str((raw as Dictionary).get("id", "")), id, "%s.json id" % id)
+
+
+# Maps
+
+## docs/ARCHITECTURE.md 2.4, 2.9 and RULES 14.2: a run map has 13 rows, so its bottom row,
+## the last row of every bottom segment, is scenery only.
+func test_every_bottom_segments_last_row_is_scenery() -> void:
+	if data == null:
+		fail("the run files do not load")
+		return
+	assert_eq(int(data.rows["top"]) + int(data.rows["middle"]) + int(data.rows["bottom"]), Sim.MAP_ROWS_MAX, "run maps have 13 rows")
+	var bottoms: Array[Dictionary] = data.segments_of(&"bottom")
+	assert_true(bottoms.size() >= 2, "more than one bottom segment, for variety")
+	for bottom: Dictionary in bottoms:
+		var grid: PackedStringArray = bottom["grid"]
+		assert_eq(grid[grid.size() - 1], ".".repeat(Sim.MAP_COLUMNS), "%s: the last row is all scenery" % bottom["id"])
+
+
+## Every segment shows up in some stack, so none is dead data.
+func test_every_segment_is_used_in_some_stack() -> void:
+	var used: Dictionary = {}
+	for stack: Array in _stacks():
+		for id: StringName in stack:
+			used[id] = true
+	for id: String in _listed():
+		assert_true(used.has(StringName(id)), "%s is part of some stack" % id)
+
+
+## 2.9: every stack MapAssembler can pick is a valid map within run.json's spots and sockets,
+## and every entrance has an open route to the base with no gates placed.
+func test_every_stack_is_a_valid_run_map() -> void:
+	var stacks: Array[Array] = _stacks()
+	assert_true(stacks.size() >= 20, "plenty of stacks for variety, got %d" % stacks.size())
+	for stack: Array in stacks:
+		var label: String = "%s / %s / %s" % stack
+		var level: LevelData = _build(stack)
+		assert_not_null(level, label)
+		if level == null:
+			continue
+		assert_eq(level.rows, Sim.MAP_ROWS_MAX, "%s: 13 rows" % label)
+		assert_eq(level.grid[level.rows - 1], ".".repeat(Sim.MAP_COLUMNS), "%s: the bottom row is scenery" % label)
+		assert_true(level.spots.size() >= data.spots_min and level.spots.size() <= data.spots_max, "%s: %d spots" % [label, level.spots.size()])
+		assert_true(level.sockets.size() >= data.sockets_min and level.sockets.size() <= data.sockets_max, "%s: %d sockets" % [label, level.sockets.size()])
+		var map: RoadMap = RoadMap.new(level)
+		var none: Array[Vector2i] = []
+		var dist: PackedInt32Array = map.distances(none)
+		assert_false(map.seals(none), "%s: no gate seals nothing" % label)
+		for i: int in level.entrances.size():
+			var path: Array[Vector2i] = map.route(level.entrances[i], dist)
+			assert_true(path.size() >= 2, "%s: entrance %d has an open route" % [label, i + 1])
+			if path.size() >= 2:
+				assert_eq(path[path.size() - 1], level.base, "%s: entrance %d reaches the base" % [label, i + 1])
+
+
+## RULES 14.2: middle segments hold the forks. In every stack some single gate, placed where
+## it seals nothing, changes where walkers go, so the run's first gate is a real choice.
+func test_every_stack_has_a_gate_that_steers() -> void:
+	for stack: Array in _stacks():
+		var level: LevelData = _build(stack)
+		if level == null:
+			fail("%s / %s / %s does not build" % stack)
+			continue
+		var map: RoadMap = RoadMap.new(level)
+		var none: Array[Vector2i] = []
+		var open_dist: PackedInt32Array = map.distances(none)
+		var steers: int = 0
+		for socket: Vector2i in level.sockets:
+			var closed: Array[Vector2i] = [socket]
+			if map.seals(closed):
+				continue
+			var dist: PackedInt32Array = map.distances(closed)
+			for entrance: Vector2i in level.entrances:
+				if _text(map.route(entrance, dist)) != _text(map.route(entrance, open_dist)):
+					steers += 1
+					break
+		assert_true(steers >= 1, "%s / %s / %s: some gate changes a route" % stack)
+
+
+## Every assembled run builds, as the roguelite engineer's test also checks, and its waves
+## reach only entrances the map has.
+func test_runs_from_seeds_assemble() -> void:
+	if data == null:
+		fail("the run files do not load")
+		return
+	for run_seed: int in SEEDS:
+		var level: LevelData = MapAssembler.assemble(run_seed, data, catalog)
+		assert_not_null(level, "seed %d" % run_seed)
+		if level == null:
+			continue
+		assert_eq(level.waves.size(), RunData.BANDS * 3, "seed %d: 18 waves" % run_seed)
+
+
+# Packs
+
+## RULES 14.3 and docs/ARCHITECTURE.md 2.9: for every choice of one pack per band (band 6:
+## every pack), reading waves 1 to 18 in order, a creature the run has not shown yet comes in
+## the wave's first group, no group of that wave starts before it, and no wave brings two.
+## The creatures shown so far are all that a later band depends on, so equal sets are walked once.
+func test_every_choice_of_packs_keeps_the_new_creature_rule() -> void:
+	if data == null:
+		fail("the run files do not load")
+		return
+	var states: Dictionary = {"": []}
+	var walked: int = 0
+	for band: int in range(1, RunData.BANDS + 1):
+		var next: Dictionary = {}
+		var packs: Array[Dictionary] = data.packs_of(band)
+		assert_true(packs.size() >= 4, "band %d has at least 4 packs" % band)
+		for key: String in states:
+			var shown_before: Array = states[key]
+			for pack: Dictionary in packs:
+				walked += 1
+				var shown: Array = shown_before.duplicate()
+				var waves: Array = pack["waves"]
+				for w: int in waves.size():
+					var label: String = "%s wave %d after [%s]" % [pack["id"], w + 1, key]
+					_check_new_creatures((waves[w] as Dictionary)["groups"], shown, label)
+				shown.sort()
+				next[",".join(PackedStringArray(shown))] = shown
+		states = next
+	assert_true(walked > 0, "some packs were walked")
+
+
+## Checks one wave against the creatures shown so far, then adds its creatures to them.
+func _check_new_creatures(groups: Array, shown: Array, label: String) -> void:
+	var fresh: Array[String] = []
+	for raw: Variant in groups:
+		var enemy: String = String((raw as Dictionary)["enemy"])
+		if not shown.has(enemy) and not fresh.has(enemy):
+			fresh.append(enemy)
+	assert_true(fresh.size() <= 1, "%s: brings two new creatures %s" % [label, fresh])
+	if fresh.size() == 1:
+		var first: Dictionary = groups[0]
+		assert_eq(String(first["enemy"]), fresh[0], "%s: the new %s comes in the first group" % [label, fresh[0]])
+		for raw: Variant in groups:
+			assert_true(int((raw as Dictionary)["at_ms"]) >= int(first["at_ms"]), "%s: no group starts before the new %s" % [label, fresh[0]])
+	for raw: Variant in groups:
+		var enemy: String = String((raw as Dictionary)["enemy"])
+		if not shown.has(enemy):
+			shown.append(enemy)
+
+
+## The simple way the rule is kept (2.9): every band's pack shows every creature its band adds,
+## so any pack can follow any other.
+func test_every_pack_shows_every_creature_its_band_adds() -> void:
+	if data == null:
+		fail("the run files do not load")
+		return
+	for pack: Dictionary in data.packs:
+		var band: int = pack["band"]
+		var seen: Array[String] = []
+		for wave: Variant in pack["waves"]:
+			for group: Variant in (wave as Dictionary)["groups"]:
+				seen.append(String((group as Dictionary)["enemy"]))
+		for creature: StringName in data.bands[band - 1]:
+			assert_true(seen.has(String(creature)), "%s shows %s" % [pack["id"], creature])
+
+
+## RULES 12.5 aims, for a readable screen and a whole folded preview.
+func test_pack_waves_stay_readable() -> void:
+	if data == null:
+		fail("the run files do not load")
+		return
+	var none: Array[Dictionary] = []
+	for pack: Dictionary in data.packs:
+		var waves: Array = pack["waves"]
+		for w: int in waves.size():
+			var groups: Array = (waves[w] as Dictionary)["groups"]
+			var total: int = RunPacks.spawn_total(groups, catalog, none)
+			assert_true(total <= SPAWN_AIM, "%s wave %d spawns %d, RULES 12.5 aims for %d or fewer" % [pack["id"], w + 1, total, SPAWN_AIM])
+			assert_true(groups.size() <= GROUPS_AIM, "%s wave %d has %d groups" % [pack["id"], w + 1, groups.size()])
+
+
+## RULES 14.3: the boss comes alone at the start of the third wave of its pack, and each boss
+## has more than one pack so its runs differ.
+func test_each_boss_has_two_packs_and_leads_its_wave() -> void:
+	if data == null:
+		fail("the run files do not load")
+		return
+	for boss: StringName in catalog.enemy_ids():
+		var type: EnemyType = catalog.enemy(boss)
+		if not type.boss:
+			continue
+		var packs: Array[Dictionary] = data.packs_of(RunData.BANDS, boss)
+		assert_true(packs.size() >= 2, "%s has at least 2 band 6 packs" % boss)
+		for pack: Dictionary in packs:
+			var groups: Array = ((pack["waves"] as Array)[2] as Dictionary)["groups"]
+			assert_eq(StringName(String((groups[0] as Dictionary)["enemy"])), boss, "%s: the boss leads wave 3" % pack["id"])

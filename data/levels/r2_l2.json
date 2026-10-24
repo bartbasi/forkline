@@ -21,7 +21,7 @@
   "strength": 135,
   "towers": ["sling_post", "pumpkin_catapult", "lullaby_bell"],
   "star3": {"kind": "towers_at_most", "value": 6},
-  "hint": {"text": "Bells make walkers drowsy. Slow crowds are easy Catapult targets.", "cell": [2, 5]},
+  "hint": {"text": "Bells make walkers drowsy. Slow crowds are easy Catapult targets.", "cell": [4, 7]},
   "waves": [
     {"strength": 100, "groups": [{"enemy": "scamp", "count": 6, "entrance": 1, "at_ms": 0, "every_ms": 1500}]},
     {"strength": 110, "groups": [{"enemy": "scamp", "count": 6, "entrance": 1, "at_ms": 0, "every_ms": 1300}, {"enemy": "skitter", "count": 5, "entrance": 1, "at_ms": 8000, "every_ms": 1000}]},

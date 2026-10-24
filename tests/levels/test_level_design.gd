@@ -395,6 +395,35 @@ func test_hint_highlights_the_planned_kind_of_cell() -> void:
 		assert_eq(level.kind_at(level.hint_cell), kinds[planned], "%s: the hint cell %s is a %s" % [id, level.hint_cell, planned])
 
 
+## RULES 9.6: a first tower built on a highlighted spot touches the road the creatures walk
+## with no gate placed. Every tower that attacks or slows reaches, at tier 1, some cell of an
+## entrance's open route. (Level 2-2 once glowed on a spot that saw road only with a gate on.)
+func test_a_highlighted_spot_sees_the_open_route() -> void:
+	for id: String in order:
+		var level: LevelData = _level(id)
+		if level == null or level.hint_cell.x < 0 or level.kind_at(level.hint_cell) != LevelData.Kind.SPOT:
+			continue
+		var map: RoadMap = RoadMap.new(level)
+		var none: Array[Vector2i] = []
+		var dist: PackedInt32Array = map.distances(none)
+		var walked: Array[Vector2i] = []
+		for entrance: Vector2i in level.entrances:
+			walked.append_array(map.route(entrance, dist))
+		for tower: StringName in level.towers:
+			var type: TowerType = catalog.tower(tower)
+			if type == null or type.kind == &"boost":
+				continue
+			var reach: int = type.stats(1, -1).reach
+			var seen: bool = false
+			for cell: Vector2i in walked:
+				var dx: int = (cell.x - level.hint_cell.x) * 100
+				var dy: int = (cell.y - level.hint_cell.y) * 100
+				if dx * dx + dy * dy <= reach * reach:
+					seen = true
+					break
+			assert_true(seen, "%s: a %s on the highlighted spot %s reaches the open route" % [id, tower, level.hint_cell])
+
+
 ## docs/ARCHITECTURE.md 2.4 and 7.4, RULES 3.1: the bottom row of a 13 row map is scenery only,
 ## so the folded wave preview on the Fold5 cover never hides a spot, socket, entrance or home.
 func test_a_13_row_maps_bottom_row_is_scenery() -> void:
