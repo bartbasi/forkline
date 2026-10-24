@@ -1,6 +1,6 @@
 # Forkline: Architecture
 
-Owner: architect. Status: revised for phase 7, 2026-10-24.
+Owner: architect. Status: revised for phase 7, and brought up to the built sim (S1), 2026-10-24.
 
 This is the contract every agent builds against: folders and owners, ids and data files, every public class with its methods and data shapes, routing, saves, resume, orientation, outbound links, the performance budget, the tests and the build plans for phase 5 (section 11) and phase 7 (section 13). Do not invent a public method that another area must call. If you need a change here, put it in your report for the DM.
 
@@ -346,7 +346,7 @@ Which creatures an effect reaches: a Twist's creature effects reach every creatu
 | `clear_bonus_pct` | pct | card | Clear bonuses times pct / 100, rounded half up | 14.5 |
 | `refund_pct` | pct | card | Replaces rules.json `refund_pct`. pct is 1 to 100, so selling never pays a profit. | 14.5 |
 | `cost_add` | build, upgrade | card | Added to every build price and every upgrade price, never below 10 | 14.6 |
-| `interest` | pct, max | card | When each build phase begins, after the clear bonus, gain pct of the gold held, rounded down, at most max | 14.6 |
+| `interest` | pct, max | card | When each build phase begins, after the clear bonus, gain pct of the gold held, rounded down, at most max. The `interest` event (3.1) reports the gain. | 14.6 |
 | `gates_stay` | none | card | Each time a wave starts, every placed gate becomes fixed (RULES 14.6) | 14.6 |
 | `add_gates` | count | card, instant | Gain gates, never more than `max_gates` placed and in hand together | 14.5, 14.6 |
 | `add_gold` | amount, per_wave | card, instant | Gain amount plus per_wave for each wave cleared so far | 14.5 |
@@ -355,7 +355,7 @@ Which creatures an effect reaches: a Twist's creature effects reach every creatu
 - Order: a Twist's start effects come before Relaxed (RULES 11). Tower stats: the data, then every `tower_add`, then every `tower_pct`, then Bakery boosts on top (RULES 8.7). Creatures: the data, then strength, then effects, each step rounded by its own rule.
 - Floors after card effects (no ceilings, so Volley gives a Triple Bow 4 targets): price at least 10, reach at least 1, reload at least 50 ms, damage at least 1 on a tower that deals damage, splash at least 0, targets at least 1, a slow from 1 to 90 percent on a stat block that has a slow (a card never adds a slow to one that has none), boosts at least 0.
 - Instant effects change the state once and are not kept, so a restore never applies them twice. Every other effect is kept by the battle and saved with it.
-- Checks (`Modifiers.check`): the type is known and allowed for its use; the fields are exact; every id exists; pct is 1 to 1,000, except `refund_pct`, which is 1 to 100; counts are 1 to 200, except `set_gates` count, which is 0 to `max_gates` (the No Gates Twist gives 0); `set_lives` is 1 to 1,000; entrances are 1 to 4; times are multiples of 50 up to 600,000; every other number is -1,000 to 1,000; a `break_ms` creature already breaks gates (phase 7). `LevelData.check` also checks that `fixed_gates` cells are sockets of that level, that there are no more of them than the level gives, and that they do not seal. `RunData.check` adds the card rules of 2.11.
+- Checks (`Modifiers.check`): the type is known and allowed for its use; the fields are exact; every id exists; pct is 1 to 1,000, except `refund_pct`, which is 1 to 100; counts are 1 to 200, except `set_gates` count, which is 0 to `max_gates` (the No Gates Twist gives 0); `set_lives` is 1 to 1,000; entrances are 1 to 4; times are multiples of 50 up to 600,000; `add_gold` `amount`, `add_lives` `amount`, `reward_gold` `amount` and `interest` `max` are 0 to 1,000: a negative value is refused when it is loaded or picked, not counted as 0 (2026-10-24); every other number is -1,000 to 1,000; a `break_ms` creature already breaks gates (phase 7). `LevelData.check` also checks that `fixed_gates` cells are sockets of that level, that there are no more of them than the level gives, and that they do not seal. `RunData.check` adds the card rules of 2.11.
 
 The Twists of RULES 13 as effects. The level designer writes them into each level's `twist`, with `name` and `text` from RULES 13:
 
@@ -669,13 +669,14 @@ enum Phase { BUILD, WAVE, WON, LOST }
 const FORMAT: int = 1
 const DONE: StringName = &"done"                       # a command was carried out (not OK, which would shadow Godot's OK)
 class Release extends RefCounted                       # inner class, internal: one batch of creatures being released at one
-                                                       # spot (boss summons; Puffs and boss releases in phase 7); saved (5.6)
+                                                       # spot (boss summons, Puffball splits, boss health releases); saved (5.6)
 
 # Fixed for the whole battle. Read only.
 var level: LevelData
 var catalog: Catalog
 var map: RoadMap
 var relaxed: bool
+var twist_effects: Array[Dictionary]                   # the Twist's effects (2.8) as plain checked data; [] for none
 
 # State. Read only outside src/sim/.
 var tick: int
@@ -690,9 +691,11 @@ var gates: Array[GateState]                            # cell order
 var towers: Array[TowerState]                          # cell order
 var enemies: Array[EnemyState]                         # id order
 var risk_waiting: Array[Dictionary]                    # a risk card's effects waiting for the next wave; [] for none
+var card_effects: Array[Dictionary]                    # the kept card effects (2.8), in the order taken; instant ones are not kept
+var gates_open: bool                                   # a `gates_open` risk effect holds every gate open until the next build phase (4.2)
 var record_events: bool = true                         # bots set false for speed
 
-static func create(level: LevelData, catalog: Catalog, relaxed: bool, twist_effects: Array[Dictionary]) -> Battle
+static func create(level: LevelData, catalog: Catalog, relaxed: bool, twist_effects: Array[Dictionary]) -> Battle   # null on bad input (below)
 func step() -> void                                    # one tick; does nothing unless phase is WAVE
 func take_events() -> Array[Dictionary]                # the events since the last call, oldest first
 
@@ -732,6 +735,8 @@ static func from_data(data: Variant, catalog: Catalog) -> Battle   # null when a
 ```
 
 - `create` sets the starting numbers: a Twist's `start_gold_pct`, `set_lives`, `set_gates` and `fixed_gates` first, then Relaxed (RULES 11). Lives come from rules.json. A run's map carries its own start gold, gates and towers (3.4).
+- `create` returns null when the level or the catalog is missing, or when the Twist has more than 8 effects, fails `Modifiers.check` for use `twist`, or has fixed gates that are not sockets of the level, outnumber the gates given (the level's, or the Twist's `set_gates`) or seal. Real data never does that: a level file holds at most 2 Twist effects and `LevelData.check` checks its fixed gates. So a null is a bug.
+- `twist_effects`, `card_effects` and `risk_waiting` hold checked effects as plain data: ints, bools, Strings (ids included), and cells as `[column, row]` arrays. `gates_open` is true from the start of a wave whose risk card holds `gates_open` until the next build phase begins, even after that wave is cleared.
 - Tower numbers (`numbers`, `before`, `after` and `tower_numbers`) hold the tower's own stats with card effects: `damage`, `reload_ms`, `reach`, `splash`, `targets`, `pierce`, `slow_pct`, `slow_ms`, `hits_ground`, `hits_air`, `boost_pct`, `boost_damage`. `tower_numbers` adds `got_pct` and `got_damage` (the best Bakery boosts it gets), `boosting` (towers a Bakery boosts now), `spent`, `sell` and `aim`. The UI works out the rate as `(100 + got_pct) * 1000 / (100 * reload_ms)` attacks a second (RULES 5.2, 9.3).
 - `enemy_numbers(id)`: `health`, `max_health`, `armor`, `speed` (now, with slows and effects), `base_speed`, `flying`, `lives`, `bounty`, `heal`, `slow_pct`, `slow_ms` (left), `bubble` (up), `bubble_ms` (until it is back), `breaking_ms` (left, 0 when not breaking). RULES 9.4.
 - `wave_preview(index)`: one row per group in spawn order, `{"enemy": StringName, "count": int, "entrance": int (1 based), "health": int, "bounty": int, "heal": int}`, at that wave's strength with the Twist and, for the next wave, a waiting risk card applied (RULES 9.1).
@@ -750,6 +755,12 @@ var aim: Aim
 var reload: int                                        # 1/100 ms until it may fire; 0 or less is ready
 var spent_now: int                                     # bought in the current build phase: refunded in full
 var spent_before: int                                  # every other purchase: refunded at the refund percent
+# Worked out again whenever towers or card effects change. Render reads these for boost marks.
+var kind: StringName                                   # &"attack", &"slow" or &"boost", from its type
+var stats: TowerStats                                  # its own stats with card effects, before Bakery boosts; shared, never write to it
+var got_pct: int                                       # the best Bakery rate boost it gets; 0 for Bells and Bakeries
+var got_damage: int                                    # the best Bakery damage bonus it gets; 0 for Bells and Bakeries
+var boosting: int                                      # a Bakery: the attacking towers it boosts now; 0 for other towers
 
 class_name EnemyState extends RefCounted               # src/sim/enemy_state.gd
 var id: int
@@ -804,7 +815,7 @@ Refunds (RULES 4.6): a purchase in a build phase goes into `spent_now`. A purcha
 | `&"still_spawning"` | The newest wave has not spawned all its groups (RULES 4.9). |
 | `&"too_many_waves"` | `max_waves_running` waves are on the map. |
 | `&"risk_waiting"` | A risk card is already waiting. |
-| `&"bad_effect"` | An effect fails its check. |
+| `&"bad_effect"` | The list is empty or fails `Modifiers.check` (2.8), an `add_group` entrance is not on this map, or the battle would hold more than 64 kept card effects or a risk card of more than 8 effects (5.6). |
 
 The UI turns every other refusal into plain feedback of its own.
 
@@ -819,10 +830,14 @@ Each event is a Dictionary with `"kind"` and the fields below. Commands add even
 | `&"fired"` | `cell: Vector2i` (the tower's cell), `tower: StringName` (the tower id), `spec: int` (-1 below tier 3), `targets: Array[int]`, `at: Array[Vector2i]` (each target's position when hit) |
 | `&"popped"` | `id: int` (a bubble popped) |
 | `&"defeated"` | `id: int`, `enemy: StringName`, `pos: Vector2i`, `gold: int` |
-| `&"healed"` | `id: int` (the Mender), `ids: Array[int]` |
+| `&"released"` | `id: int` and `source: StringName` (the releaser, which may already be gone from the state), `enemy: StringName` (the creature released), `count: int`, `pos: Vector2i` (where the release begins). Sent when any release begins: a Puffball's split when it is defeated, each batch of a boss's summons, and a boss's health release (Old Tusk's). Each creature released later gets its own `spawned`. |
+| `&"healed"` | `id: int` (the Mender), `ids: Array[int]` (only the creatures that gained health; no event when none did) |
+| `&"sped_up"` | `id: int`, `speed: int` (the new speed in hundredths of a tile a second: its data speed plus its speed ups, before slows and `speed_pct`, the same as `base_speed` in `enemy_numbers`) |
 | `&"leaked"` | `id: int`, `enemy: StringName`, `lives: int` |
+| `&"break_started"` | `id: int` (the breaker), `cell: Vector2i` (the gate's own cell, as in `gate_broken`). Sent when the breaker reaches the center of the cell before that gate and starts to break it. |
 | `&"gate_broken"` | `cell: Vector2i` |
-| `&"wave_cleared"` | `wave: int`, `gold: int` (the clear bonus, plus a risk card's reward for that wave) |
+| `&"wave_cleared"` | `wave: int`, `gold: int` (the clear bonus, plus a risk card's `reward_gold` for that wave) |
+| `&"interest"` | `gold: int` (the gold `interest` adds, 2.8). Sent just before `build_started`, only when more than 0. |
 | `&"build_started"` | `wave: int` (the next wave) |
 | `&"built"`, `&"upgraded"`, `&"sold"` | `cell: Vector2i`, `tower: StringName`, `tier: int`, `spec: int`, `gold: int` |
 | `&"gate_placed"`, `&"gate_removed"` | `cell: Vector2i` (a move is a removal, then a placement) |
@@ -1393,26 +1408,30 @@ Ceilings are far above anything a real player reaches. Counters saturate at thei
 
 `Battle.to_data()` and `Battle.from_data()` belong to the sim-engineer, and the shape inside is internal to src/sim/. The rules:
 
-- It holds the level (`LevelData.to_data()`), so an assembled run map or a later data change never breaks a saved game. It also holds `relaxed`, the kept effects, the waiting risk card, and every field that affects a later tick: the tick, the phase, the waves started and running, the tick each started wave began, gold, lives, gates, towers with their purchases, creatures with every timer, queued releases (`Battle.Release`), the next id, and what the star rules need.
-- Rebuilt on load, not saved: positions between ticks, the distance fields, the folded effects, the spawn counters (worked out from each wave's start tick), and each creature's armor, speed, lives and bounty (worked out again from its type, its wave's strength and the effects).
+- It holds the level (`LevelData.to_data()`), so an assembled run map or a later data change never breaks a saved game. It also holds `relaxed`, the Twist's effects (`twist`), the kept card effects (`effects`), the waiting risk card (`risk`), and every field that affects a later tick: the tick, the phase, the waves started and running, the tick each started wave began, the risk card each running wave took (`wave_risk`), whether gates stand open (`gates_open`), gold, lives, the gates and how many gates cards added (`gates_added`), towers with their purchases, creatures with every timer, `heal_at` (the tick of the next heal) among them, plus `ups` (the speed ups taken) and `released` (whether the health release has begun), queued releases (`Battle.Release`), the next id, and what the star rules need.
+- Rebuilt on load, not saved: positions between ticks, the distance fields, the folded effects, the spawn counters (worked out from each wave's start tick), and each creature's armor, speed, lives and bounty (worked out again from its type, its speed ups, its wave's strength and the effects).
 - `from_data` checks everything, all or nothing:
 
 | Field | Rule |
 |---|---|
 | level | passes `LevelData.check` |
-| effects | at most 64 kept and 8 waiting, each passing `Modifiers.check` for its use (phase 7; both empty until then) |
+| twist | at most 8 effects, passing `Modifiers.check` for `twist`; fixed gates on sockets of the level |
+| effects | at most 64 kept card effects, passing `Modifiers.check` for `card`, none of them instant |
+| risk | the waiting risk card: at most 8 effects, passing `Modifiers.check` for `risk`, every `add_group` entrance on the map |
+| wave_risk | at most one entry per running wave, in start order: the risk card that wave took, 1 to 8 effects checked the same way as `risk` |
 | tick | 0 to 1,000,000,000 |
 | phase | `build` or `wave` |
 | waves | waves started 0 to the level's wave count; running waves in start order, at most `max_waves_running`; each start tick 0 to `tick` and not before the one before it |
 | gold | 0 to 1,000,000,000 |
 | lives | 1 to 1,000,000 |
-| gates | each on a socket, at most one per socket, at most `max_gates` placed and in hand together; in `build` the closed set does not seal |
-| towers | at most the spot count; each on its own spot; a known type; tier 1 to 3; spec matching the tier and inside any cap |
-| creatures | at most 4,000; ids 0 to 2^31, unique and below the next id; known types; health 1 to max health, max health 1 to 1,000,000,000; walkers on joined road cells with progress 0 to UNIT; flyers inside the map; every timer inside its data range |
+| gates | each on a socket, at most one per socket; `gates_added` 0 to `max_gates`; placed and in hand add up to the gates given (the level's, or the Twist's `set_gates`) plus `gates_added`, at most `max_gates` in all; every fixed cell of the Twist holds a fixed gate, and any other gate is fixed only under `gates_stay`; a gate is broken only in `wave`; in `build` the closed set does not seal |
+| gates_open | false in `build` |
+| towers | at most the spot count; each on its own spot; a tower the battle offers (the level's, plus `add_tower`, less `ban_tower`); tier 1 to 3; spec matching the tier and inside any cap |
+| creatures | at most 4,000; ids 0 to 2^31, unique and below the next id; known types; health 1 to max health, max health 1 to 1,000,000,000; walkers on joined road cells with progress 0 to UNIT; flyers inside the map; every timer inside its data range, `heal_at` included; `ups` at most the creature's number of speed up steps; `released` true only for a creature with a health release |
 | releases | at most 1,000; each a known creature of a running wave, 1 to 200 still to come, the next one due within one gap, starting as a creature would (walkers on joined road cells, flyers inside the map) |
 | every number | whole, finite and in range, then converted to int |
 
-`RunSession.from_data` (phase 7) checks the run the same way, all or nothing: exact keys and `format` 1; a seed from 0 to 2^32 - 1; `day` either `""` or a day key whose `daily_seed()` is the seed, and then a battle that is not Relaxed; a pool of 1 to 256 known card ids with no repeats; picks of 0 to 17 card ids from the pool, a `once` card at most once, and no more picks than the battle has cleared waves among waves 1 to 17. `SavedGame.from_data` also checks that mode `daily` has a day and mode `run` has none.
+`RunSession.from_data` (phase 7) checks the run the same way, all or nothing: exact keys and `format` 1; a seed from 0 to 2^32 - 1; `day` either `""` or a day key whose `daily_seed()` is the seed, and then a battle that is not Relaxed; a pool of 1 to 256 known card ids with no repeats; picks of 0 to 17 card ids from the pool, a `once` card at most once, and no more picks than the battle has cleared waves among waves 1 to 17. `SavedGame.from_data` already checks that a campaign level's battle holds that level's Twist effects when `twist` is true and none otherwise, with no kept card effects and no waiting risk card; that a run or daily battle holds no Twist; and that a daily battle is not Relaxed. From S2 it also checks that mode `daily` has a day and mode `run` has none.
 
 ## 6. Resume after the app is killed (brief 3.10)
 
@@ -1714,15 +1733,15 @@ Ground rules for the whole phase:
 
 - **The region loop.** For regions 2, 3 and 4 in turn: the level designer builds the region's six levels and their Twists with tests/levels/ passing; the balance analyst runs a pass; the game designer tunes from it (RULES.md and data/stats/ in one step, and a list of level changes); the level designer applies the level changes. A region's levels may be built while the region before it is being tuned, but a region's pass starts only after that tuning has landed, so every pass measures the current numbers.
 - **Every balance pass** covers every level and Twist built so far, because tuning can move older levels. Its dated report in docs/balance/, with seeds, gives for each level: a Normal win by the plain mixed recipe (section 12, question 2), a Relaxed win, all three stars in one Normal win, no single tower type earning three stars alone, random strategies earning three stars in under 10% of plays, 5 to 10 minutes at 1x (RULES 12.5), the peak live creatures and the ms per tick. For each Twist: a Normal win by some strategy (RULES 13). Across the campaign: every tower type in some three-star win (brief section 11). And the same seed playing the same.
-- **No new audio.** Every event kind and every tower and path already has a sound (3.8), and neither RULES.md nor docs/art/THEME.md asks for region music or region sounds. One exception: S1's work in progress emits event kinds that 3.1 does not list yet (`released`, `break_started`, `sped_up`, `interest`). Once the sim engineer reports them and the DM adds them to 3.1, the audio engineer gives each one a sound or a deliberate silence (tests/audio/ checks every kind in 3.1), as a short task in the first slot that frees after S1, and V1 draws the ones it needs.
+- **No new audio** beyond the four new event kinds. Every tower and path already has a sound (3.8), and neither RULES.md nor docs/art/THEME.md asks for region music or region sounds. S1 added four event kinds, now in 3.1: `released`, `break_started`, `sped_up` and `interest`. The audio engineer owes each one a sound or a deliberate silence, as a short task in the first slot that frees. tests/audio/ checks every kind in 3.1, so its list of event kinds gains these four. V1 draws the ones it needs.
 - **No new art** except the OPEN gate look (3.9). Every tower, path, creature and boss already has a silhouette, checked by tests/theme/.
 - **DM checks on the Fold5,** both screens: region 2 after wave 2, including a fold mid-wave; a run and a daily after wave 4, including killing the app mid-wave and with a draft open, then Continue; everything at the end (the list below).
 
-**Wave 1**, now. The sim engineer is already at work. The second slot runs two short tasks one after the other.
+**Wave 1**, now. S1 is done. The second slot runs two short tasks one after the other.
 
 | Agent | Builds | Depends on | Done when |
 |---|---|---|---|
-| sim-engineer (running) | **S1**: src/sim/ for phase 7. Every tower (Bell slows, Longbow armor piercing, Firework air splash, Bakery boosts), creature rule (bubbles, Puffball splits, heals, gate breakers), boss (Ironshell's speed ups, Moon Moth's flyer summons, Old Tusk's breaks and release), broken gates and mending, every Twist and card effect of 2.8 (Twists in `Battle.create`, cards and risk cards in `add_effects`), and save and restore for all of it. The DM adds this revision's sim items: `stars_possible()` and `loses_star3()` (3.1), and 2.8 as revised on 2026-10-24: which creatures each effect reaches, `add_group`'s order, `after_last` and entrance, the risk reward inside `wave_cleared` gold, the early call bonus from `bounty_pct` bounties, interest after the clear bonus, the floors, the `break_ms` check, and Bubble Night once the game designer answers section 12 question 1 (a). | 2.6 to 2.8, 3.1, 4, 5.6 | tests/sim/: every rule and effect; both queries for every `star3` kind, including a tower sold after going above a tier cap; snapshot, restore and continue equal to an uninterrupted run on battles with every new tower, creature, boss and effect |
+| sim-engineer (done 2026-10-24) | **S1**: src/sim/ for phase 7. Every tower (Bell slows, Longbow armor piercing, Firework air splash, Bakery boosts), creature rule (bubbles, Puffball splits, heals, gate breakers), boss (Ironshell's speed ups, Moon Moth's flyer summons, Old Tusk's breaks and release), broken gates and mending, every Twist and card effect of 2.8 (Twists in `Battle.create`, cards and risk cards in `add_effects`), and save and restore for all of it. The DM adds this revision's sim items: `stars_possible()` and `loses_star3()` (3.1), and 2.8 as revised on 2026-10-24: which creatures each effect reaches, `add_group`'s order, `after_last` and entrance, the risk reward inside `wave_cleared` gold, the early call bonus from `bounty_pct` bounties, interest after the clear bonus, the floors, the `break_ms` check, and Bubble Night once the game designer answers section 12 question 1 (a). Follow-up: the 0 to 1,000 check in 2.8 on `add_gold`, `add_lives`, `reward_gold` and the `interest` max, added after S1. | 2.6 to 2.8, 3.1, 4, 5.6 | tests/sim/: every rule and effect; both queries for every `star3` kind, including a tower sold after going above a tier cap; snapshot, restore and continue equal to an uninterrupted run on battles with every new tower, creature, boss and effect |
 | game-designer, then art-director | **G1**: answers section 12's questions 1 and 2, and brings RULES.md in line with this revision. Then **A1**: `MapArt.Gate.OPEN` (3.9). | this contract | G1: RULES.md updated, the DM checks it against this contract. A1: tests/theme/ with the OPEN look, and a picture of all six gate looks |
 | roguelite-engineer | **R1**: src/run/ except RunSession: RunSeeds, RunData (every load check of 2.9 to 2.11), MapAssembler, Daily; data/runs/run.json and data/cards/cards.json (2.10, 2.11); tests/run/ with fixture segments and packs | 2.9 to 2.11, 3.4; LevelData and `Modifiers.check` (built) | tests/run/: good and hostile fixtures for every check; derived seeds pinned; the boss, segment and pack picks pinned for fixed seeds; the same seed gives an equal level; the daily seed from a date; `is_better`, `streak_after` and `shown_streak`; the real run.json and cards.json pass `RunData.check` |
 | level-designer | **L1**: the Twists of region 1 (2.8 table); region 2, r2_l1 to r2_l6 with their Twists (RULES 12, 13), added to campaign.json; the hints of 1-2 and 1-3 (FUN_REVIEW_R1 items 6 and 10) | 2.3 to 2.8, RULES 12 and 13 | `GameData` loads every file with no problems, and the data checks in tests/levels/ pass. The checks that play levels run in wave 2. |

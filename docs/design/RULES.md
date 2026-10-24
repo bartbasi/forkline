@@ -8,7 +8,19 @@ Clarifications, 2026-10-23, after the sim was built. No number changed. Settled:
 
 Region 1 tuning, 2026-10-24, after the first balance report. The plan and its evidence are in docs/design/TUNING_R1.md. Changed numbers: Pumpkin Catapult tier 1 range 3.0 to 2.5, tier 2 splash 0.75 to 1.25, Prize Pumpkin splash 1.25 to 1.5, Jam Pot splash 1.0 to 1.25 (5.4); Pip health 12 to 21 and bounty 2 to 3 (6.1). Changed text: the Pip's card line (6.6). Changed plan: region 1 waves, star 3 rules and level 1-6's strength (12.3, 12.4). New: difficulty targets in place of the old wave size guide (12.5). The 5.10 tables are recomputed.
 
-Names follow docs/art/NAMES.md as the game designer reviewed it on 2026-10-23. Bart still has to see the final name list. The tables in 5.1, 5.3 to 5.8, 6.1, 6.3 and 12.1 give each tower, tier 3 path, creature, boss and region its id from that list, so the data files have one source. In each tower's tier table, the first tier 3 row is spec 0 and the second is spec 1.
+Phase 7 alignment, 2026-10-24 (task G1), after hard stop B and the contract revision of that day. No number changed, here or in data/stats/.
+
+- From Bart's hard stop B approvals: a saved game resumes at 1x (4.8). A third star capped at tier 1 reads "Upgrade no towers." (10.3, 12.4). Level 1-5 is "Wings at Dusk" (12.3). The approved fun review items that touch the rules: star lines in Pause and warnings before a tap that loses star 3 (10.6), new hints on 1-2 and 1-3 with 1-3 now highlighting a spot (9.6, 12.4), and a line on the loss panel that points to Relaxed (11).
+- Approved wording changed to match the contract, for the DM to tell Bart:
+  - 9.1: in portrait the wave preview opens in a build phase only when it fits under the map. Otherwise the build phase starts with it folded into its one line strip, which still shows each group's creature, count and entrance. Landscape is unchanged.
+  - 14.4: no risk card once wave 17 has started. It was "none in the draft after wave 17", which let a risk card reach the boss wave after an early call of wave 17.
+  - 3.1 and 14.2: the bottom row of a 13 row map is scenery only.
+  - 9.2: a creature met on the map before its card has opened pauses the game and opens its card.
+  - 14.6: Piggy Bank pays after the clear bonus, on all the gold held. An unlocked card joins from the next run on.
+- Made precise, with nothing approved changed: Bubble Night's bubbles come back as a Bubbler's do (13). What Twist and risk card effects reach, and that count changes never touch Puffs or added groups (6.4, 13, 14.5). A tower fires at most once a tick (5.2). A Puffball's first Puff comes on the next tick (6.2, 8.1). The largest wave counts Puffs but not boss summons, which the bots measure (12.5). Route lines and the preview show a waiting risk card (7.5, 9.1). The call button highlight (9.6). Targets per shot in the tower panel (9.3). "Reach wave N" (14.6). Risk rewards, added groups and card floors (14.5, 14.6). Segments, packs and draft details (14.2 to 14.4). The daily's date check (15).
+- New: a card text for every Twist (13), a guide of 4 groups or fewer a wave (12.5), and the balance checks with the plain mixed recipe for every region (12.6).
+
+Names follow docs/art/NAMES.md, which Bart approved at hard stop B. The tables in 5.1, 5.3 to 5.8, 6.1, 6.3 and 12.1 give each tower, tier 3 path, creature, boss and region its id from that list, so the data files have one source. In each tower's tier table, the first tier 3 row is spec 0 and the second is spec 1.
 
 This file holds every game rule and number for version 1. The sim engineer, level designer, roguelite engineer, balance analyst and UI engineer build from it. If something here is unclear or seems to conflict with docs/ARCHITECTURE.md, ask the DM. Do not guess.
 
@@ -95,6 +107,7 @@ Rounding:
 - South means one row down, north one row up, west one column left, east one column right.
 - Why 7 wide: the Fold5 cover screen is 344 dp wide. Seven tiles keep each tile at about 49 dp there, so every build spot and gate socket is a 48 dp touch target (contract section 7.4).
 - Heights: region 1 maps are 8 to 11 rows, so the first maps are small and easy to read. Regions 2 to 4 use 10 to 13 rows. Run maps are 13 rows (14.2).
+- On a 13 row map the bottom row is scenery only: no road, build spot, gate socket, entrance or base. On the Fold5 cover screen the folded wave preview covers part of that row (9.1). Maps of 8 to 12 rows have no such rule.
 - Every range and speed in this file assumes a 7-wide grid, and all of them are in tiles.
 - The landscape layout shows the same grid. Grid directions never change with the screen.
 
@@ -224,6 +237,7 @@ All prices are multiples of 10, so 70% is always a whole number.
 
 - Speeds are 1x, 2x and 3x. They change only how fast sim time passes. The same inputs give the same results at every speed.
 - Every level and run starts at 1x. The chosen speed then stays until the player changes it.
+- A saved game also resumes at 1x, from the Continue card or any other way back in (Bart, hard stop B).
 
 ### 4.9 Calling the next wave early
 
@@ -260,6 +274,7 @@ All prices are multiples of 10, so 70% is always a whole number.
 - A creature is in range when the distance from the tower's center to the creature's center is no more than the range.
 - An attack hits on the tick it fires. Attacks never miss. Projectiles are only drawn. The render may hold a hit's flash or puff until the drawn projectile arrives, but the sim never waits.
 - Every attacking tower has a reload timer. Each tick the timer goes down by the tick length times the tower's rate multiplier (1, or more with a Bakery boost). When the timer is 0 or less and a target is in range, the tower fires and adds its reload time to the timer, keeping any leftover. When the timer is 0 or less and no target is in range, the timer is set to 0 and waits there, so a tower never saves up shots. This keeps every rate exact at any tick length.
+- A tower fires at most once a tick. If a shot still leaves the timer below 0, the timer is set to 0. That can only happen when a boost takes more off the timer in one tick than the whole reload time, and no number in this file allows it: the shortest reload is 0.2 s, and the biggest boost takes 0.07 s off in one tick. So a tower never banks shots, and between ticks its timer is always from 0 up to its reload time.
 - Upgrading keeps the reload timer running, but never above the new reload time. If more is left on the timer than the new reload time, the timer drops to the new reload time. Otherwise it is unchanged. So an upgraded tower never waits longer for its next shot than its new numbers say, and an upgrade never gives a free shot.
 - Example: a tier 2 Pumpkin Catapult has 1.8 s left on its timer. Upgraded to a Jam Pot (reload 1.5 s), its timer drops to 1.5 s. Upgraded to a Prize Pumpkin (reload 2.5 s) instead, it keeps 1.8 s.
 - A run card that changes reload times (Steady Aim, Heavy Pumpkins, Long Fuse) follows the same rule for every tower it changes, at the moment it is taken.
@@ -475,7 +490,7 @@ Bubble (Bubbler):
 
 Splits (Puffball):
 
-- When a Puffball is defeated, it releases 3 Puffs at the spot where it fell: one at once, one 0.3 s later and one 0.6 s later.
+- When a Puffball is defeated, it releases 3 Puffs at the spot where it fell. The first appears in the spawn step of the next tick (8.1), the second 0.3 s after the first and the third 0.6 s after the first.
 - Puffs belong to the Puffball's wave and use its strength. They follow the shortest open route from that spot.
 - A Puffball that reaches the base costs 2 lives and releases nothing.
 
@@ -523,6 +538,7 @@ Exact boss rules:
 - Campaign: each level has a strength (12.3). By default every wave in the level uses it. The level designer may give single waves their own strength.
 - Runs: wave w has strength 100 + 10 times (w minus 1) (14.1).
 - Puffs and boss summons use the strength of their wave.
+- Twists (13) and risk cards (14.5) change creatures after strength, and each step rounds by its own rule. With Thick Hides, a Scamp at strength 150 has 60 health, then 90.
 
 Example: a Shellback at strength 150 has 135 health, armor 4, speed 0.7, and pays 18 gold.
 
@@ -596,6 +612,7 @@ Players never need the tie break. The route line (7.5) always shows the result.
 - While the player drags a gate over a socket, the lines show the result as if the gate were dropped there. Over a socket that would be refused, the crossed-out gate icon shows instead.
 - If the next wave has a Gatecrasher or Old Tusk, its route shows as a dashed line, with a crack icon on each closed gate it would break.
 - If the next wave has flyers, a dotted straight line runs from each entrance they use to the base.
+- "The next wave" is the wave as it will really come, with the level's Twist and any waiting risk card. With Gateless Night waiting, the lines show every gate open (14.5).
 - The lines are hidden during wave phases. The creatures show the way.
 
 ### 7.6 Locked during waves, and broken gates
@@ -633,7 +650,7 @@ The sim runs on a fixed timestep (docs/ARCHITECTURE.md). Each tick runs these st
 3. Bells. Every creature of the right kind in a Bell's ring gets that Bell's slow (8.5).
 4. Movement. Creatures move. A creature that reaches the base is removed and costs its lives. If lives are 0 or less, the game is lost at once.
 5. Towers. Attacking towers act in spot order, row by row from the top (3.4). Each runs down its reload timer, picks targets, fires, and its hits land at once (8.3, 8.4). A creature at 0 health or less is defeated at once and cannot be targeted again.
-6. Defeats and boss events. Bounties are paid. Puffballs queue their Puffs. Boss health events happen: Ironshell's speed rises from the next tick, Old Tusk's moths appear on the next tick.
+6. Defeats and boss events. Bounties are paid. Puffballs queue their Puffs, and the first appears on the next tick. Boss health events happen: Ironshell's speed rises from the next tick, Old Tusk's moths appear on the next tick.
 7. Wave checks. A wave runs from the moment it starts until it is cleared. A running wave with nothing left on the map and nothing left to spawn is cleared and pays its clear bonus. Then, if no wave is still running, one of two things happens: if every wave has started and lives are above 0, the game is won (4.1); if not, the build phase begins. While any wave is still running, neither happens, even if the final wave is already cleared.
 
 Combat never uses randomness. The campaign uses no randomness at all. Runs use seeded randomness only to build the run and draw cards (14).
@@ -691,7 +708,7 @@ For each creature a hit reaches:
 | Bakery rate boosts | No | The best one counts. |
 | Bakery damage bonuses | No | The best one counts. |
 | A rate boost and a damage bonus from two Bakeries | Yes | One of each kind can apply together. |
-| Run card bonuses | Yes | They change the tower's own numbers. Bakery bonuses come on top. |
+| Run card bonuses | Yes | They change the tower's own numbers: added amounts first, then percents (14.6). Bakery bonuses come on top. |
 | Splash | Yes | Every creature in the radius takes the full hit. |
 | Several towers on one creature | Yes | Every hit is separate. |
 | Bubbles | One per creature | Blocks one hit, back 2.0 s after it pops. |
@@ -701,25 +718,31 @@ For each creature a hit reaches:
 
 ### 9.1 Wave preview
 
-- The preview of the next wave is always on screen. It is open during build phases and folded into a strip during waves.
-- It lists each group in spawn order: the creature's silhouette and name, how many, and the entrance letter.
-- A creature the player has never seen has a "New" tag.
+- The preview of the next wave is always on screen, open or folded.
+- Open, it lists each group in spawn order: the creature's silhouette and name, how many, and the entrance letter.
+- Folded, it is a strip one line tall: each group's silhouette, how many and the entrance letter, in spawn order. When the groups do not fit on that line, the strip shows as many as fit and a "+N" chip for the rest.
+- During waves the preview is folded.
+- In landscape it is always open in a build phase. In portrait a build phase starts with it open only when it fits in the room under the map. Otherwise the build phase starts with it folded, and the strip still shows what is coming, how many and from which entrance. On the Fold5 cover screen that happens on every 12 and 13 row map, and on shorter maps for some big or boss waves. Phones with shorter screens start it folded more often.
+- One tap on the strip opens the preview over the map, and one tap on its header folds it again. That choice holds until the next build phase or the next change of layout.
+- A creature the player has never seen has a "New" tag, in the open list and in the strip, until the wave that brings it starts.
 - A boss row adds its one-line ability (6.6).
 - Tapping a row opens that creature's card with its numbers for that wave: health, heal amount and bounty at the wave's strength.
-- In runs, a waiting risk card shows as a row at the top with its effect.
+- The preview shows the wave as it will really come, with the level's Twist and any waiting risk card.
+- In runs, a waiting risk card shows first: as a row at the top of the open list with its effect, and as a chip at the start of the strip. A group that a risk card adds comes after the wave's own groups.
 - During build phases the map also shows the route lines for the next wave (7.5).
 
 ### 9.2 Info cards
 
 - The first time a creature appears in a preview, its card opens by itself in that build phase: silhouette, name, its one line (6.6) and its numbers at that wave's strength.
-- The first time a tower is available, its card opens at the start of that level (5.9).
-- Each card opens by itself once per player. That is saved. Cards can be reopened from the preview, the build menu and the Info screen.
+- If a creature the player has never seen reaches the map before its card has opened, the game pauses and its card opens. That happens when its wave was called early, and for a creature that a Puffball or a boss releases.
+- The first time a tower is available, its card opens at the start of that level (5.9). In runs, it opens when the player picks the card that adds the tower.
+- Each card opens by itself once per player. It counts as seen when the player closes it, and that is saved. Cards can be reopened from the preview, the build menu and the Info screen.
 
 ### 9.3 Tapping a tower
 
 | Tower kind | Shows |
 |---|---|
-| Attacking towers | Name, tier and path. Damage per hit, with any Bakery bonus shown as "+2". Rate (attacks per second, one decimal, boosts included). Range in tiles. What it hits: walkers, flyers or both. Special: splash radius, ignores armor, 3 targets, or slow percent and time. Bakery boost received. Targeting mode, which can be changed here. Total spent. Sell value right now. |
+| Attacking towers | Name, tier and path. Damage per hit, with any Bakery bonus shown as "+2". Rate (attacks per second, one decimal, boosts included). Range in tiles. What it hits: walkers, flyers or both. Special: splash radius, ignores armor, targets per shot when more than 1, or slow percent and time. Bakery boost received. Targeting mode, which can be changed here. Total spent. Sell value right now. |
 | Lullaby Bell | Name, tier and path. Slow percent. Range. Linger 1.0 s. Affects walkers, or walkers and flyers. Total spent. Sell value. |
 | Bakery | Name, tier and path. Rate boost and damage bonus. Reach. How many towers it boosts right now. Total spent. Sell value. |
 
@@ -735,8 +758,9 @@ Name. Health now and max. Armor. Speed now and base, in tiles per second to two 
 
 ### 9.6 Hints and highlights
 
-- Early levels, and any level that brings something new, have one one-line hint and one highlighted thing on the map: a spot, a socket, a tower or a button (12.4).
-- The hint shows at the start of the level the first time it is played, and always on the level card.
+- Early levels, and any level that brings something new, have one one-line hint and one highlighted thing: a spot or a socket on the map, or the call button (12.4).
+- The hint shows at the start of the level the first time it is played, and always on the level card. It closes when the player taps it or the first wave starts.
+- When the highlight is the call button (level 2-1), the button wears a pulsing ring whenever it offers an early call, until the player first calls a wave early. It never glows in a build phase, where the same button starts the next wave.
 - There is no other tutorial text. The Info screen holds the full rules from this file.
 
 ### 9.7 Signals that never rely on color
@@ -751,7 +775,7 @@ Name. Health now and max. Armor. Speed now and base, in tiles per second to two 
 
 ### 10.1 Star 1
 
-Win the level, on Normal or Relaxed.
+Win the level, on Normal or Relaxed. Card text: "Win the level."
 
 ### 10.2 Star 2
 
@@ -767,7 +791,7 @@ Win on Normal while meeting the level's challenge. Each level uses one of these 
 | Tower limit | Have at most 4 towers. | The number of towers on the map was never above N. Bells and Bakeries count. |
 | Tower ban | Build no Sling Posts. | That tower was never built in the level. |
 | Gate limit | Use at most 1 gate. Or: Use no gates. | At the start of every wave, at most N gates were placed. |
-| Tier cap | No tower above tier 2. | No tower reached tier 3 in the level. |
+| Tier cap | Upgrade no towers. Or, with a cap of tier 2: No tower above tier 2. | No tower went above tier N (1 or 2) in the level, even one sold later. A cap of tier 1 always reads "Upgrade no towers." (Bart, hard stop B) |
 | Early calls | Call 4 waves early. | At least N waves were called early (4.9). |
 | Kinds limit | Use at most 3 kinds of tower. | At most N different tower types were built in the level. |
 | Gates whole | Use every gate and keep them whole. | At the start of every wave all the level's gates were placed, and no gate was broken in the level. |
@@ -785,6 +809,23 @@ Rule for star 3 challenges: a challenge must always leave at least two kinds of 
 
 The level card shows the level name, number of waves, number of gates, the three star lines, which stars are earned, the hint, the Normal or Relaxed choice, and the Twist once it is unlocked.
 
+### 10.6 Stars during play
+
+Only in a campaign level that is not a Twist. Twists, runs and the daily have no stars, so they show no star lines and no warnings.
+
+- The Pause menu shows the level's three star lines, with the same sentences as the level card. A resumed game opens on this menu too.
+- Each line ends with one word:
+  - "Earned": the player already has this star for this level.
+  - "Not yet": a win from this moment can still earn it.
+  - "Lost": this game can no longer earn it. The line is also struck through, so it never relies on color. Star 2 is lost once lives fall below 15. Star 3 is lost once its rule is broken (10.3), or for "Call N waves early" once too few waves are left to call.
+  - "Normal only": lines 2 and 3 on Relaxed, unless already earned. These lines are not struck through, because nothing was lost.
+- Warnings. On Normal, while star 3 is not yet earned for the level and this game can still earn it, the game warns before a tap that would lose it. The warning is an empty star with the words "Loses the third star." It shows:
+  - in the build menu, on a tower that would break the rule: one tower over the limit, a banned tower, or a kind of tower over the limit;
+  - on an upgrade that would go above the tier cap.
+  The player can still go ahead.
+- Gates. When placing a gate puts more gates on the map than the rule allows, the gate message says "Start a wave with this gate and the third star is lost." Placing it loses nothing: the star is lost only if a wave starts with too many gates placed, so the player can still take one back.
+- There is no warning on Relaxed, once star 3 is earned, or once it is lost.
+
 ## 11. Relaxed difficulty
 
 Relaxed gives more lives and more starting gold. Nothing else changes: same maps, waves, creatures, towers, prices, bounties and rules.
@@ -799,6 +840,7 @@ Relaxed gives more lives and more starting gold. Nothing else changes: same maps
 - Relaxed wins earn star 1 only (10.4). Star 1 is all that progress needs (16).
 - Twists: the Twist's change applies first, then Relaxed. Five Lives gives 5 lives on Normal and 10 on Relaxed. Thin Purse halves the gold first, then Relaxed adds half again.
 - The daily challenge is always Normal.
+- After a Normal loss of a campaign level that is not a Twist, or of a normal run, the loss panel adds one line: "Stuck? Relaxed gives 40 lives and more gold." The number comes from the rules data.
 
 ## 12. Campaign
 
@@ -857,7 +899,7 @@ Region 1, Lantern Hill:
 | 1-2 | The Fork | A gate closes a road. Creatures take the shortest open road. | Gates | none | 1 (2) | 8 | 100 | 250 | 380 |
 | 1-3 | Tall Posts | Upgrade towers when spots run out. | none | none | 1 (2) | 9 | 100 | 250 | 380 |
 | 1-4 | Pumpkin Patch | Splash beats crowds. | Pip | 3 | 1 (3) | 9 | 100 | 300 | 450 |
-| 1-5 | Night Wings | Flyers ignore roads and gates. | Flitter | 3 | 1 (3) | 10 | 100 | 300 | 450 |
+| 1-5 | Wings at Dusk | Flyers ignore roads and gates. | Flitter | 3 | 1 (3) | 10 | 100 | 300 | 450 |
 | 1-6 | Grumblesack | Tier 3 paths, then a boss. | Grumblesack | 10 | 1 (3) | 10 | 100 | 350 | 530 |
 
 Region 1 waves set their own strength where TUNING_R1.md lists one: tougher Scamp waves at 140 to 180, and the 1-6 boss wave at 50, so Grumblesack has 1000 health there.
@@ -903,10 +945,10 @@ The number in each star 3 rule is a starting target. The level designer confirms
 
 | Level | Star 3 | Hint | Highlight |
 |---|---|---|---|
-| 1-1 | No tower above tier 1. | Tap a glowing spot to build a tower by the road. | The best first build spot |
-| 1-2 | No tower above tier 1. | Drop the gate on a road. The line shows their new way. | The socket that makes the long road |
-| 1-3 | Have at most 2 towers. | Tap a tower to upgrade it. Spots are few, so make them count. | The tower that covers the most road |
-| 1-4 | No tower above tier 1. | Pips come in crowds. Catapults hit the whole crowd. | The spot at the busiest bend |
+| 1-1 | Upgrade no towers. | Tap a glowing spot to build a tower by the road. | The best first build spot |
+| 1-2 | Upgrade no towers. | Tap the glowing road to drop your gate there. The line shows their new way. | The socket that makes the long road |
+| 1-3 | Have at most 2 towers. | Build on the glow, then tap your tower to upgrade it. | The spot that sees the most road |
+| 1-4 | Upgrade no towers. | Pips come in crowds. Catapults hit the whole crowd. | The spot at the busiest bend |
 | 1-5 | No tower above tier 2. | Flitters fly over roads and gates. Only Sling Posts hit them. | A spot under the flight line |
 | 1-6 | Use no gates. | At tier 3, a tower picks one of two paths for good. | The spot beside the boss's longest stretch |
 | 2-1 | Call 6 waves early. | Doing well? Call the next wave early for bonus gold. | The call button |
@@ -962,13 +1004,60 @@ Region 1's star 3 rules were set with the bots (TUNING_R1.md): a rule that limit
 | 1-5 | 75% |
 | 1-6 | 70% |
 
-  A thoughtful player reads the hint and the wave preview, builds both towers where they see the most road, and upgrades as gold allows. The bots cannot play like that, so they check three things instead. First, the plain mixed recipe (Sling Posts and Catapults in turn, on the spots that see the most road first, each upgraded once, with the best gate) wins on Normal: with 15 lives or more on 1-1 to 1-5, and at all on 1-6. Second, it wins on Relaxed on every level. Third, random strategies earn all three stars in under 10% of plays. Random strategies pick their tower mix by chance and never buy more than their list, so their win rate is a floor for comparing levels, not a target. Bart's playtest at hard stop B is the real check. Later regions: aim for about 85% on each region's first level, falling to about 65% on its boss level.
+  A thoughtful player reads the hint and the wave preview, builds the towers the waves call for where they see the most road, and upgrades as gold allows. The bots cannot play like that, so they check what they can instead (12.6): the plain mixed recipe must win, and random strategies must rarely earn all three stars. Random strategies pick their tower mix by chance and never buy more than their list, so their win rate is a floor for comparing levels, not a target. Bart's playtest at hard stop B was the real check for region 1. Later regions: aim for about 85% on each region's first level, falling to about 65% on its boss level.
 - Giving each tower its job. Spread-out Scamps, and tougher Scamps from waves at strength 140 to 180 spaced 1.6 to 2.0 s, are the Sling Post's job: they walk farther apart than a pumpkin splashes. Packs of Scamps and Pip crowds are the Catapult's job. Flitters need Sling Posts. A Pip crowd and a Flitter flock arriving together is the hardest moment for one tower type alone.
-- Third stars that bite. A star 3 rule that limits spending (No tower above tier N, Have at most N towers) makes the mix matter. In region 1, rules that limit nothing about towers (Call N waves early, Lose no lives) did not stop one tower type from earning all three stars: it bought its way through. Use no gates works on 1-6 only because its late waves are hard.
-- Largest wave: one wave spawns at most 120 creatures in all, Puffs and summons included, and at most 2 waves run at once (4.9). That is the contract's performance ceiling. Aim for 80 or fewer per wave so the screen stays readable.
-- Map height: see 3.1. Ranges are long on a 7-wide map by design: a Longbow Loft in the middle column reaches both side lanes.
+- Third stars that bite. A star 3 rule that limits spending (Upgrade no towers, No tower above tier 2, Have at most N towers) makes the mix matter. In region 1, rules that limit nothing about towers (Call N waves early, Lose no lives) did not stop one tower type from earning all three stars: it bought its way through. Use no gates works on 1-6 only because its late waves are hard.
+- Largest wave: one wave spawns at most 120 creatures, counting 3 Puffs for every Puffball, with the level's Twist applied. Boss summons depend on how long the boss lives, so the bots report the real peak. At most 2 waves run at once (4.9). That is the contract's performance ceiling. Aim for 80 or fewer per wave so the screen stays readable.
+- Groups per wave. The folded preview strip is one line (9.1), with room for about 4 groups on the cover screen. Prefer 4 groups or fewer a wave, so even a folded preview shows the whole wave. This is a guide, not a limit.
+- Map height: see 3.1. On a 13 row map the bottom row is scenery only. Ranges are long on a 7-wide map by design: a Longbow Loft in the middle column reaches both side lanes.
 - Level length: 5 to 10 minutes at 1x, measured as the sum of the wave phases with no early calls, plus 15 s for each build phase.
-- Every level must pass the bots: it can be won, one Normal win can earn all three stars, no single tower type earns three stars alone, and across the campaign every tower type is part of some three-star win.
+- Every level must pass the balance checks in 12.6.
+
+### 12.6 Balance checks
+
+Each balance pass covers every campaign level and every Twist built so far, because tuning can move older levels. The report gives its seeds, so every number can be repeated.
+
+Towers by level, from 12.2. A Twist that bans a tower takes it out.
+
+| Levels | Attacking towers | Support towers |
+|---|---|---|
+| 1-1 to 2-1 | Sling Post, Pumpkin Catapult | none |
+| 2-2 | Sling Post, Pumpkin Catapult | Lullaby Bell |
+| 2-3 to 2-6 | Sling Post, Pumpkin Catapult, Longbow Loft | Lullaby Bell |
+| 3-1 to 3-6 | Sling Post, Pumpkin Catapult, Longbow Loft, Firework Tower | Lullaby Bell |
+| 4-1 to 4-6 | Sling Post, Pumpkin Catapult, Longbow Loft, Firework Tower | Lullaby Bell, Bakery |
+
+**The plain mixed recipe.** It stands in for a thoughtful player on a first try. It builds where the most road is, mixes the attacking towers so every job is covered, adds one of each support tower in a plain place, upgrades everything once before anything twice, and uses the best gates, which the hint points to. It has no randomness:
+
+1. Spot order. Rank the build spots by road seen: the number of road tiles whose centers are within 2.5 tiles of the spot's center. Most first. Ties go in cell order (3.4).
+2. Bakery, when the level offers it: on the spot with the most other build spots among its 8 neighbors. Ties go to the spot earlier in the spot order. If no spot has 2 or more neighboring spots, the recipe builds no Bakery.
+3. Lullaby Bell, when the level offers it: one Bell, on the third spot in the spot order, or on the fourth if the Bakery has the third.
+4. Every other spot gets an attacking tower, in spot order, taking the level's attacking towers in turn: Sling Post, Pumpkin Catapult, Longbow Loft, Firework Tower, then the Sling Post again. The Firework Tower is in the turn only on a level whose waves bring flyers: a flying creature, or a boss that flies or releases flyers.
+5. Buying. First build every tower in spot order, the Bakery last. Then upgrade every tower to tier 2 in the same order, the Bakery last. From region 2 on, then upgrade every attacking tower to tier 3 in spot order, each on its first path: Quickshot, Prize Pumpkin, Giant Bow, Star Bloom. Bells and Bakeries stay at tier 2. In region 1 the recipe stops at tier 2, because tier 3 is taught on 1-6.
+6. It buys only in build phases, strictly in this order, and waits when the next purchase costs more than the gold on hand. Every tower aims at First. It never calls a wave early, never sells and never moves a gate.
+7. Gates. It is played once for every placement of up to the level's number of gates that seals no entrance, the placement with no gates included, with the gates placed before wave 1. Its result is its best placement: a win with the most lives left, or if nothing wins, the loss that clears the most waves. The report also gives the result with no gates and with the worst placement.
+
+In region 1 this is exactly the recipe of the region 1 tuning (TUNING_R1.md): Sling Posts and Catapults in turn, most road first, each upgraded once, with the best gate.
+
+Every campaign level must pass these checks:
+
+| Check | Bar |
+|---|---|
+| The plain mixed recipe on Normal | Region 1: it keeps 15 lives or more on 1-1 to 1-5, and wins 1-6. Regions 2 to 4: it keeps 15 lives or more on each region's first two levels, and wins the other four. |
+| The plain mixed recipe on Relaxed | It wins with no gates placed, and with its best placement. |
+| All three stars | A search finds one Normal win that earns all three stars. |
+| No super tower | For each attacking tower the level offers, a search that may use only that tower plus the level's support towers finds no Normal win with all three stars. Bells and Bakeries never defeat anything alone, so they need no search of their own. Each search tries at least 2500 builds (TUNING_R1.md: on some levels the first single-tower win only turned up after 1000 to 2200). |
+| Random play | Random strategies earn all three stars in under 10% of plays. |
+| Length | 5 to 10 minutes at 1x (12.5). |
+| Size and speed | The report gives the largest wave, the most creatures on the map at once and the time per tick. |
+
+The "No super tower" check is stricter than the brief's words, "no single tower type earns three stars alone". One attacking tower type with Bells or Bakeries still has one tower doing every job, so it counts as that tower alone.
+
+Every Twist: some strategy wins it on Normal (13).
+
+Across the campaign: every tower type, the Lullaby Bell and the Bakery included, is part of some three-star win (brief section 11). The report also counts each tier 3 path in three-star wins. A path that never shows up is a flag for the game designer, not a failed check.
+
+And the same inputs always give the same result.
 
 ## 13. Twists
 
@@ -976,33 +1065,38 @@ Region 1's star 3 rules were set with the bots (TUNING_R1.md): a rule that limit
 - A Twist is the same map and the same waves with one rule changed.
 - Twists have no stars. A win on either difficulty marks the level's Twist as cleared.
 - The bots must confirm every Twist can be won on Normal.
+- A Twist that changes creatures changes every creature of every wave: bosses, Puffs and the creatures a boss releases included.
+- A Twist that changes how many creatures come changes only the groups in the level's wave data. A Puffball still releases 3 Puffs, and a boss releases its usual batches.
+- The level card shows the Twist's name and its card text from the table. The level designer copies both into the level file. Card text is at most 80 characters.
 
-| Level | Twist | The one rule changed |
-|---|---|---|
-| 1-1 | Thin Purse | Start with half the gold, rounded down to a multiple of 10. |
-| 1-2 | Stuck Gate | The level's gate starts placed on a socket the level sets. It cannot be moved or removed, and there is no other gate. |
-| 1-3 | No Upgrades | Towers stay at tier 1. |
-| 1-4 | No Catapults | The Pumpkin Catapult cannot be built. |
-| 1-5 | Twice the Wings | Every group of flyers has twice as many. |
-| 1-6 | Double Trouble | Every group in the final wave has twice as many. Two bosses. |
-| 2-1 | Hurry | Every creature moves 20% faster. |
-| 2-2 | No Bells | The Lullaby Bell cannot be built. |
-| 2-3 | Thick Shells | Every creature has 2 more armor. |
-| 2-4 | No Gates | The level gives 0 gates. |
-| 2-5 | Bubble Night | Every creature carries a bubble. |
-| 2-6 | Stuck Gates | Both of the level's gates start placed on sockets the level sets. They cannot be moved or removed, and there are no others. |
-| 3-1 | No Fireworks | The Firework Tower cannot be built. |
-| 3-2 | No Catapults | The Pumpkin Catapult cannot be built. |
-| 3-3 | One Gate | The level gives 1 gate instead of 3. |
-| 3-4 | Twice the Wings | Every group of flyers has twice as many. |
-| 3-5 | Tier 2 Cap | No tower can go above tier 2. |
-| 3-6 | Double Trouble | Every group in the final wave has twice as many. Two bosses. |
-| 4-1 | Thin Purse | Start with half the gold, rounded down to a multiple of 10. |
-| 4-2 | No Longbows | The Longbow Loft cannot be built. |
-| 4-3 | Quick Crashers | Gatecrashers break gates in 2.0 s instead of 4.0 s. |
-| 4-4 | No Selling | Towers cannot be sold. |
-| 4-5 | Five Lives | Start with 5 lives. |
-| 4-6 | Double Trouble | Every group in the final wave has twice as many. Two bosses. |
+| Level | Twist | The one rule changed | Card text |
+|---|---|---|---|
+| 1-1 | Thin Purse | Start with half the gold, rounded down to a multiple of 10. | Start with half the gold. |
+| 1-2 | Stuck Gate | The level's gate starts placed on a socket the level sets. It cannot be moved or removed, and there is no other gate. | Your gate is stuck on one socket for the whole level. |
+| 1-3 | No Upgrades | Towers stay at tier 1. | Towers stay at tier 1. |
+| 1-4 | No Catapults | The Pumpkin Catapult cannot be built. | Pumpkin Catapults cannot be built. |
+| 1-5 | Twice the Wings | Every group of flyers has twice as many. | Twice as many flyers in every wave. |
+| 1-6 | Double Trouble | Every group in the final wave has twice as many. Two bosses. | The final wave is twice as big, with two bosses. |
+| 2-1 | Hurry | Every creature moves 20% faster. | Every creature moves 20% faster. |
+| 2-2 | No Bells | The Lullaby Bell cannot be built. | Lullaby Bells cannot be built. |
+| 2-3 | Thick Shells | Every creature has 2 more armor. | Every creature has 2 more armor. |
+| 2-4 | No Gates | The level gives 0 gates. | You get no gates. |
+| 2-5 | Bubble Night | Every creature carries a bubble. | Every creature carries a bubble that comes back 2 seconds after it pops. |
+| 2-6 | Stuck Gates | Both of the level's gates start placed on sockets the level sets. They cannot be moved or removed, and there are no others. | Both gates are stuck on their sockets for the whole level. |
+| 3-1 | No Fireworks | The Firework Tower cannot be built. | Firework Towers cannot be built. |
+| 3-2 | No Catapults | The Pumpkin Catapult cannot be built. | Pumpkin Catapults cannot be built. |
+| 3-3 | One Gate | The level gives 1 gate instead of 3. | You get 1 gate instead of 3. |
+| 3-4 | Twice the Wings | Every group of flyers has twice as many. | Twice as many flyers in every wave. |
+| 3-5 | Tier 2 Cap | No tower can go above tier 2. | No tower can go above tier 2. |
+| 3-6 | Double Trouble | Every group in the final wave has twice as many. Two bosses. | The final wave is twice as big, with two bosses. |
+| 4-1 | Thin Purse | Start with half the gold, rounded down to a multiple of 10. | Start with half the gold. |
+| 4-2 | No Longbows | The Longbow Loft cannot be built. | Longbow Lofts cannot be built. |
+| 4-3 | Quick Crashers | Gatecrashers break gates in 2.0 s instead of 4.0 s. | Gatecrashers break gates in 2 seconds instead of 4. |
+| 4-4 | No Selling | Towers cannot be sold. | Towers cannot be sold. |
+| 4-5 | Five Lives | Start with 5 lives. | Start with 5 lives, or 10 on Relaxed. |
+| 4-6 | Double Trouble | Every group in the final wave has twice as many. Two bosses. | The final wave is twice as big, with two bosses. |
+
+- Bubble Night: every creature starts with a bubble that works exactly like a Bubbler's (6.2). It blocks one whole hit, and it comes back 2.0 s after it pops, every time. So on this Twist every slow hitter needs a quick partner to pop bubbles for it. A Bubbler is unchanged.
 
 ## 14. Roguelite mode
 
@@ -1025,11 +1119,12 @@ All core rules (4 to 9) apply in runs: phases, pause, speeds, early calls, selli
 ### 14.2 Maps from segments
 
 - A run map is 7 columns by 13 rows, made of three hand-built segments stacked: a top segment of 4 rows, a middle segment of 5 rows and a bottom segment of 4 rows. The middle one gets the extra row because it holds the forks.
+- The last row of every bottom segment is scenery only, because it is the bottom row of a 13 row map (3.1). The base and everything else in a bottom segment sit in its first 3 rows.
 - Top segments hold 1 or 2 entrances, on the top edge or the side edges of that segment. Middle segments hold forks and gate sockets. Bottom segments hold the base. Any segment may have build spots and sockets.
-- Each segment lists the columns where its road crosses its top edge and its bottom edge. Two segments join only if the bottom crossing columns of the upper one are exactly the top crossing columns of the lower one.
+- The columns where a segment's road crosses its top row and its bottom row are its ports, read from its grid. On those rows no two road tiles sit side by side. Two segments join only if the bottom ports of the upper one are exactly the top ports of the lower one.
 - The run's seed picks a top segment, then a middle segment that joins it, then a bottom segment that joins that. Each pick is even among the segments that fit.
-- A joined map must have 8 to 12 build spots and 2 to 5 gate sockets, and pass the same checks as a campaign map.
-- The level designer builds the segments. Tests check that every top segment can be finished into a valid map.
+- Every way of joining a top, a middle and a bottom segment that fit must give a valid map: 8 to 12 build spots, 2 to 5 gate sockets, and the same checks as a campaign map. Every top segment has at least one middle that fits under it, and every such middle has at least one bottom.
+- The level designer builds the segments. Tests check every way they can join.
 
 ### 14.3 Waves in a run
 
@@ -1047,7 +1142,9 @@ All core rules (4 to 9) apply in runs: phases, pause, speeds, early calls, selli
 
 - The seed picks the run's boss from the four, and band 6 uses a pack made for that boss.
 - Packs name entrance A or B. On a map with one entrance, B means A.
-- A creature a run has not shown yet comes in its own group, first in its wave, and no wave brings two such creatures. Risk cards are the only exception, and their card says what they add.
+- A creature a run has not shown yet comes in its own group, first in its wave, and no group of that wave starts before it. No wave brings two such creatures. Risk cards are the only exception, and their card says what they add.
+- No pack has a group of Puffs. Puffs only come from Puffballs.
+- Every pack wave stays within the 120 creature bound of 12.5, counting 3 Puffs for every Puffball, with no risk card and with any one risk card applied. The boss wave never gets a risk card (14.4).
 - Health, heals, bounties and clear bonuses follow the wave's strength.
 - The level designer builds the packs, like levels.
 
@@ -1055,18 +1152,18 @@ All core rules (4 to 9) apply in runs: phases, pause, speeds, early calls, selli
 
 - After each of waves 1 to 17 is cleared, the player picks 1 card from 3. The draft opens in the next build phase.
 - If waves were called early, the drafts wait and come one after another, in wave order, at the next build phase. The next wave cannot start until every waiting draft is picked. A draft cannot be skipped.
-- That holds for early calls too. A wave cleared while another wave is still on the map owes its draft at once, and from then on the next wave cannot be called until the build phase, where the waiting drafts are picked first. Tapping the call button meanwhile says "Pick your card after this wave."
+- That holds for early calls too. A wave cleared while another wave is still on the map owes its draft at once, and from then on the next wave cannot be called until the build phase, where the waiting drafts are picked first. Tapping the call button meanwhile says "Pick your card after this wave." In a build phase with a draft waiting, it says "Pick a card first."
 - A draft opens only in a build phase. If wave 18 is called early and wave 17 is cleared after that, no build phase follows, so the draft for wave 17 never opens.
 - Card type weights: tower 30, tower perk 25, extra gate 10, economy 20, risk 15.
-- Drawing a draft: for each of the 3 slots, pick a type by weight among the types that still have an eligible card, then pick a card of that type evenly. No card appears twice in one draft.
+- Drawing a draft: for each of the 3 slots, pick a type by weight among the types that still have an eligible card, then pick a card of that type evenly. No card appears twice in one draft. If fewer than 3 cards are eligible, the draft offers fewer.
 - While the run has fewer than 3 kinds of tower, the first slot is always a tower card, if one is eligible.
 - Eligible cards:
   - A tower card only for a tower not yet in the run.
   - A tower perk only for a tower in the run.
   - A card marked once is gone after it is taken.
-  - An extra gate only while the run has fewer than 3 gates and fewer gates than the map has sockets.
-  - At most one risk card per draft. None while another risk card is waiting. None in the draft after wave 17, so the boss wave is never changed.
-- A risk card changes the next wave that starts. Its reward is paid when that wave is cleared.
+  - An extra gate only while the run has fewer than 3 gates, placed and in hand together, and fewer gates than the map has sockets.
+  - At most one risk card per draft. None while another risk card is waiting. None once wave 17 has started, so the boss wave is never changed. That covers the draft after wave 17, and also the draft after wave 16 when wave 17 was called early, because that draft opens only after wave 17 has started.
+- A risk card changes the next wave that starts. Its reward is paid with that wave's clear bonus (14.5).
 - Each draft uses its own random generator, seeded from the run seed and the wave number. Earlier picks never change which random numbers later drafts get. The architect sets how the seed is mixed.
 
 ### 14.5 Base cards
@@ -1097,8 +1194,8 @@ Economy (5).
 | Card | Effect | Taken |
 |---|---|---|
 | Gold Purse | Gain 100 gold plus 10 for each wave cleared so far. | Again and again |
-| Fat Bounties | Creatures give 20% more gold for the rest of the run, rounded half up. | Once |
-| Feast Days | Wave clear bonuses are 50% bigger for the rest of the run, rounded half up. | Once |
+| Fat Bounties | Creatures give 20% more gold for the rest of the run, rounded half up. The early call bonus counts the bigger bounties. | Once |
+| Feast Days | Wave clear bonuses are 50% bigger for the rest of the run, rounded half up. Risk card rewards stay the same. | Once |
 | Fair Trade | Selling refunds 90% instead of 70% for the rest of the run. | Once |
 | Tea Break | Gain 5 lives. | Again and again |
 
@@ -1110,14 +1207,18 @@ Risk (5). Each changes the next wave only.
 | Thick Hides | Creatures have 50% more health, rounded half up. | 120 gold |
 | Hurry Night | Creatures move 25% faster. | 100 gold |
 | Gateless Night | Your gates stand open. They block nothing and cannot be broken. | 120 gold |
-| Flock | 8 extra Flitters come from entrance A, 0.4 s apart, starting 2.0 s after the wave's last group starts. | 80 gold |
+| Flock | 8 extra Flitters come from entrance A, 0.4 s apart, starting 2.0 s after the last of the wave's own groups starts. | 80 gold |
 
+- A risk card's reward is paid together with its wave's clear bonus, when that wave is cleared. If the run ends before that, nothing is paid.
+- A risk card's changes reach every creature of its wave, the Puffs of that wave included.
+- A change to how many creatures come (Crowded Night) changes only the wave's own groups from its pack. A group a risk card adds always comes with the count its card says, and a Puffball still releases 3 Puffs.
+- A group a risk card adds belongs to its wave and comes after the wave's own groups, in the preview too. It comes from entrance A, which every map has.
 - Gateless Night opens every gate from the moment its wave starts until the next build phase begins. Gates never close during a wave (7.8), so any other wave on the map in that time, including one called early, finds them open too. Gatecrashers and Old Tusk walk through without stopping. In the build phase before that wave, the route lines already show the roads with every gate open. When the next build phase begins, every gate stands closed again on its socket.
 
 ### 14.6 Unlockable cards
 
 - Playing unlocks new cards into the pool. Each one is a sidegrade: it changes how something works and carries a cost, so it adds variety, never raw power. Nothing is bought.
-- An unlocked card joins its type in every later draft.
+- An unlocked card joins the pool from the next run on. A run's pool is fixed when the run starts and is saved with it.
 - The daily challenge always uses every card, unlocked or not (15).
 
 | Card | Type | Effect | Unlocked by |
@@ -1128,7 +1229,7 @@ Risk (5). Each changes the next wave only.
 | Volley | Tower perk, Longbow Loft | Hits one more target per shot, but each arrow deals 40% less damage, rounded half up. Once. | Win a run |
 | Long Fuse | Tower perk, Firework Tower | Reaches 1 tile further, but reloads 0.5 s slower. Once. | Win a run on Normal |
 | Spice Rack | Tower perk, Bakery | Also adds 2 damage per hit to the towers it reaches, but its speed boost is 10 points smaller. 25% becomes 15%. Once. | Earn 24 stars |
-| Piggy Bank | Economy | At the start of each build phase, gain 10% of your unspent gold, rounded down, up to 50. Once. | Earn 36 stars |
+| Piggy Bank | Economy | When each build phase begins, after the clear bonus is paid, gain 10% of the gold you hold, rounded down, up to 50. Once. | Earn 36 stars |
 | Bargain | Economy | New towers cost 20 more. Upgrades cost 20 less. Once. | Earn 48 stars |
 | Iron Gate | Extra gate | Gain 2 gates, up to 3. When a wave starts, placed gates lock for good. Once. | Clear any Twist |
 | Moonlit Wager | Risk | Next wave: creatures have twice the health. Reward: 250 gold. | Earn 60 stars |
@@ -1137,7 +1238,9 @@ Risk (5). Each changes the next wave only.
 
 - Daily runs count as runs for these conditions.
 - Frost Chime changes every tier and path of the Lullaby Bell, like every tower perk. Its Bells slow every flyer in their ring, the Moon Moth included (6.3), so a Hush Bell with Frost Chime slows the Moon Moth by 60%. A Night Bell already slows flyers, so for it the card only shortens the ring.
-- Unlock progress is kept in these counters: `best_run_wave` (the highest wave reached in any run; it only goes up), `runs_won`, `runs_won_normal`, `dailies_finished` and `risky_wins` (runs won after taking 3 or more risk cards in them). Stars and Twist clears come from the level records (16).
+- Unlock progress is kept in these counters: `best_run_wave` (the highest wave number started in any run or daily; it only goes up), `runs_won`, `runs_won_normal`, `dailies_finished` and `risky_wins` (runs won after taking 3 or more risk cards in them). Stars and Twist clears come from the level records (16).
+- "Reach wave N" means wave N has started, an early call included. The counters change when a run ends: won, lost or abandoned.
+- Card changes to a tower's numbers apply in order: added amounts first, then percents, then Bakery boosts on top (8.7). No card takes a number below its floor: a price of 10, a reload of 0.05 s, damage 1, 1 target, a slow from 1% to 90%, a range above 0, and no boost below 0. Nothing caps them from above, so Volley gives a Triple Bow 4 targets.
 - Iron Gate locks nothing at the moment it is taken. In that build phase every gate can still be placed, moved and removed, so a mistaken drop can be fixed. From then on, each time a wave starts, every gate on a socket locks there for the rest of the run and can never be moved or removed again. That includes gates placed before the card was taken. Gates still in the tray stay free until they are placed and a wave starts. A locked gate can still be broken by a Gatecrasher or Old Tusk, and it mends on its socket as usual (7.6).
 
 ### 14.7 Leaving, losing and results
@@ -1157,6 +1260,7 @@ Risk (5). Each changes the next wave only.
 - The player may try as often as they like. Each finished try is compared with the day's best.
 - Best result: a win beats a loss. Between wins, more lives left is better. Between losses, more waves cleared is better. A tie keeps the earlier result.
 - A daily run belongs to the date it started, even if it ends after midnight.
+- If the phone's date is before 2026 or after 2200, the Daily button says "Check the phone's date." and starts no new daily. A saved daily still resumes.
 - Streak. The phone keeps a streak count and the last date it counted.
   - When a daily run ends (won, lost or abandoned), look at the date it belongs to.
   - If that date is the day after the last counted date, the streak grows by 1.
@@ -1241,7 +1345,7 @@ On the contract's open question 2, map width. Yes, 7 columns by up to 13 rows is
 | 3.1 Gold from kills and clears; full refund in the same build phase, part after | 4.5, 4.6 |
 | 3.2 Six towers with one job each, from the six archetypes | 5.1 to 5.8 |
 | 3.2 Three tiers, a permanent pick of two at tier 3 | 4.6, 5.3 to 5.8, 9.5 |
-| 3.2 No tower best everywhere; each right somewhere | 5.1, 5.10, 5.11, 10.3, 12.5 |
+| 3.2 No tower best everywhere; each right somewhere | 5.1, 5.10, 5.11, 10.3, 12.5, 12.6 |
 | 3.2 Build spots; limited spots are part of the puzzle | 3.4, 12.5 |
 | 3.3 About ten creatures plus one boss per region, from the starting set | 6.1 to 6.3 |
 | 3.3 Flyers ignore roads and gates | 6.5, 7.5 |
@@ -1252,14 +1356,14 @@ On the contract's open question 2, map width. Yes, 7 columns by up to 13 rows is
 | 3.4 A placement that seals every route is refused with feedback | 7.4 |
 | 3.4 Route line while placing or moving | 7.5 |
 | 3.4 Place, move, remove in build phases; locked in waves; mid-wave switch proposal | 7.2, 7.6, 19.2 |
-| 3.5 Wave preview: what, how many, which entrance | 9.1 |
+| 3.5 Wave preview: what, how many, which entrance | 9.1. The folded strip shows all three too. |
 | 3.5 Tapping shows real numbers | 9.3, 9.4 |
 | 3.5 Range shown on placing; before and after on upgrades | 9.5 |
 | 3.5 Color never the only signal; silhouettes | 9.7. The art director owns silhouettes. |
 | 3.5 Touch only, one thumb, 48 dp | 3.1 sizes the grid for 48 dp. The UI engineer owns controls. |
 | 3.6 About 24 levels in 4 regions of 6; each region brings 1 or 2 towers and 2 or 3 creatures and ends with a boss | 12.1, 12.2, 12.3 |
 | 3.6 Levels take 5 to 10 minutes at 1x | 12.3, 12.5 |
-| 3.6 Three stars; one for winning; second and third defined and shown on the level card | 10, 12.4 |
+| 3.6 Three stars; one for winning; second and third defined and shown on the level card | 10, 12.4. Shown in Pause during play: 10.6 |
 | 3.6 First levels teach one idea with a one-line hint and a highlighted spot; Info holds the full rules | 9.6, 12.3, 12.4 |
 | 3.6 Twist after three stars; the Twist list | 13 |
 | 3.7 Runs of 15 to 20 waves, 15 to 25 minutes, ending in a boss | 14.1, 14.3 |
