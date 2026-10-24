@@ -158,7 +158,7 @@ The map and waves are placeholders. Both branches are 13 steps long, so with no 
 | Field | Type | Limits | Notes |
 |---|---|---|---|
 | format | int | 1 | |
-| id | id | equals the file name | 2.2 |
+| id | id | equals the file name | 2.2. GameData checks this, because `LevelData.check` never sees the file name. |
 | name | text | 1 to 24 characters | |
 | grid | array of strings | 8 to 13 rows of 7 characters | 2.3 |
 | start_gold | int | 0 to 100,000 | Normal. Twists and Relaxed change it in `Battle.create` (3.1). |
@@ -191,7 +191,7 @@ Regions and levels in play order. Every listed level exists, and every level fil
 
 ### 2.6 Stats: data/stats/ (game-designer)
 
-Every number comes from RULES 4 to 6. Unknown keys are errors (they catch typos). A missing optional field is 0, false or empty, except `targets`, which is 1.
+Every number comes from RULES 4 to 6. Unknown keys are errors (they catch typos). A missing optional field is 0, false or empty, except `targets`, which is 1. The limits in the tables below are what `Catalog.check` enforces. They are sanity bounds far from any real number, so a typo fails the load instead of breaking a battle. Every time is a multiple of 50 ms.
 
 `towers.json`:
 
@@ -213,22 +213,24 @@ Every number comes from RULES 4 to 6. Unknown keys are errors (they catch typos)
 ]}
 ```
 
-- A tower has `id`, `name`, `plural` (for the star line "Build no ..."), `info`, `kind` (`attack`, `slow` for the Bell, `boost` for the Bakery), `tiers` (exactly 2: the build, then the tier 2 upgrade) and `specs` (exactly 2 tier 3 paths, spec 0 first, each with `id`, `name` and `info` plus a stat block). `cost` is the price of that step.
-- Stat block fields:
+- towers.json holds 1 to 32 towers. A tower has `id`, `name`, `plural` (for the star line "Build no ..."), `info`, `kind` (`attack`, `slow` for the Bell, `boost` for the Bakery), `tiers` (exactly 2: the build, then the tier 2 upgrade) and `specs` (exactly 2 tier 3 paths, spec 0 first, each with `id`, `name` and `info` plus a stat block). `cost` is the price of that step. Path ids are unique across all towers.
+- Stat block fields. A field is required for the kinds listed unless it says optional. A field outside its kinds is an unknown key.
 
-| Field | Kinds | Meaning | RULES |
-|---|---|---|---|
-| cost | all | Price, a multiple of 10 | 4.6 |
-| reach | all | Range, Bell ring or Bakery reach | 5.2, 5.5, 5.8 |
-| hits | attack, slow | `ground`, `air` or `both` | 5.1, 6.5 |
-| damage, reload_ms | attack | Per hit, and the reload time | 5.2 |
-| splash | attack | Splash radius, 0 for one target | 8.4 |
-| targets | attack | Creatures per shot, 1 to 3 | 8.2 |
-| pierce | attack | true: ignores armor | 8.3 |
-| slow_pct, slow_ms | attack, slow | The slow given, with this much time left: a Bell gives it every tick, a Jam Pot to each walker it damages | 8.5 |
-| boost_pct, boost_damage | boost | Attack rate and damage added to attacking towers in reach | 8.6 |
+| Field | Kinds | Limits | Meaning | RULES |
+|---|---|---|---|---|
+| cost | all | 10 to 100,000, a multiple of 10 | Price | 4.6 |
+| reach | all | 1 to 1,000 | Range, Bell ring or Bakery reach | 5.2, 5.5, 5.8 |
+| hits | attack, slow | `ground`, `air` or `both` | What it hits, or what a Bell slows | 5.1, 6.5 |
+| damage | attack | 1 to 100,000 | Per hit | 5.2 |
+| reload_ms | attack | 50 to 60,000 | The reload time | 5.2 |
+| splash | attack, optional | 0 to 500 | Splash radius, 0 for one target | 8.4 |
+| targets | attack, optional | 1 to 3 | Creatures per shot | 8.2 |
+| pierce | attack, optional | true or false | true: ignores armor | 8.3 |
+| slow_pct, slow_ms | slow; attack, optional | 1 to 90, and 50 to 60,000. Both or neither. | The slow given, with this much time left: a Bell gives it every tick, a Jam Pot to each walker it damages | 8.5 |
+| boost_pct | boost | 0 to 500 | Attack rate added to attacking towers in reach | 8.6 |
+| boost_damage | boost, optional | 0 to 1,000 | Damage added to attacking towers in reach | 8.6 |
 
-`enemies.json`:
+`enemies.json` holds 1 to 64 creatures and bosses:
 
 ```json
 {"format": 1, "enemies": [
@@ -240,19 +242,21 @@ Every number comes from RULES 4 to 6. Unknown keys are errors (they catch typos)
 ]}
 ```
 
-| Field | Meaning | RULES |
-|---|---|---|
-| id, name, info | | 6.6 |
-| health, armor, speed, lives, bounty | Numbers at strength 100 | 6.1, 6.3 |
-| flying | A flyer (4.6) | 6.5 |
-| boss | A boss. It comes only in a final wave. | 6.3 |
-| bubble | Starts with its bubble up. The bubble comes back `bubble_ms` (rules.json) after it pops. | 6.2 |
-| heal, heal_reach, heal_ms | Every `heal_ms`, the first time `heal_ms` after it appears, every other creature within `heal_reach` gains `heal` (at strength 100), up to its max health | 6.2 |
-| split_into, split_count, split_gap_ms | Released where it is defeated: one at once, then one every `split_gap_ms` | 6.2 |
-| break_ms | A gate breaker (4.5) | 7.7 |
-| summon | `{"enemy", "count", "every_ms", "gap_ms"}`: the first time `every_ms` after it appears, then every `every_ms`, `count` creatures `gap_ms` apart | 6.3 |
-| speed_up | `{"at_pct": [75, 50, 25], "add": 10}`: the first time health falls to each percent, speed rises by `add` from the next tick | 6.3 |
-| release | `{"at_pct": 50, "enemy", "count", "gap_ms"}`: once, starting on the next tick, even if the same hit defeats it | 6.3 |
+| Field | Limits | Meaning | RULES |
+|---|---|---|---|
+| id, name, info | | | 6.6 |
+| health, armor, speed, lives, bounty | health 1 to 1,000,000; armor 0 to 1,000; speed 1 to 1,000; lives 1 to 1,000; bounty 1 to 100,000 | Numbers at strength 100 | 6.1, 6.3 |
+| flying | | A flyer (4.6) | 6.5 |
+| boss | | A boss. It comes only in a final wave. | 6.3 |
+| bubble | | Starts with its bubble up. The bubble comes back `bubble_ms` (rules.json) after it pops. | 6.2 |
+| heal, heal_reach, heal_ms | 1 to 10,000; 1 to 1,000; 50 to 600,000. All three or none. | Every `heal_ms`, the first time `heal_ms` after it appears, every other creature within `heal_reach` gains `heal` (at strength 100), up to its max health | 6.2 |
+| split_into, split_count, split_gap_ms | a creature id; 1 to 10; 50 to 60,000. All three or none. | Released where it is defeated: one at once, then one every `split_gap_ms` | 6.2 |
+| break_ms | 50 to 600,000 | A gate breaker (4.5) | 7.7 |
+| summon | `count` 1 to 20, `every_ms` 50 to 600,000, `gap_ms` 50 to 60,000 | `{"enemy", "count", "every_ms", "gap_ms"}`: the first time `every_ms` after it appears, then every `every_ms`, `count` creatures `gap_ms` apart | 6.3 |
+| speed_up | `at_pct` 1 to 10 values, each 1 to 99 and lower than the one before; `add` 1 to 1,000 | `{"at_pct": [75, 50, 25], "add": 10}`: the first time health falls to each percent, speed rises by `add` from the next tick | 6.3 |
+| release | `at_pct` 1 to 99, `count` 1 to 20, `gap_ms` 50 to 60,000 | `{"at_pct": 50, "enemy", "count", "gap_ms"}`: once, starting on the next tick, even if the same hit defeats it | 6.3 |
+
+Release checks: the creature named by `split_into`, `summon.enemy` or `release.enemy` exists, is not the releaser itself and is not a boss. It has no `split_into`, `summon` or `release` of its own, so releases never chain. A flyer releases only flyers, because a released walker starts on its releaser's road step (RULES 6.2).
 
 `rules.json`, every key required:
 
@@ -264,19 +268,19 @@ Every number comes from RULES 4 to 6. Unknown keys are errors (they catch typos)
  "region_stars": [0, 6, 12, 18], "run_stars": 12}
 ```
 
-| Key | Rule | RULES |
-|---|---|---|
-| start_lives, relaxed_lives_pct | Lives in the campaign and runs. Relaxed doubles them. | 4.4, 11 |
-| relaxed_gold_pct | Relaxed starting gold: Normal times 150 / 100, rounded up to a multiple of 10 | 11 |
-| refund_pct | Refund for every purchase not made in the current build phase, rounded down | 4.6 |
-| early_bonus_pct | Early call bonus: this percent of the bounty of the newest wave's creatures still on the map, rounded up | 4.9 |
-| clear_bonus, clear_bonus_per_wave | Clear bonus: (20 + 5 x wave number) x strength / 100, rounded half up | 4.5 |
-| star2_lives | Star 2 | 10.2 |
-| max_waves_running | Waves on the map at once | 4.9 |
-| max_gates | Most gates a level or run gives | 7.1, 14.5 |
-| bubble_ms | Time until a bubble comes back | 6.2 |
-| region_stars | Stars each region needs, with the previous region's last level cleared | 16 |
-| run_stars | Stars that open the roguelite and the daily | 16 |
+| Key | Limits | Rule | RULES |
+|---|---|---|---|
+| start_lives, relaxed_lives_pct | 1 to 1,000; 100 to 1,000 | Lives in the campaign and runs. Relaxed doubles them. | 4.4, 11 |
+| relaxed_gold_pct | 100 to 1,000 | Relaxed starting gold: Normal times 150 / 100, rounded up to a multiple of 10 | 11 |
+| refund_pct | 0 to 100 | Refund for every purchase not made in the current build phase, rounded down | 4.6 |
+| early_bonus_pct | 0 to 100 | Early call bonus: this percent of the bounty of the newest wave's creatures still on the map, rounded up | 4.9 |
+| clear_bonus, clear_bonus_per_wave | 0 to 10,000; 0 to 1,000 | Clear bonus: (20 + 5 x wave number) x strength / 100, rounded half up | 4.5 |
+| star2_lives | 1 to `start_lives` | Star 2 | 10.2 |
+| max_waves_running | 1 to 10 | Waves on the map at once | 4.9 |
+| max_gates | 0 to 8 | Most gates a level or run gives | 7.1, 14.5 |
+| bubble_ms | 50 to 60,000 | Time until a bubble comes back | 6.2 |
+| region_stars | 1 to 8 values, each 0 to 1,000 and never lower than the one before | Stars each region needs, with the previous region's last level cleared | 16 |
+| run_stars | 0 to 1,000 | Stars that open the roguelite and the daily | 16 |
 
 ### 2.7 Star rules (RULES 10)
 
@@ -310,7 +314,7 @@ Uses: **Twist** effects last the whole level. **card** effects last the rest of 
 |---|---|---|---|---|
 | `start_gold_pct` | pct | Twist | Starting gold times pct / 100, rounded down to a multiple of 10 | 13 |
 | `set_lives` | lives | Twist | Normal starting lives | 13 |
-| `set_gates` | count | Twist | The gates the level gives | 13 |
+| `set_gates` | count | Twist | The gates the level gives, 0 to `max_gates` | 13 |
 | `fixed_gates` | cells | Twist | Gates start on these sockets. They cannot be moved or removed, and each one comes out of the level's gates. | 13 |
 | `ban_tower` | tower | Twist | The tower cannot be built | 13 |
 | `tier_cap` | tier (1 or 2) | Twist | No tower can go above this tier | 13 |
@@ -330,7 +334,7 @@ Uses: **Twist** effects last the whole level. **card** effects last the rest of 
 | `tower_hits_air` | tower | card | The tower also hits or slows flyers | 14.6 |
 | `bounty_pct` | pct | card | Bounties times pct / 100, rounded half up | 14.5 |
 | `clear_bonus_pct` | pct | card | Clear bonuses times pct / 100, rounded half up | 14.5 |
-| `refund_pct` | pct | card | Replaces rules.json `refund_pct` | 14.5 |
+| `refund_pct` | pct | card | Replaces rules.json `refund_pct`. pct is 1 to 100, so selling never pays a profit. | 14.5 |
 | `cost_add` | build, upgrade | card | Added to every build price and every upgrade price, never below 10 | 14.6 |
 | `interest` | pct, max | card | At the start of each build phase, gain pct of unspent gold, rounded down, at most max | 14.6 |
 | `gates_stay` | none | card | Each time a wave starts, every placed gate becomes fixed (RULES 14.6) | 14.6 |
@@ -340,7 +344,7 @@ Uses: **Twist** effects last the whole level. **card** effects last the rest of 
 
 - Order: a Twist's start effects come before Relaxed (RULES 11). Tower stats: the data, then every `tower_add`, then every `tower_pct`, then Bakery boosts on top (RULES 8.7). Creatures: the data, then strength, then effects.
 - Instant effects change the state once and are not kept, so a restore never applies them twice. Every other effect is kept by the battle and saved with it.
-- Checks: the type is known and allowed for its use; the fields are exact; every id exists; pct is 1 to 1,000; counts are 1 to 200; times are multiples of 50 up to 600,000; every other number is -1,000 to 1,000. `LevelData.check` also checks that `fixed_gates` cells are sockets of that level.
+- Checks: the type is known and allowed for its use; the fields are exact; every id exists; pct is 1 to 1,000, except `refund_pct`, which is 1 to 100; counts are 1 to 200, except `set_gates` count, which is 0 to `max_gates` (the No Gates Twist gives 0); `set_lives` is 1 to 1,000; entrances are 1 to 4; times are multiples of 50 up to 600,000; every other number is -1,000 to 1,000. `LevelData.check` also checks that `fixed_gates` cells are sockets of that level.
 - In phase 5 the checks cover every type, but no region 1 level uses an effect yet.
 
 ### 2.9 Segments and wave packs: data/segments/ (level-designer, phase 7)
@@ -396,7 +400,7 @@ Values from RULES 14.1 to 14.4. Lives and the Relaxed numbers come from rules.js
 ### 2.12 How data is checked on load
 
 1. `GameData.load_from()` (src/save/) reads every bundled file through `JsonFile.read()`: a size cap first, ASCII only, then Godot's JSON parser. Never `load()`, `ResourceLoader`, `str_to_var` or anything that can make objects.
-2. It hands each parsed value to its owner's check, in this order: `Catalog.check` (stats), `LevelData.check` (each level), the campaign list (GameData itself), then in phase 7 `RunData.check` (segments, packs, run plan and cards).
+2. It hands each parsed value to its owner's check, in this order: `Catalog.check` (stats), the campaign list (GameData itself), `LevelData.check` (each listed level), then in phase 7 `RunData.check` (segments, packs, run plan and cards). The checks never see file names, so GameData itself checks that each level's `id` equals its file name and that every level file is listed.
 3. Each check verifies exact keys, types, whole numbers, ranges, the id format, that every referenced id exists, the map rules in 2.3, times in multiples of 50 ms, the effects in 2.8 and the spawn bound in 2.4.
 4. Each check returns every problem as a plain line naming the file and field, for example `r1_l3.json: waves[2].groups[0].count: must be 1 to 200`. An empty list means valid.
 5. A bundled file with a problem is a build bug. tests/sim/, tests/levels/ and tests/run/ load every real file and fail on any problem. In the game, if `GameData.problems` is not empty, the App shows one message, "This copy of Forkline is damaged. Installing it again should fix it.", and starts nothing else.
@@ -448,6 +452,28 @@ const MAX_ENTRANCES: int = 4
 static func isqrt(n: int) -> int                       # floor of the square root; n >= 0
 static func center(cell: Vector2i) -> Vector2i         # sub-unit position of a cell center
 static func cell_of(pos: Vector2i) -> Vector2i         # the cell holding a sub-unit position
+```
+
+```gdscript
+class_name DataCheck extends RefCounted                # src/sim/data_check.gd: field checks for parsed JSON (2.12, 5.6)
+## Used by src/sim/ and src/save/, and in phase 7 by src/run/. Nobody else. Each reader checks one field. When it is
+## wrong, the reader adds the line "<file>: <path>: <why>" to problems and returns a safe fallback, so checking goes on.
+const LIMIT: int = 1000000000000000                    # a number of 10^15 or more, either way, is refused before it becomes an int
+var problems: PackedStringArray
+func _init(file_name: String = "") -> void             # the file each problem line names
+func fail(path: String, why: String) -> void
+func ok() -> bool                                      # no problem so far
+func object(value: Variant, path: String, required: PackedStringArray, optional: PackedStringArray = PackedStringArray()) -> bool   # a Dictionary with exactly these keys
+func integer(data: Dictionary, key: String, path: String, lo: int, hi: int, step: int = 1, fallback: int = 0) -> int   # also whole(value, path, ...)
+func boolean(data: Dictionary, key: String, path: String, fallback: bool = false) -> bool
+func ident(data: Dictionary, key: String, path: String) -> StringName   # an id (2.1); also ident_value(value, path)
+func text(data: Dictionary, key: String, path: String, max_len: int) -> String   # display text (2.1)
+func array(data: Dictionary, key: String, path: String, lo: int, hi: int) -> Array   # lo to hi items; also array_value(value, path, lo, hi)
+func cell(value: Variant, path: String, rows: int) -> Vector2i   # [column, row] inside the map; (-1, -1) when wrong
+static func is_whole(value: Variant) -> bool           # an int, or a whole, finite JSON number below LIMIT
+static func is_string(value: Variant) -> bool
+static func is_id(value: Variant) -> bool
+static func is_text(value: Variant, max_len: int) -> bool
 ```
 
 ```gdscript
@@ -538,6 +564,8 @@ class_name Battle extends RefCounted                   # src/sim/battle.gd: one 
 enum Phase { BUILD, WAVE, WON, LOST }
 const FORMAT: int = 1
 const DONE: StringName = &"done"                       # a command was carried out (not OK, which would shadow Godot's OK)
+class Release extends RefCounted                       # inner class, internal: one batch of creatures being released at one
+                                                       # spot (boss summons; Puffs and boss releases in phase 7); saved (5.6)
 
 # Fixed for the whole battle. Read only.
 var level: LevelData
@@ -658,6 +686,7 @@ Refunds (RULES 4.6): a purchase in a build phase goes into `spent_now`. A purcha
 | `&"pick_spec"`, `&"bad_spec"` | Tier 2 to 3 needs spec 0 or 1; other steps take -1. |
 | `&"no_selling"` | A Twist forbids selling. |
 | `&"no_aim"` | Bells and Bakeries have no targeting. |
+| `&"bad_aim"` | The aim value is not FIRST, LAST or STRONG. |
 | `&"gates_locked"` | A gate command outside BUILD. The UI says "Gates are locked until the wave is over." (RULES 7.6) |
 | `&"not_a_socket"`, `&"has_gate"`, `&"no_gate"` | No socket there, the socket has a gate, or no gate there. |
 | `&"no_gates_left"` | No gate in hand. |
@@ -795,10 +824,16 @@ A daily run belongs to the day it started, even if it ends after midnight (RULES
 
 ```gdscript
 class_name JsonFile extends RefCounted                 # src/save/json_file.gd: the only JSON file reader and writer
-## {"status": StringName, "data": Variant}. Status: &"ok", &"missing", &"locked" (exists, cannot be opened)
-## or &"bad" (over max_bytes, a NUL byte or a byte of 0x80 or above, or not valid JSON).
+## {"status": StringName, "data": Variant, "text": String}. Status: &"ok", &"missing", &"locked" (exists, cannot be opened)
+## or &"bad" (over max_bytes, a NUL byte or a byte of 0x80 or above, or not valid JSON). "data" is null and "text" "" unless ok.
 static func read(path: String, max_bytes: int) -> Dictionary
-static func write_atomic(path: String, data: Dictionary) -> bool   # section 5.3
+static func probe(path: String) -> StringName          # &"missing", &"locked" or &"ok" (it opens); reads nothing
+static func is_ascii(bytes: PackedByteArray) -> bool   # no NUL byte and no byte of 0x80 or above
+static func to_text(data: Dictionary) -> String        # JSON with sorted keys; "" when it is not plain ASCII
+static func write_atomic(path: String, data: Dictionary, backup_of: String = "") -> bool   # section 5.3; only inside user://
+                                                       # backup_of: the text the caller last wrote or loaded as valid at path
+static func write_text(path: String, text: String, backup_of: String = "") -> bool   # write_atomic for text from to_text()
+static func remove(path: String) -> bool               # true when no file is there afterwards
 
 class_name GameData extends RefCounted                 # src/save/game_data.gd: every bundled data file, checked (2.12)
 static func load_from(root: String = "res://data") -> GameData
@@ -806,17 +841,19 @@ var problems: PackedStringArray                        # empty when every file i
 var catalog: Catalog
 var campaign: Array[Dictionary]                        # [{"id": StringName, "name": String, "levels": Array[StringName]}]
 var levels: Dictionary[StringName, LevelData]
-var run: RunData                                       # phase 7
+var run: RunData                                       # phase 7; until then GameData has no run field
 
 class_name SaveStore extends RefCounted                # src/save/save_store.gd: every save file (section 5)
-func _init(dir: String = "user://") -> void            # tests pass a folder under user://tests/
+func _init(dir: String = "user://") -> void            # tests pass a folder under user://tests/; one outside user:// is refused
 func load_settings() -> Settings
 func save_settings(settings: Settings) -> bool
 func load_progress() -> Progress
 func save_progress(progress: Progress) -> bool
 func load_games(game: GameData) -> Array[SavedGame]    # every valid saved game, most recent first; an invalid one is deleted
-func save_game(saved: SavedGame) -> bool               # gives it the next order number, then writes its mode's file
+func save_game(saved: SavedGame) -> bool               # gives it the next order number, then writes its mode's file; false when
+                                                       # can_save() is false or the write failed
 func delete_game(mode: StringName) -> void
+func is_locked(file_name: String) -> bool              # true when this launch leaves that file alone (5.4), for example "progress.json"
 func load_daily() -> DailyRecord                       # phase 7
 func save_daily(daily: DailyRecord) -> bool            # phase 7
 
@@ -836,6 +873,7 @@ func mark_seen(id: StringName) -> void
 func bump(counter: StringName, amount: int) -> void    # adds, saturating at the ceiling
 func raise(counter: StringName, value: int) -> void    # keeps the larger value, for best_run_wave
 func stars() -> int                                    # star marks over campaign levels
+func cleared(id: StringName) -> bool                   # the level was won at least once (star bit 1)
 func level_open(game: GameData, id: StringName) -> bool   # RULES 16
 func region_open(game: GameData, index: int) -> bool
 func runs_open(game: GameData) -> bool                 # the roguelite and the daily
@@ -850,7 +888,10 @@ var order: int                                         # higher is more recent; 
 var level_id: StringName                               # the campaign level; &"" for runs
 var twist: bool
 var battle: Battle
-var run: RunSession                                    # phase 7; null for a campaign level
+var run: RunSession                                    # phase 7; null for a campaign level. Until then SavedGame has no run field.
+func can_save() -> bool                                # a known mode and a battle in BUILD or WAVE
+func to_data() -> Dictionary                           # the 5.5 shape
+static func from_data(data: Variant, game: GameData) -> SavedGame   # null when any field is invalid (5.5, 5.6)
 
 class_name DailyRecord extends RefCounted              # src/save/daily_record.gd (phase 7)
 var day: String                                        # "" or the day of `best`
@@ -930,7 +971,7 @@ App flow:
 5. **End.** On `ended`: record the stars (`Progress.record_level`, or `record_twist` for a won Twist), the counters for a run or daily and the daily record for a daily (phase 7), delete that mode's saved game, save, and show EndPanel. An abandoned campaign level records nothing. An abandoned run or daily counts as lost at its current wave (RULES 14.7).
 6. **Back button.** `handle_back()`: close or answer the top modal first, then go back one screen. In a battle, open Pause. On the front door, quit; everything is already saved.
 7. **Resize.** The App connects its viewport's `size_changed` and calls `apply_layout(window, safe)` with `Layout.safe_rect()`, which lays out every screen and modal (7.5).
-8. **Debug builds** (`OS.is_debug_build()`) add a `PerfProbe` (3.7). Release builds never do.
+8. **Debug builds** (`OS.is_debug_build()`) add a `PerfProbe` (3.7) that watches the open battle and its map view through `watch()`. BattleScreen times each `battle.step()` with `Time.get_ticks_usec()` and passes it to `record_tick_usec()` (9.2). Release builds do none of this.
 
 First sight (RULES 9.2, 9.6): a tower's card opens at the start of the first level that offers it, a creature's card in the build phase before the first wave that brings it, and a level's hint at its first start. Each opens by itself once, then its id goes into `Progress.seen`.
 
@@ -952,6 +993,8 @@ func show_selection(cell: Vector2i) -> void            # (-1, -1) hides it
 func show_hint(cell: Vector2i) -> void                 # (-1, -1) hides it
 
 class_name PerfProbe extends Node                      # src/render/perf_probe.gd: debug builds only (section 9)
+func watch(battle: Battle, view: MapView = null) -> void   # what it reports on
+func record_tick_usec(usec: int) -> void               # how long one Battle.step() took, from BattleScreen
 ```
 
 - MapView draws in its own local space, where a cell is `CELL` pixels, with `MapArt` and `Silhouettes` (3.9). `fit()` changes only the node's position and scale, so a fold re-fits one transform and every child, particles in flight included, keeps its place.
@@ -1105,7 +1148,7 @@ Writes are synchronous on the main thread. The largest file is under 100 KB in t
 ### 5.2 Reading
 
 1. A missing file means defaults, or no saved game.
-2. A file that exists but cannot be opened is **locked**. Its defaults are used in memory, and nothing in this launch writes, renames or deletes it or its `.tmp` or `.bak`, because it may hold good data.
+2. A file is **locked** when any of its three copies (`<name>.tmp`, `<name>`, `<name>.bak`) exists but cannot be opened. Its defaults are used in memory, and nothing in this launch writes, renames or deletes any of the three, because they may hold good data (5.4).
 3. A file over its cap is refused before any of it is read.
 4. A NUL byte or any byte of 0x80 or above is refused before parsing. Every saved string is an id, a day key, a mode or a number in a string, so the files are plain ASCII.
 5. The text goes through `JSON.new().parse()`. A parse error means invalid. Godot's parser refuses nesting past its limit cleanly (checked with 4.7.2: 600 levels parse, 2,000 fail with an error, nothing crashes). Never `str_to_var`, `bytes_to_var`, `FileAccess.get_var`, `ConfigFile`, `load()`, `ResourceLoader` or anything that can make objects from file data.
@@ -1117,14 +1160,16 @@ Writes are synchronous on the main thread. The largest file is under 100 KB in t
 1. Build the dictionary with `to_data()`: only bool, int, String, Array and Dictionary values. Vector2i becomes `[x, y]`, StringName becomes String, and an enum value becomes its lowercase name.
 2. `JSON.stringify(data)` (sorted keys). Refuse to write text that is not plain ASCII.
 3. Write the text to `<name>.tmp`, flush, close. Read it back and compare. On any difference, delete the `.tmp` and return false.
-4. If `<name>` holds exactly the text this store last wrote or loaded as valid, rename it to `<name>.bak`. If that rename fails, carry on without a fresh backup.
+4. If `<name>` holds exactly the text this store last wrote or loaded as valid, rename it to `<name>.bak`. SaveStore passes that text to `JsonFile.write_atomic` as `backup_of`. With no such text, there is no backup step. If that rename fails, carry on without a fresh backup.
 5. Rename `<name>.tmp` to `<name>`.
 6. **A failed rename** returns false and leaves the `.tmp` in place. It holds the newest complete save, and the next load uses it. The next write tries again. On Windows, Godot's rename removes the target, then moves the file in: it fails while another program holds the target (checked with 4.7.2: the old file stays, the `.tmp` stays), and SumUp saw it fail half way while the temp file was held (the target gone, the `.tmp` kept). On Android, Godot uses POSIX rename, which replaces the file in one step. In every case a kill at any moment leaves a complete newest save in `.tmp` or `<name>`, plus the `.bak`.
 7. The App logs a failed save once per launch, not every time. No error shows to the player.
 
 ### 5.4 Loading order
 
-Try a valid `<name>.tmp` first (it is always the newest attempt); if it is valid, rename it into place. Then a valid `<name>`. Then a valid `<name>.bak` (one save behind). A `.tmp` that fails its check is deleted. For settings, progress and daily, "valid" means a JSON object with a known `format`, and any bad field inside falls back to its own default. For a saved game, "valid" means every check in 5.6 passes. When no copy of a saved game passes, all three are deleted (`.tmp`, then `.bak`, then the file), so a bad save never comes back.
+First every copy is probed. If any of `<name>.tmp`, `<name>` and `<name>.bak` exists but cannot be opened, the whole file is locked for the rest of this launch. Its defaults are used, or no saved game for a game file, and nothing writes, renames or deletes any of the three copies. A newer `format` in a copy of settings, progress or daily locks the file the same way (5.2). `SaveStore.is_locked()` reports it.
+
+Then try a valid `<name>.tmp` first (it is always the newest attempt); if it is valid, rename it into place. Then a valid `<name>`. Then a valid `<name>.bak` (one save behind). A `.tmp` that fails its check is deleted. For settings, progress and daily, "valid" means a JSON object with a known `format`, and any bad field inside falls back to its own default. For a saved game, "valid" means every check in 5.6 passes. When no copy of a saved game passes, all three are deleted (`.tmp`, then `.bak`, then the file), so a bad save never comes back.
 
 ### 5.5 Shapes and ceilings
 
@@ -1152,7 +1197,7 @@ Ceilings are far above anything a real player reaches. Counters saturate at thei
  "run": {}}
 ```
 
-- `mode` is `level`, `run` or `daily` and matches the file name. `order` is 0 to 10^12. `level_id` is a campaign level id for `level` and `""` otherwise. `battle` holds `Battle.to_data()` (5.6). `run` is null for `level`, and `RunSession.to_data()` otherwise (phase 7).
+- `mode` is `level`, `run` or `daily` and matches the file name. `order` is 0 to 10^12. `level_id` is a campaign level id for `level` and `""` otherwise. `battle` holds `Battle.to_data()` (5.6). `run` is null for `level`, and `RunSession.to_data()` for `run` and `daily` (phase 7). Until phase 7 every saved game holds `"run": null`, so a run or daily save holds only its battle.
 
 ```json
 {"format": 1, "day": "2026-10-23", "best": {"won": false, "waves": 12, "lives": 0},
@@ -1165,22 +1210,23 @@ Ceilings are far above anything a real player reaches. Counters saturate at thei
 
 `Battle.to_data()` and `Battle.from_data()` belong to the sim-engineer, and the shape inside is internal to src/sim/. The rules:
 
-- It holds the level (`LevelData.to_data()`), so an assembled run map or a later data change never breaks a saved game. It also holds `relaxed`, the kept effects, the waiting risk card, and every field that affects a later tick: the tick, the phase, the waves started and running with their spawn counters, gold, lives, gates, towers with their purchases, creatures with every timer, queued releases, the next id, and what the star rules need.
-- Positions between ticks, the distance fields and the folded effects are rebuilt on load, not saved.
+- It holds the level (`LevelData.to_data()`), so an assembled run map or a later data change never breaks a saved game. It also holds `relaxed`, the kept effects, the waiting risk card, and every field that affects a later tick: the tick, the phase, the waves started and running, the tick each started wave began, gold, lives, gates, towers with their purchases, creatures with every timer, queued releases (`Battle.Release`), the next id, and what the star rules need.
+- Rebuilt on load, not saved: positions between ticks, the distance fields, the folded effects, the spawn counters (worked out from each wave's start tick), and each creature's armor, speed, lives and bounty (worked out again from its type, its wave's strength and the effects).
 - `from_data` checks everything, all or nothing:
 
 | Field | Rule |
 |---|---|
 | level | passes `LevelData.check` |
-| effects | at most 64 kept and 8 waiting, each passing `Modifiers.check` for its use |
+| effects | at most 64 kept and 8 waiting, each passing `Modifiers.check` for its use (phase 7; both empty until then) |
 | tick | 0 to 1,000,000,000 |
 | phase | `build` or `wave` |
-| waves and spawn counters | inside the level's waves and groups |
+| waves | waves started 0 to the level's wave count; running waves in start order, at most `max_waves_running`; each start tick 0 to `tick` and not before the one before it |
 | gold | 0 to 1,000,000,000 |
 | lives | 1 to 1,000,000 |
 | gates | each on a socket, at most one per socket, at most `max_gates` placed and in hand together; in `build` the closed set does not seal |
 | towers | at most the spot count; each on its own spot; a known type; tier 1 to 3; spec matching the tier and inside any cap |
 | creatures | at most 4,000; ids 0 to 2^31, unique and below the next id; known types; health 1 to max health, max health 1 to 1,000,000,000; walkers on joined road cells with progress 0 to UNIT; flyers inside the map; every timer inside its data range |
+| releases | at most 1,000; each a known creature of a running wave, 1 to 200 still to come, the next one due within one gap, starting as a creature would (walkers on joined road cells, flyers inside the map) |
 | every number | whole, finite and in range, then converted to int |
 
 `RunSession.from_data` (phase 7) checks the run the same way: a seed from 0 to 2^32, known card ids, at most 64 picks, 0 to 17 drafts owed, and a day key or `""`.
@@ -1343,7 +1389,7 @@ Target: 60 fps on the Fold5 (Snapdragon 8 Gen 2), on both screens, through the l
 
 | Thing | Budget | Held by |
 |---|---|---|
-| Live creatures at once, Puffs and releases included | 200 | The spawn bound (2.4): one wave spawns at most 120 counting splits, and at most `max_waves_running` (2) waves run at once. The bots report the real peak, boss releases included. |
+| Live creatures at once, Puffs and releases included | 200 | The planned peak. The spawn bound (2.4) holds one wave to 120 counting splits, and at most `max_waves_running` (2) waves run at once, so a failing defense can see more: up to 240 plus boss summons. The bots report the real peak. |
 | Towers | 24 | Build spots per map (2.3) |
 | Drawn projectiles in flight | 150 | The render pools them. The sim has no shots: hits land at once. |
 | Particles alive | 400 | Pooled emitters, at most 24, at most 16 particles per puff |
@@ -1352,10 +1398,19 @@ Target: 60 fps on the Fold5 (Snapdragon 8 Gen 2), on both screens, through the l
 
 ### 9.2 Time per frame on the Fold5 (16.7 ms)
 
-- Sim: at most 2 ms per frame at 3x (one tick per frame at 60 fps), with 200 live creatures. On the dev PC, headless: at most 0.5 ms per tick.
+- Sim: at most 2 ms per tick at the 99th percentile, at 3x with 200 live creatures. At 3x and 60 fps that is about one tick per frame.
 - Render and UI scripts (`sync`, events, HUD): at most 3 ms.
 - GPU: at most 8 ms.
 - The 99th percentile frame over the whole wave: at most 20 ms.
+
+These Fold5 numbers are the budget. The dev PC number is only an early warning.
+
+- **Dev PC, headless.** tests/sim/test_battle_perf.gd times a crowd of 200 or more creatures. Its 0.5 ms per tick is a **mean**, not a worst case. The test fails only past a 2 ms mean, so a busy machine does not fail the suite. The 99th percentile is printed, not budgeted, because other programs on the PC move it. Three runs on 2026-10-23, peak 205 creatures: mean 0.35 to 0.51 ms, 99th percentile 0.9 to 1.1 ms.
+- **The Fold5 decides, in phase 6.** The render engineer plays the largest region 1 wave at 3x on both screens and reads PerfProbe's wave summary (9.4):
+  1. Mean frame at most 16.7 ms and 99th percentile frame at most 20 ms, on both screens: no more performance work, whatever the PC shows.
+  2. Otherwise, if the sim's 99th percentile tick is over 2 ms: the sim engineer speeds up the sim before any more content.
+  3. Otherwise: the render and UI scripts are sped up first.
+- Phase 7 measures again with the largest wave of the game (brief section 11).
 
 ### 9.3 Draw approach
 
@@ -1370,7 +1425,7 @@ Target: 60 fps on the Fold5 (Snapdragon 8 Gen 2), on both screens, through the l
 
 1. **Sim, headless:** a benchmark tool in tools/balance/ plays each level's largest wave with a bot's build and prints the mean and 99th percentile ms per tick and the peak live creatures.
 2. **On the phone:** the same tool writes game_level.json through `SaveStore` just before the largest wave starts. Push it into a debug build's files folder: `adb push game_level.json /data/local/tmp/`, then `adb shell run-as io.github.bartbasi.forkline cp /data/local/tmp/game_level.json files/game_level.json`. Open the game, tap Continue, set 3x. This uses the normal resume path, so the test is the real game.
-3. **PerfProbe** (debug builds only) prints one line every 2 seconds during a wave: fps, 99th percentile frame ms, process ms, draw calls, objects, live creatures. Read it with `adb logcat -s godot`. Measure on the cover screen, on the inner screen, and while folding mid-wave.
+3. **PerfProbe** (debug builds only) prints one line every 2 seconds during a wave: fps, 99th percentile frame ms, process ms, the sim's tick time (3.6, step 8), draw calls, objects, live creatures. At the end of each wave it prints a summary: the mean, 99th percentile and worst frame, the tick's mean, 99th percentile and worst, and the peak live creatures. Read it with `adb logcat -s godot`. Measure on the cover screen, on the inner screen, and while folding mid-wave.
 4. Godot renders at the display rate by default (`application/run/max_fps=0`), which can mean 120 fps on the Fold5. The render-engineer measures both, and the DM sets `application/run/max_fps=60` if 120 costs too much heat or paces badly.
 5. The render-engineer reports the numbers and the device state (screen, speed, wave) in its report.
 
