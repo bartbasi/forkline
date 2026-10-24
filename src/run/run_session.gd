@@ -40,7 +40,8 @@ var _in_pool: Dictionary[StringName, bool] = {}
 ## A new run. day is "" for a normal run. A daily passes its day key, run_seed equal to
 ## RunSeeds.daily_seed(day), and relaxed false. Null when the seed is outside 0 to 2^32 - 1,
 ## a daily breaks any of that, the pool is not a list of 1 to 256 known cards with no
-## repeats, or the map cannot be built.
+## repeats, holds no economy card that can be taken again (so a draft is never empty), or the
+## map cannot be built.
 static func start(seed_value: int, day_key: String, relaxed: bool, pool_ids: Array[StringName], data: RunData, catalog: Catalog) -> RunSession:
 	if data == null or catalog == null:
 		return null
@@ -63,10 +64,20 @@ static func start(seed_value: int, day_key: String, relaxed: bool, pool_ids: Arr
 	return session
 
 
+## Drafts owed: the cleared waves among waves 1 to 17, less the picks made (3.4).
+func drafts_owed() -> int:
+	return maxi(_cleared(battle) - picks.size(), 0)
+
+
+## A card's data as RunData holds it (3.4); {} when the id is unknown.
+func card(id: StringName) -> Dictionary:
+	return _data.card(id)
+
+
 ## True when a draft is owed and the battle is in a build phase. A draft with no build
 ## phase after it never opens.
 func draft_open() -> bool:
-	return battle.phase == Battle.Phase.BUILD and _owed() > 0
+	return battle.phase == Battle.Phase.BUILD and drafts_owed() > 0
 
 
 ## The open draft's cards, 1 to 3, in the order they were drawn; [] when no draft is open.
@@ -131,7 +142,7 @@ func pick(card_id: StringName) -> StringName:
 ## &"draft_waiting" while a draft is owed, in a build phase or during a wave. Otherwise
 ## the battle's own answer: the next wave starts, or an early call is made.
 func start_next_wave() -> StringName:
-	if (battle.phase == Battle.Phase.BUILD or battle.phase == Battle.Phase.WAVE) and _owed() > 0:
+	if (battle.phase == Battle.Phase.BUILD or battle.phase == Battle.Phase.WAVE) and drafts_owed() > 0:
 		return &"draft_waiting"
 	return battle.start_next_wave()
 
@@ -190,6 +201,8 @@ static func from_data(raw: Variant, saved_battle: Battle, run_data: RunData) -> 
 	var pick_ids: Array[StringName] = _read_picks(top.get("picks", null), pool_ids, run_data, chk)
 	if pick_ids.size() > _cleared(saved_battle):
 		chk.fail("picks", "more picks than cleared waves")
+	if chk.ok() and not _has_repeatable_economy(pool_ids, run_data):
+		chk.fail("pool", "holds no economy card that can be taken again")
 	if not chk.ok():
 		return null
 	var session: RunSession = new()
@@ -256,7 +269,17 @@ static func _pool_ok(pool_ids: Array[StringName], data: RunData) -> bool:
 		if seen.has(id) or data.card(id).is_empty():
 			return false
 		seen[id] = true
-	return true
+	return _has_repeatable_economy(pool_ids, data)
+
+
+## True when the pool holds an economy card that is not once. Economy cards are always
+## eligible, so such a card means a draft always has something to offer.
+static func _has_repeatable_economy(pool_ids: Array[StringName], data: RunData) -> bool:
+	for id: StringName in pool_ids:
+		var card_data: Dictionary = data.card(id)
+		if card_data.get("kind", &"") == &"economy" and not bool(card_data.get("once", false)):
+			return true
+	return false
 
 
 ## Waves 1 to 17 that have started and are no longer on the map (3.4).
@@ -277,11 +300,6 @@ func _set_up(made: Battle, seed_value: int, day_key: String, pool_ids: Array[Str
 	_data = data
 	for id: StringName in pool:
 		_in_pool[id] = true
-
-
-## Drafts owed: the cleared waves among waves 1 to 17, less the picks made.
-func _owed() -> int:
-	return maxi(_cleared(battle) - picks.size(), 0)
 
 
 ## The held card with this id; {} when unknown. Read only.

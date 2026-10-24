@@ -334,6 +334,20 @@ func test_hostile_pools_give_null() -> void:
 	assert_not_null(RunSession.from_data(tiny, good[1], Fx.run_data()), "a pool of just the picks is a fine pool")
 
 
+func test_a_saved_pool_needs_an_economy_card_that_can_be_taken_again() -> void:
+	var good: Array = _good()
+	# Cards that are not economy cards, or economy cards that are taken only once.
+	for bad: Array in [["tower_bakery"], ["sharp_pebbles", "spare_gate"], ["piggy_bank"], ["piggy_bank", "spare_gate"], ["piggy_bank", "tower_bakery", "crowded_night"]]:
+		var raw: Dictionary = (good[0] as Dictionary).duplicate(true)
+		raw["pool"] = bad
+		raw["picks"] = []
+		assert_null(RunSession.from_data(raw, good[1], Fx.run_data()), "pool %s" % str(bad))
+	var ok: Dictionary = (good[0] as Dictionary).duplicate(true)
+	ok["pool"] = ["piggy_bank", "gold_purse"]
+	ok["picks"] = []
+	assert_not_null(RunSession.from_data(ok, good[1], Fx.run_data()), "one economy card that can be taken again is enough")
+
+
 func _many_ids(count: int) -> Array:
 	var out: Array = []
 	for i: int in count:

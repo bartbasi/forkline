@@ -2,8 +2,8 @@
 # Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.
 extends "res://tests/base_test.gd"
 ## The real data/runs/run.json and data/cards/cards.json (docs/ARCHITECTURE.md 2.10, 2.11).
-## The real segments and packs come from the level designer; until they exist the fixtures
-## stand in for them, and the real ones are checked as soon as they are there.
+## The real segments and packs come from the level designer. Most tests here use the fixture
+## segments and packs; the last ones use the real files.
 
 const Fx: GDScript = preload("res://tests/run/fixtures/run_fixtures.gd")
 const RUN_PATH: String = "res://data/runs/run.json"
@@ -189,9 +189,8 @@ func test_every_real_card_is_accepted_by_a_battle() -> void:
 		assert_eq(battle.add_effects(effects, card["kind"] == &"risk"), Battle.DONE, String(id))
 
 
-func test_the_real_segments_and_packs_pass_when_they_exist() -> void:
-	if not FileAccess.file_exists(SEGMENT_DIR + "index.json"):
-		return
+## Every real file: run plan, cards, segments and packs.
+func _real_files() -> Dictionary:
 	var files: Dictionary = {
 		"runs/run.json": _read(RUN_PATH, 16384), "cards/cards.json": _read(CARDS_PATH, 262144),
 		"segments/index.json": _read(SEGMENT_DIR + "index.json", 16384),
@@ -202,19 +201,51 @@ func test_the_real_segments_and_packs_pass_when_they_exist() -> void:
 		for id: Variant in (index as Dictionary)["segments"]:
 			if DataCheck.is_id(id):
 				files["segments/%s.json" % id] = _read(SEGMENT_DIR + "%s.json" % id, 16384)
+	return files
+
+
+func test_the_real_segments_and_packs_pass() -> void:
+	var files: Dictionary = _real_files()
 	var found: PackedStringArray = RunData.check(files, catalog)
-	assert_eq(found, PackedStringArray(), "\n".join(found))
+	assert_eq(found, PackedStringArray(), "
+".join(found))
 	var data: RunData = RunData.from_data(files, catalog)
+	assert_not_null(data)
 	if data == null:
 		return
 	# Every stack of the real segments is a valid map (2.9), and a run from a seed builds.
 	var packs: Array[StringName] = []
 	for band: int in range(1, 7):
 		packs.append(data.packs_of(band)[0]["id"])
+	var stacks: int = 0
 	for top: Dictionary in data.segments_of(&"top"):
 		for middle: Dictionary in data.segments_under(top["id"]):
 			for bottom: Dictionary in data.segments_under(middle["id"]):
 				var level: LevelData = MapAssembler.build(data, catalog, top["id"], middle["id"], bottom["id"], packs)
 				assert_not_null(level, "%s / %s / %s" % [top["id"], middle["id"], bottom["id"]])
+				stacks += 1
+	assert_true(stacks > 0, "the real segments make at least one stack")
 	for run_seed: int in 50:
 		assert_not_null(MapAssembler.assemble(run_seed, data, catalog), "seed %d" % run_seed)
+
+
+## Real runs start from the real pools, and the real pools can always fill a draft.
+func test_real_runs_start_with_the_real_pools() -> void:
+	var data: RunData = RunData.from_data(_real_files(), catalog)
+	assert_not_null(data)
+	if data == null:
+		return
+	for id: StringName in [&"gold_purse", &"tea_break"]:
+		assert_false(bool(data.card(id)["once"]), "%s can be taken again" % id)
+		assert_eq(data.card(id)["kind"], &"economy")
+		assert_true(data.pool({}).has(id), "%s is in the base pool" % id)
+	for run_seed: int in [0, 1, 2, 12345, 4294967295]:
+		var s: RunSession = RunSession.start(run_seed, "", false, data.pool({}), data, catalog)
+		assert_not_null(s, "seed %d, base pool" % run_seed)
+		assert_not_null(RunSession.start(run_seed, "", true, data.card_ids(), data, catalog), "seed %d, every card, Relaxed" % run_seed)
+	var day: String = "2026-10-24"
+	var daily: RunSession = RunSession.start(RunSeeds.daily_seed(day), day, false, data.card_ids(), data, catalog)
+	assert_not_null(daily)
+	if daily != null:
+		assert_eq(daily.card(&"gold_purse")["kind"], &"economy")
+		assert_eq(daily.drafts_owed(), 0)

@@ -155,6 +155,45 @@ func test_start_refuses_bad_input() -> void:
 	assert_null(RunSession.start(1, "", false, ids, broken, catalog), "the map cannot be built")
 
 
+## A draft can never be empty: economy cards are always eligible, so the pool needs one that
+## can be taken again.
+func test_a_pool_needs_an_economy_card_that_can_be_taken_again() -> void:
+	var bad_pools: Array = [
+		[&"tower_bakery"],
+		[&"sharp_pebbles", &"spare_gate"],
+		[&"crowded_night", &"flock", &"tower_lullaby_bell"],
+		[&"piggy_bank"],
+		[&"piggy_bank", &"spare_gate", &"tower_bakery"],
+	]
+	for bad: Array in bad_pools:
+		var ids: Array[StringName] = []
+		ids.assign(bad)
+		assert_null(RunSession.start(1, "", false, ids, data, catalog), "pool %s" % str(bad))
+	var good_pools: Array = [[&"gold_purse"], [&"piggy_bank", &"gold_purse"], [&"tower_bakery", &"gold_purse", &"crowded_night"]]
+	for good: Array in good_pools:
+		var ids: Array[StringName] = []
+		ids.assign(good)
+		assert_not_null(RunSession.start(1, "", false, ids, data, catalog), "pool %s" % str(good))
+	assert_not_null(RunSession.start(1, "", false, data.pool({}), data, catalog), "the base pool")
+	assert_not_null(RunSession.start(1, "", false, data.card_ids(), data, catalog), "every card")
+
+
+func test_card_gives_the_data_of_a_known_card_and_nothing_for_an_unknown_one() -> void:
+	var s: RunSession = Player.session(1)
+	assert_eq(s.card(&"gold_purse"), data.card(&"gold_purse"))
+	assert_eq(s.card(&"gold_purse")["kind"], &"economy")
+	assert_eq(s.card(&"tower_bakery")["tower"], &"bakery")
+	assert_eq(s.card(&"no_such_card"), {})
+	assert_eq(s.card(&""), {})
+	# A card outside the pool is still a known card.
+	var small: RunSession = _with_pool(1, [&"gold_purse"] as Array[StringName])
+	assert_eq(small.card(&"spare_gate")["kind"], &"gate")
+	# A change to the answer does not reach the run's data.
+	var copy: Dictionary = s.card(&"gold_purse")
+	copy["kind"] = &"risk"
+	assert_eq(s.card(&"gold_purse")["kind"], &"economy")
+
+
 # owed drafts
 
 func test_no_draft_is_owed_before_a_wave_is_cleared() -> void:
@@ -164,6 +203,28 @@ func test_no_draft_is_owed_before_a_wave_is_cleared() -> void:
 	assert_false(s.draft_open(), "during wave 1")
 	assert_eq(s.offers(), [])
 	assert_eq(s.battle.phase, Battle.Phase.WAVE)
+
+
+func test_drafts_owed_counts_the_cleared_waves_less_the_picks() -> void:
+	var s: RunSession = Player.session(1)
+	assert_eq(s.drafts_owed(), 0, "a new run")
+	s.start_next_wave()
+	assert_eq(s.drafts_owed(), 0, "during wave 1")
+	var done: RunSession = _after_wave_one(data.pool({}))
+	assert_eq(done.drafts_owed(), 1, "wave 1 cleared")
+	assert_true(done.draft_open())
+	done.pick(done.offers()[0])
+	assert_eq(done.drafts_owed(), 0, "the pick is made")
+	# Shortcut states: drafts are owed for waves 1 to 17 only.
+	s = Player.session(1)
+	_open(s, 5)
+	assert_eq(s.drafts_owed(), 1)
+	s.battle.waves_started = 9
+	assert_eq(s.drafts_owed(), 5, "waves 5 to 9 are owed")
+	s.battle.waves_started = 18
+	assert_eq(s.drafts_owed(), 13, "wave 18 owes no draft: 17 cleared less 4 picks")
+	s.battle.waves_started = 0
+	assert_eq(s.drafts_owed(), 0, "never below 0")
 
 
 func test_a_cleared_wave_owes_a_draft_that_blocks_the_next_wave() -> void:
@@ -651,9 +712,9 @@ func test_a_battle_refusal_is_returned_and_the_pick_is_not_kept() -> void:
 
 
 func test_picking_a_tower_card_adds_the_tower() -> void:
-	var ids: Array[StringName] = [&"tower_bakery"]
+	var ids: Array[StringName] = [&"tower_bakery", &"gold_purse"]
 	var s: RunSession = _after_wave_one(ids)
-	assert_eq(s.offers(), [&"tower_bakery"])
+	assert_eq(s.offers(), [&"tower_bakery", &"gold_purse"])
 	var spot: Vector2i = s.battle.level.spots[0]
 	s.battle.sell_tower(spot)
 	var before: Array[StringName] = []
@@ -685,7 +746,7 @@ func test_picking_gold_lives_and_gates() -> void:
 	var lives: int = tea.battle.lives
 	assert_eq(tea.pick(&"tea_break"), Battle.DONE)
 	assert_eq(tea.battle.lives, lives + 5)
-	var gate: RunSession = _after_wave_one([&"spare_gate"] as Array[StringName])
+	var gate: RunSession = _after_wave_one([&"spare_gate", &"gold_purse"] as Array[StringName])
 	var in_hand: int = gate.battle.gates_in_hand
 	assert_eq(gate.pick(&"spare_gate"), Battle.DONE)
 	assert_eq(gate.battle.gates_in_hand, in_hand + 1)
@@ -693,7 +754,7 @@ func test_picking_gold_lives_and_gates() -> void:
 
 
 func test_a_risk_card_waits_for_the_next_wave_and_changes_it_only() -> void:
-	var s: RunSession = _after_wave_one([&"crowded_night"] as Array[StringName])
+	var s: RunSession = _after_wave_one([&"crowded_night", &"gold_purse"] as Array[StringName])
 	var plain: int = 0
 	for row: Dictionary in s.battle.wave_preview(1):
 		plain += int(row["count"])
@@ -715,7 +776,7 @@ func test_a_risk_card_waits_for_the_next_wave_and_changes_it_only() -> void:
 
 
 func test_a_flock_adds_a_group_to_the_next_wave() -> void:
-	var s: RunSession = _after_wave_one([&"flock"] as Array[StringName])
+	var s: RunSession = _after_wave_one([&"flock", &"gold_purse"] as Array[StringName])
 	var rows: int = s.battle.wave_preview(1).size()
 	assert_eq(s.pick(&"flock"), Battle.DONE)
 	var preview: Array[Dictionary] = s.battle.wave_preview(1)
