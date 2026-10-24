@@ -27,6 +27,7 @@ func request_close() -> void:
 	closed.emit()
 
 
+## The dialog closes first, so a screen the answer opens is not hidden by it.
 func _confirm() -> void:
-	confirmed.emit()
 	closed.emit()
+	confirmed.emit()

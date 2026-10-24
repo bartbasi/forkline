@@ -14,6 +14,9 @@ var index: int = -1
 var expanded: bool = true
 var header: TapRow = null
 var header_label: Label = null
+## False keeps the preview folded into its strip in a build phase too, for a layout with
+## no spare height. A tap on the header still opens it.
+var auto_expand: bool = true
 var rows: Array[TapRow] = []
 var open_rows: Array[StringName] = []
 
@@ -27,6 +30,14 @@ func set_unseen(ids: Array[StringName]) -> void:
 	_unseen = ids.duplicate()
 	_signature = []
 	refresh()
+
+
+## Changes whether a build phase opens the preview by itself (see auto_expand).
+func set_auto_expand(value: bool) -> void:
+	if value != auto_expand:
+		auto_expand = value
+		_last_phase = -1
+		refresh()
 
 
 ## Folds or opens the preview, as a tap on its header does.
@@ -52,7 +63,7 @@ func refresh() -> void:
 	if int(battle.phase) != _last_phase:
 		# Open in a build phase, folded into a strip during a wave.
 		_last_phase = int(battle.phase)
-		expanded = battle.phase == Battle.Phase.BUILD
+		expanded = auto_expand and battle.phase == Battle.Phase.BUILD
 		_signature = []
 	var wave: int = battle.waves_started
 	if wave != index:

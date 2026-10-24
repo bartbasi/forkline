@@ -15,7 +15,8 @@ const COVER: Vector2 = Vector2(1080.0, 2767.0)
 const INNER: Vector2 = Vector2(1998.0, 2400.0)
 const COVER_SAFE: Rect2 = Rect2(0.0, 96.0, 1080.0, 2500.0)
 const INNER_SAFE: Rect2 = Rect2(0.0, 0.0, 1998.0, 2250.0)
-const WATCHDOG_SECONDS: float = 90.0
+const WATCHDOG_SECONDS: float = 150.0
+const BattleFixtures: GDScript = preload("res://tests/ui/battle_fixtures.gd")
 
 
 ## Stands in for the phone: remembers every address handed to it.
@@ -60,6 +61,7 @@ func _viewport(size: Vector2) -> SubViewport:
 func _hosted(vp: SubViewport, screen: Control, size: Vector2, safe: Rect2) -> void:
 	var holder: Control = Control.new()
 	holder.set_anchors_preset(Control.PRESET_FULL_RECT)
+	holder.theme = UiTheme.build()
 	vp.add_child(holder)
 	holder.add_child(screen)
 	screen.call("apply_layout", size, safe)
@@ -74,6 +76,7 @@ func _run() -> void:
 	await _about_first_screenful()
 	await _battle_panels()
 	await _app()
+	await _battle_screens()
 	Links.opener = Callable()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
@@ -83,7 +86,8 @@ func _run() -> void:
 
 const SCREEN_NAMES: PackedStringArray = [
 	"front door", "mode screen", "mode screen open", "info", "about", "license viewer",
-	"settings", "pause", "confirm",
+	"settings", "pause", "confirm", "level select", "level card", "level card saved", "end win", "end loss",
+	"info card tower", "info card creature", "notice", "damaged",
 ]
 
 
@@ -265,9 +269,6 @@ func _about_first_screenful() -> void:
 
 
 # The battle panels: real Battle objects, at both Fold5 sizes.
-
-const BattleFixtures: GDScript = preload("res://tests/ui/battle_fixtures.gd")
-
 
 ## A themed host with a column the width a layout gives the panels: the whole safe
 ## width in portrait, a side panel of 760 in landscape.
@@ -455,3 +456,375 @@ func _app() -> void:
 	await _frames()
 	check(not door.landscape, "and back to portrait")
 	vp.queue_free()
+
+
+# The battle screen in a real scene tree, at both Fold5 sizes.
+
+const Fx: GDScript = preload("res://tests/ui/flow_fixtures.gd")
+const BATTLE_TAGS: PackedStringArray = [
+	"real_cover_build", "real_inner_build", "real_cover_touch", "real_inner_touch",
+	"real_cover_drag", "real_inner_drag", "real_fold", "real_back",
+]
+
+
+func _battle_app(vp: SubViewport, size: Vector2, safe: Rect2, tag: String) -> App:
+	Fx.wipe(tag)
+	var made: App = (load("res://scenes/ui/app.tscn") as PackedScene).instantiate() as App
+	made.game = BattleFixtures.game()
+	made.store = SaveStore.new(Fx.dir(tag))
+	made.audio = Fx.audio()
+	made.end_delay = 0.0
+	vp.add_child(made)
+	await _frames()
+	made.apply_layout(size, safe)
+	Fx.mark_all_seen(made)
+	return made
+
+
+func _start_level(made: App, id: StringName) -> BattleScreen:
+	made.start_level(id, false)
+	await _frames(4)
+	return made.battle_screen()
+
+
+## Every visible control inside the viewport, and every button big enough.
+func _inside_and_big(root: Node, size: Vector2, where: String) -> void:
+	var screen: Rect2 = Rect2(Vector2.ZERO, size).grow(0.6)
+	for node: Node in root.find_children("*", "Control", true, false):
+		var control: Control = node as Control
+		if not control.is_visible_in_tree() or control.size.x <= 0.0 or control.size.y <= 0.0:
+			continue
+		check(screen.encloses(control.get_global_rect()), "%s: %s (%s) lies outside the viewport %s" % [where, control.get_class(), control.name, control.get_global_rect()])
+	for node: Node in root.find_children("*", "BaseButton", true, false):
+		var button: BaseButton = node as BaseButton
+		if button.is_visible_in_tree() and button.size.x > 0.0:
+			check(button.size.x >= Layout.MIN_TOUCH - 0.5 and button.size.y >= Layout.MIN_TOUCH - 0.5, "%s: a button is under 48 dp (%s)" % [where, button.size])
+
+
+func _cell_center(screen: BattleScreen, cell: Vector2i) -> Vector2:
+	return screen.map_view.get_global_transform() * ((Vector2(cell) + Vector2(0.5, 0.5)) * MapView.CELL)
+
+
+func _motion(vp: SubViewport, at: Vector2) -> void:
+	var motion: InputEventMouseMotion = InputEventMouseMotion.new()
+	motion.position = at
+	motion.global_position = at
+	motion.button_mask = MOUSE_BUTTON_MASK_LEFT
+	vp.push_input(motion)
+
+
+## The points of a straight line, for a finger that moves.
+func _line(from: Vector2, to: Vector2) -> Array[Vector2]:
+	var out: Array[Vector2] = []
+	for i: int in 9:
+		out.append(from.lerp(to, float(i) / 8.0))
+	return out
+
+
+func _battle_screens() -> void:
+	for pair: Array in [[COVER, COVER_SAFE, "cover"], [INNER, INNER_SAFE, "inner"]]:
+		var size: Vector2 = pair[0]
+		var safe: Rect2 = pair[1]
+		var label: String = pair[2]
+		await _battle_build_phase(size, safe, label)
+		await _battle_panels_and_touch(size, safe, label)
+		await _battle_gate_drag(size, safe, label)
+	await _battle_fold()
+	await _battle_back_and_pause()
+	await _battle_end_delay()
+	for tag: String in BATTLE_TAGS:
+		Fx.wipe(tag)
+	Fx.audio().free()
+
+
+func _battle_build_phase(size: Vector2, safe: Rect2, label: String) -> void:
+	var vp: SubViewport = _viewport(size)
+	var made: App = await _battle_app(vp, size, safe, "real_%s_build" % label)
+	var screen: BattleScreen = await _start_level(made, &"r1_l2")
+	var where: String = "battle build phase at %s" % size
+	_inside_and_big(screen, size, where)
+	var cell_px: float = screen.map_view.scale.x * MapView.CELL
+	check(cell_px >= (140.0 if not screen.landscape else 165.0), "%s: map cells are %.0f px" % [where, cell_px])
+	check(screen.landscape == (label == "inner"), "%s: the layout follows the window" % where)
+	var rect: Rect2 = screen.map_area.get_global_rect()
+	check(rect.size.x >= 7.0 * cell_px - 1.0 and rect.size.y >= 10.0 * cell_px - 1.0, "%s: the whole map fits its slot" % where)
+	if not screen.landscape:
+		check(screen.hud.get_global_rect().end.y <= rect.position.y + 1.0, "%s: the HUD is above the map" % where)
+		check(screen.hud.get_global_rect().position.y >= safe.position.y - 0.5, "%s: the HUD is inside the safe area" % where)
+		check(screen.preview.get_global_rect().end.y <= safe.end.y + 0.5, "%s: the preview is inside the safe area" % where)
+		check(screen.hud.call_button.get_global_rect().get_center().y < size.y * 0.5, "%s: the HUD is on top" % where)
+		check(not screen.preview.expanded, "%s: the preview is a strip in portrait" % where)
+	else:
+		check(screen.hud.get_global_rect().position.x >= rect.end.x - 1.0, "%s: the HUD is in the side column" % where)
+		check(screen.preview.get_global_rect().position.x >= rect.end.x - 1.0, "%s: the preview is in the side column" % where)
+		check(screen.preview.expanded, "%s: the preview is open in landscape" % where)
+	vp.queue_free()
+	# A first sight card and the hint in a real layout.
+	var vp2: SubViewport = _viewport(size)
+	var fresh: App = (load("res://scenes/ui/app.tscn") as PackedScene).instantiate() as App
+	Fx.wipe("real_%s_build" % label)
+	fresh.game = BattleFixtures.game()
+	fresh.store = SaveStore.new(Fx.dir("real_%s_build" % label))
+	fresh.audio = Fx.audio()
+	fresh.end_delay = 0.0
+	vp2.add_child(fresh)
+	await _frames()
+	fresh.apply_layout(size, safe)
+	fresh.start_level(&"r1_l1", false)
+	await _frames(4)
+	var first: BattleScreen = fresh.battle_screen()
+	check(first.card_open(), "%s: level 1-1 opens its first sight card" % where)
+	_inside_and_big(fresh.top_modal(), size, "%s first sight card" % where)
+	for i: int in 3:
+		(fresh.top_modal() as InfoCard).advance()
+	await _frames(2)
+	check(first.hint_banner.visible, "%s: the hint shows after the cards" % where)
+	_inside_and_big(first, size, "%s with the hint" % where)
+	vp2.queue_free()
+	await _frames(2)
+
+
+func _battle_panels_and_touch(size: Vector2, safe: Rect2, label: String) -> void:
+	var vp: SubViewport = _viewport(size)
+	var made: App = await _battle_app(vp, size, safe, "real_%s_touch" % label)
+	var screen: BattleScreen = await _start_level(made, &"r1_l3")
+	var b: Battle = screen.battle
+	var where: String = "battle touches at %s" % size
+	# A real tap on a build spot opens the build panel.
+	var spot: Vector2i = b.level.spots[0]
+	_touch(vp, _cell_center(screen, spot))
+	await _frames(3)
+	check(screen.context_panel() == screen.build_panel, "%s: a tap on a spot opens the build panel" % where)
+	check(screen.selected_cell() == spot, "%s: and selects it" % where)
+	if not screen.landscape:
+		var sheet_top: float = screen.build_panel.get_global_rect().position.y
+		check(sheet_top >= screen.hud.get_global_rect().end.y - 0.5, "%s: the sheet never covers the HUD (%s vs %s)" % [where, sheet_top, screen.hud.get_global_rect().end.y])
+		_inside_and_big(screen.build_panel, size, "%s build panel" % where)
+	# A real tap on Build builds.
+	screen.build_panel.select_tower(&"pumpkin_catapult")
+	await _frames(2)
+	_touch(vp, screen.build_panel.build_button.get_global_rect().get_center())
+	check(b.tower_at(spot) != null, "%s: a real tap on Build builds the tower" % where)
+	await _frames(2)
+	check(screen.context_panel() == null, "%s: the panel closed after building" % where)
+	# The lowest spot: the sheet must not hide it, the map slides up.
+	var lowest: Vector2i = b.level.spots[0]
+	for cell: Vector2i in b.level.spots:
+		if cell.y > lowest.y:
+			lowest = cell
+	b.gold = 2000
+	b.place_tower(lowest, &"sling_post")
+	b.upgrade_tower(lowest)
+	await _frames(2)
+	_touch(vp, _cell_center(screen, lowest))
+	await _frames(40)
+	check(screen.context_panel() == screen.tower_panel, "%s: a tap on a tower opens its panel" % where)
+	if not screen.landscape:
+		var sheet: Rect2 = screen.tower_panel.get_global_rect()
+		var side: float = screen._cell_px()
+		var cell_rect: Rect2 = Rect2(_cell_center(screen, lowest) - Vector2(side, side) * 0.5, Vector2(side, side))
+		check(cell_rect.end.y <= sheet.position.y + 2.0, "%s: the tapped tower is above the sheet (%s vs %s)" % [where, cell_rect, sheet])
+		check(cell_rect.position.y >= screen.hud.get_global_rect().end.y - 2.0, "%s: and below the HUD" % where)
+		check(sheet.end.y <= safe.end.y + 0.5, "%s: the sheet is inside the safe area" % where)
+		_inside_and_big(screen.tower_panel, size, "%s tower panel" % where)
+	else:
+		check(screen.tower_panel.get_global_rect().position.x >= screen.map_area.get_global_rect().end.x - 1.0, "%s: the panel is in the side column" % where)
+	# A tap on bare ground closes the panel.
+	var ground: Vector2i = Vector2i(-1, -1)
+	var map_rect: Rect2 = screen.map_area.get_global_rect()
+	var open_top: float = screen.tower_panel.get_global_rect().position.y if not screen.landscape else size.y
+	for row: int in b.level.rows:
+		for column: int in Sim.MAP_COLUMNS:
+			var probe_cell: Vector2i = Vector2i(column, row)
+			var at_cell: Vector2 = _cell_center(screen, probe_cell)
+			if ground.x < 0 and b.level.kind_at(probe_cell) == LevelData.Kind.SCENERY and map_rect.has_point(at_cell) and at_cell.y < open_top - 60.0:
+				ground = probe_cell
+	check(ground.x >= 0, "%s: there is bare ground in sight" % where)
+	_touch(vp, _cell_center(screen, ground))
+	await _frames(2)
+	check(screen.context_panel() == null, "%s: a tap on bare ground closes the panel" % where)
+	# A creature panel during a wave, also while paused.
+	b.upgrade_tower(lowest, 0)
+	screen.hud.call_button.tapped.emit()
+	screen.clock.speed = 3
+	var guard: int = 0
+	while b.enemies.is_empty() and guard < 300:
+		await process_frame
+		guard += 1
+	await _frames(3)
+	check(not b.enemies.is_empty(), "%s: a wave is running" % where)
+	if not b.enemies.is_empty():
+		screen.freeze()
+		await _frames(40)
+		var enemy: EnemyState = b.enemies[0]
+		var view: MapView.CreatureView = screen.map_view._creatures[enemy.id]
+		var at: Vector2 = screen.map_view.get_global_transform() * view.center
+		check(screen.map_area.get_global_rect().has_point(at), "%s: the creature is on the map slot" % where)
+		_touch(vp, at)
+		await _frames(3)
+		check(screen.context_panel() == screen.enemy_panel, "%s: a tap on a creature shows its numbers, also while paused" % where)
+		if not screen.landscape:
+			_inside_and_big(screen.enemy_panel, size, "%s creature panel" % where)
+	vp.queue_free()
+	await _frames(2)
+
+
+func _battle_gate_drag(size: Vector2, safe: Rect2, label: String) -> void:
+	var vp: SubViewport = _viewport(size)
+	var made: App = await _battle_app(vp, size, safe, "real_%s_drag" % label)
+	var data: Dictionary = BattleFixtures.game().levels[&"r1_l2"].to_data()
+	data["gates"] = 2
+	var level: LevelData = LevelData.from_data(data, BattleFixtures.game().catalog)
+	var b: Battle = Battle.create(level, BattleFixtures.game().catalog, false, [] as Array[Dictionary])
+	var saved: SavedGame = SavedGame.new()
+	saved.mode = SavedGame.LEVEL
+	saved.level_id = &"r1_l2"
+	saved.battle = b
+	made._begin(saved, false)
+	await _frames(4)
+	var screen: BattleScreen = made.battle_screen()
+	var where: String = "gate drag at %s" % size
+	var a: Vector2i = level.sockets[0]
+	var c: Vector2i = level.sockets[1]
+	var lift: Vector2 = Vector2(0.0, BattleScreen.GHOST_LIFT * screen._cell_px())
+	# A tap places a gate, a tap takes it back.
+	_touch(vp, _cell_center(screen, a))
+	check(b.gates.size() == 1 and b.gates[0].cell == a, "%s: a real tap on a socket places a gate" % where)
+	_touch(vp, _cell_center(screen, a))
+	check(b.gates.is_empty(), "%s: a second tap takes it back" % where)
+	# A drag from a socket with a gate moves it.
+	_touch(vp, _cell_center(screen, a))
+	await _frames(2)
+	var path: Array[Vector2] = _line(_cell_center(screen, a), _cell_center(screen, c) + lift)
+	_press(vp, path[0], true)
+	for point: Vector2 in path:
+		_motion(vp, point)
+	await _frames(2)
+	check(screen.is_dragging(), "%s: a drag from a placed gate is going on" % where)
+	check(screen.drag_target() == c, "%s: the gate snaps to the other socket" % where)
+	check(screen.ghost.visible, "%s: the carried gate shows" % where)
+	_press(vp, path[path.size() - 1], false)
+	await _frames(2)
+	check(b.gates.size() == 1 and b.gates[0].cell == c, "%s: the drop moved the gate" % where)
+	check(not screen.ghost.visible, "%s: the carried gate is gone after the drop" % where)
+	# A second gate from the strip onto the first socket would close every road.
+	var tray_from: Vector2 = screen.gate_tray.icon.get_global_rect().get_center()
+	var drag_path: Array[Vector2] = _line(tray_from, _cell_center(screen, a) + lift)
+	_press(vp, drag_path[0], true)
+	for point: Vector2 in drag_path:
+		_motion(vp, point)
+	await _frames(2)
+	check(screen.is_dragging(), "%s: a drag from the gate strip is going on" % where)
+	check(screen.ghost.look == MapArt.Gate.REFUSED, "%s: the carried gate is crossed out over a refused socket" % where)
+	_press(vp, drag_path[drag_path.size() - 1], false)
+	await _frames(2)
+	check(b.gates.size() == 1, "%s: the refused gate does not stay" % where)
+	check(screen.gate_tray.feedback_text() == "That would close every road.", "%s: the sentence shows (%s)" % [where, screen.gate_tray.feedback_text()])
+	# The gate strip takes a dropped gate back into the hand.
+	var back_path: Array[Vector2] = _line(_cell_center(screen, c), screen.gate_tray.get_global_rect().get_center() + lift)
+	_press(vp, back_path[0], true)
+	for point: Vector2 in back_path:
+		_motion(vp, point)
+	_press(vp, back_path[back_path.size() - 1], false)
+	await _frames(2)
+	check(b.gates.is_empty(), "%s: a gate dropped on the strip goes back to the hand" % where)
+	# Gates are locked during a wave.
+	b.start_next_wave()
+	await _frames(3)
+	_touch(vp, _cell_center(screen, a))
+	check(b.gates.is_empty(), "%s: no gate during a wave" % where)
+	check(screen.gate_tray.feedback_text() == "Gates are locked until the wave is over.", "%s: the locked sentence shows" % where)
+	vp.queue_free()
+	await _frames(2)
+
+
+func _battle_fold() -> void:
+	var vp: SubViewport = _viewport(COVER)
+	var made: App = await _battle_app(vp, COVER, COVER_SAFE, "real_fold")
+	var screen: BattleScreen = await _start_level(made, &"r1_l2")
+	var b: Battle = screen.battle
+	Fx.build(screen, b.level.spots[0], &"sling_post")
+	screen.close_context()
+	_touch(vp, screen.hud.call_button.get_global_rect().get_center())
+	screen.clock.speed = 2
+	var guard: int = 0
+	while b.enemies.size() < 2 and guard < 400:
+		await process_frame
+		guard += 1
+	check(b.phase == Battle.Phase.WAVE and not screen.is_paused(), "fold: a wave is running")
+	screen.tap_at(b.level.spots[0])
+	var before: String = JSON.stringify(b.to_data())
+	var tick: int = b.tick
+	var parts: Array[int] = [screen.map_view.get_instance_id(), screen.hud.get_instance_id(), screen.tower_panel.get_instance_id()]
+	vp.size = Vector2i(INNER)
+	await _frames(3)
+	check(screen.is_paused(), "fold: unfolding mid-wave pauses")
+	check(made.top_modal() is PausePanel, "fold: on the Pause menu")
+	check(screen.landscape, "fold: the window is near square, so the layout is landscape")
+	check(screen.tower_panel.is_open() and screen.context_panel() == screen.tower_panel, "fold: the open panel stays open")
+	check(screen.selected_cell() == b.level.spots[0], "fold: and the selection")
+	check(JSON.stringify(b.to_data()) == before, "fold: the battle is untouched")
+	check([screen.map_view.get_instance_id(), screen.hud.get_instance_id(), screen.tower_panel.get_instance_id()] == parts, "fold: no state node was replaced")
+	check(screen.clock.speed == 2, "fold: the speed stays")
+	await _frames(20)
+	check(b.tick == tick, "fold: nothing moved while paused")
+	var map_rect: Rect2 = screen.map_area.get_global_rect()
+	check(map_rect.end.x <= INNER.x and screen.hud.get_global_rect().position.x >= map_rect.end.x - 1.0, "fold: map left, side column right")
+	made.handle_back()
+	await _frames(2)
+	check(not screen.is_paused(), "fold: Resume goes on")
+	await _frames(10)
+	check(b.tick > tick, "fold: and time runs again")
+	vp.size = Vector2i(COVER)
+	await _frames(3)
+	check(screen.is_paused() and not screen.landscape, "fold: folding again pauses and returns to portrait")
+	check(screen.tower_panel.is_open(), "fold: still the same open panel")
+	vp.queue_free()
+	await _frames(2)
+
+
+func _battle_back_and_pause() -> void:
+	var vp: SubViewport = _viewport(COVER)
+	var made: App = await _battle_app(vp, COVER, COVER_SAFE, "real_back")
+	var screen: BattleScreen = await _start_level(made, &"r1_l1")
+	check(made.handle_back() == &"modal", "back: in a battle opens Pause")
+	await _frames(3)
+	var pause: PausePanel = made.top_modal() as PausePanel
+	check(pause != null, "back: the Pause menu is up")
+	if pause != null:
+		_inside_and_big(pause, COVER, "back: Pause over a battle")
+		recorder.urls.clear()
+		var coffee: CoffeeButton = pause.find_children("*", "CoffeeButton", true, false)[0] as CoffeeButton
+		_touch(vp, coffee.get_global_rect().get_center())
+		check(recorder.urls == ([Links.COFFEE_URL] as Array[String]), "back: the quiet coffee row in Pause hands over the address once, got %s" % [recorder.urls])
+	var coffee_in_battle: int = 0
+	for node: Node in screen.find_children("*", "CoffeeButton", true, false):
+		coffee_in_battle += 1
+	check(coffee_in_battle == 0, "back: the coffee button is not on the play screen")
+	made.handle_back()
+	await _frames(2)
+	check(made.top_modal() == null and not screen.is_paused(), "back: back again resumes")
+	vp.queue_free()
+	await _frames(2)
+
+
+## The end panel waits a moment after the last creature, and the back button skips the wait.
+func _battle_end_delay() -> void:
+	var vp: SubViewport = _viewport(COVER)
+	var made: App = await _battle_app(vp, COVER, COVER_SAFE, "real_back")
+	made.end_delay = 0.3
+	var screen: BattleScreen = await _start_level(made, &"r1_l1")
+	var win: Dictionary = {"won": true, "stars": 3, "lives_left": 19, "waves_cleared": 8, "abandoned": false, "relaxed": false}
+	made._on_battle_ended(win)
+	check(made.end_pending() and made.top_modal() == null, "end: the panel waits")
+	check(made.saved_games.is_empty(), "end: but the saved game is already gone, so a kill cannot undo the win")
+	check(made.progress.cleared(&"r1_l1"), "end: and the stars are already recorded")
+	await _frames(5)
+	check(made.top_modal() == null, "end: still waiting")
+	await create_timer(0.5).timeout
+	await _frames(3)
+	check(made.top_modal() is EndPanel, "end: the panel shows after the delay")
+	check(screen != null and made.end_pending() == false, "end: nothing is pending any more")
+	_inside_and_big(made.top_modal(), COVER, "end panel over a battle")
+	vp.queue_free()
+	await _frames(2)

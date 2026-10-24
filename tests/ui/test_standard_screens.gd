@@ -6,6 +6,7 @@ extends "res://tests/base_test.gd"
 ## no running scene tree. Layout and touch are in real_tree_checks.gd.
 
 const Probe: GDScript = preload("res://tests/ui/ui_probe.gd")
+const Fx: GDScript = preload("res://tests/ui/flow_fixtures.gd")
 const COVER: Vector2 = Vector2(1080.0, 2767.0)
 const COVER_SAFE: Rect2 = Rect2(0.0, 96.0, 1080.0, 2500.0)
 
@@ -23,6 +24,7 @@ func before_each() -> void:
 
 func after_each() -> void:
 	Links.opener = Callable()
+	Fx.wipe("standard")
 	if app != null:
 		app.free()
 	for node: Node in spare:
@@ -35,9 +37,7 @@ func _keep(node: Node) -> Node:
 
 
 func _app() -> App:
-	app = App.new()
-	app.build()
-	app.apply_layout(COVER, COVER_SAFE)
+	app = Fx.app("standard")
 	return app
 
 
