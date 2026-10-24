@@ -93,3 +93,53 @@ static func stress() -> Battle:
 
 static func _group(enemy: String, count: int, every_ms: int) -> Dictionary:
 	return {"enemy": enemy, "count": count, "entrance": 1, "at_ms": 0, "every_ms": every_ms}
+
+
+## A 7 x 11 map with a ring road: one entrance at the top, a fork that closes round the ring, three
+## gate sockets (two on the sides, one on the bottom) and nine build spots. Flyers cross the
+## ring in a straight line. Used by the tests of what phase 7 added.
+const ARENA_GRID: Array = [
+	"..1....", "..#.o..", ".o#.o..", ".#####.", ".#o.o#.", ".G...G.",
+	".Go.o#.", ".###G#.", "...#...", ".o.#o..", "...B...",
+]
+const ARENA_SPOTS: Array[Vector2i] = [
+	Vector2i(4, 1), Vector2i(1, 2), Vector2i(4, 2), Vector2i(2, 4), Vector2i(4, 4),
+	Vector2i(2, 6), Vector2i(4, 6), Vector2i(1, 9), Vector2i(4, 9),
+]
+const ALL_TOWERS: Array = ["sling_post", "pumpkin_catapult", "lullaby_bell", "longbow_loft", "firework_tower", "bakery"]
+## Gate sockets of the arena: left side, right side, bottom right, and a second one on the left side
+## (in series with the first, so both can be closed without sealing).
+const ARENA_SOCKETS: Array[Vector2i] = [Vector2i(1, 5), Vector2i(5, 5), Vector2i(4, 7), Vector2i(1, 6)]
+
+
+## A wave group for the arena: `count` of `enemy`, one every `every_ms`, from `at_ms`.
+static func group(enemy: String, count: int, every_ms: int = 400, at_ms: int = 0) -> Dictionary:
+	return {"enemy": enemy, "count": count, "entrance": 1, "at_ms": at_ms, "every_ms": every_ms}
+
+
+## The arena with these waves (each an array of groups). Lives are 1000, so only a test that
+## wants it ends in a loss. `effects` are a Twist's.
+static func arena(waves: Array, strength: int = 100, gates: int = 2, effects: Array = []) -> Battle:
+	var stats: Catalog = catalog()
+	var list: Array = []
+	for groups: Array in waves:
+		list.append({"groups": groups})
+	var data: Dictionary = {
+		"format": 1, "id": "arena", "name": "Arena", "grid": ARENA_GRID.duplicate(), "start_gold": 20000,
+		"gates": gates, "strength": strength, "towers": ALL_TOWERS.duplicate(),
+		"star3": {"kind": "no_lives_lost"}, "waves": list,
+	}
+	var twist: Array[Dictionary] = [{"type": "set_lives", "lives": 1000}]
+	for effect: Dictionary in effects:
+		twist.append(effect)
+	return Battle.create(LevelData.from_data(data, stats), stats, false, twist)
+
+
+## Builds `type` on `cell` and takes it to `tier`; at tier 3 `spec` picks the path. True when it worked.
+static func build(b: Battle, cell: Vector2i, type: StringName, tier: int = 1, spec: int = -1) -> bool:
+	if b.place_tower(cell, type) != Battle.DONE:
+		return false
+	for t: int in range(2, tier + 1):
+		if b.upgrade_tower(cell, spec if t == 3 else -1) != Battle.DONE:
+			return false
+	return true

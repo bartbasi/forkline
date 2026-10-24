@@ -12,6 +12,9 @@ extends Node2D
 ##
 ## Effects run on game time while a wave plays (so pause and 3x just work) and on real time
 ## in the build phase, so a shot in flight never hangs after the last creature is gone.
+##
+## Gate looks (3.7): a placed gate takes the first look that applies: BROKEN, then OPEN while
+## the battle holds the gates open, then FIXED, else CLOSED (see gate_look()).
 
 const CELL: float = 128.0
 ## Sub-units of the sim to local pixels.
@@ -20,6 +23,10 @@ const WALK_FPS: float = 8.0
 const FLAP_FPS: float = 11.0
 const FINGER_CELLS: float = 0.45
 const REFUSED_MS: int = 1500
+## The most "+" marks one heal shows, so a big crowd stays calm.
+const HEAL_MARKS: int = 6
+## A breaker stands at the center of the cell before its gate, one tile away.
+const BREAK_REACH: int = Sim.UNIT * 13 / 10
 const DIRS: Array[Vector2i] = [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]
 ## Draw order: ground, routes, gates, marks, then towers and creatures sorted by row, then shots,
 ## status and sparkles on top.
@@ -66,6 +73,8 @@ var level: LevelData
 ## Microseconds the last sync() and play_events() took, for PerfProbe.
 var last_sync_usec: int = 0
 var last_events_usec: int = 0
+## For tests: how many events of each kind play_events() drew something for.
+var handled: Dictionary[StringName, int] = {}
 
 var _atlas: MapAtlas
 var _ground: MapGround
@@ -94,9 +103,14 @@ var _fx_time: float = 0.0
 var _last_game: float = -1.0
 var _last_real_us: int = 0
 var _real_dt: float = 0.0
-var _syncs: int = 0
-var _has_boost: bool = false
 var _boosted: Array[Vector2] = []
+## Gates a breaker is working on this frame, and how far along each is. MapGates draws them.
+var _crack_cells: Array[Vector2i] = []
+var _crack_progress: PackedFloat32Array = PackedFloat32Array()
+var _break_total: Dictionary[int, int] = {}
+var _dust_time: float = 0.0
+var _dust_turn: int = 0
+var _prepared: Vector2i = Vector2i(-1, -1)
 var _refused_cell: Vector2i = Vector2i(-1, -1)
 var _refused_until: int = 0
 var _arrival_ids: Dictionary[int, float] = {}
@@ -151,14 +165,12 @@ func setup(new_battle: Battle) -> void:
 	_leaks.atlas = _atlas
 	_leaks.material = _premult
 	add_child(_leaks)
-	_has_boost = false
 	for id: StringName in level.towers:
 		_atlas.add_tower_looks(id)
-		var type: TowerType = battle.catalog.tower(id)
-		if type != null and type.kind == &"boost":
-			_has_boost = true
 	for id: StringName in _level_enemy_types():
 		_atlas.add_enemy(id)
+	_prepared = Vector2i(-1, -1)
+	_prepare_atlas()
 	_atlas.add_marks()
 	_atlas.add_gates()
 	_gates.atlas = _atlas
@@ -170,6 +182,11 @@ func setup(new_battle: Battle) -> void:
 	_fx_time = 0.0
 	_last_game = -1.0
 	_last_real_us = 0
+	_break_total.clear()
+	_crack_cells.clear()
+	_crack_progress.clear()
+	_dust_time = 0.0
+	handled.clear()
 
 
 ## Puts the map inside `rect` (the parent's coordinates), as large as fits, centered.
@@ -221,8 +238,9 @@ func sync(alpha: float) -> void:
 	var t0: int = Time.get_ticks_usec()
 	_advance_clock(alpha)
 	_gen += 1
-	_syncs += 1
 	_release_unclaimed()
+	if _prepare_atlas():
+		_rebake()
 	_sync_towers()
 	_sync_creatures(clampf(alpha, 0.0, 1.0))
 	_finish_dying()
@@ -243,12 +261,14 @@ func play_events(events: Array[Dictionary]) -> void:
 	for e: Dictionary in events:
 		if e.get("kind") == &"fired":
 			_on_fired(e)
+			handled[&"fired"] = int(handled.get(&"fired", 0)) + 1
 	for e: Dictionary in events:
-		match e.get("kind"):
+		var kind: StringName = e.get("kind", &"")
+		match kind:
 			&"popped":
 				_on_popped(int(e["id"]))
 			&"defeated":
-				_on_defeated(int(e["id"]), Vector2(e["pos"] as Vector2i))
+				_on_defeated(int(e["id"]), Vector2(e["pos"] as Vector2i), int(e.get("gold", 0)))
 			&"leaked":
 				_on_leaked(e)
 			&"built", &"upgraded":
@@ -257,8 +277,21 @@ func play_events(events: Array[Dictionary]) -> void:
 				_sparkles.burst(_ground_px(e["cell"] as Vector2i), MapSparkles.Kind.DUST, 0.8)
 			&"gate_placed":
 				_sparkles.burst(_center_px(e["cell"] as Vector2i), MapSparkles.Kind.DUST, 0.7)
+			&"healed":
+				_on_healed(e)
+			&"released":
+				_on_released(e)
+			&"sped_up":
+				_on_sped_up(int(e["id"]))
+			&"break_started":
+				_on_break_started(e["cell"] as Vector2i)
 			&"gate_broken":
-				_sparkles.burst(_center_px(e["cell"] as Vector2i), MapSparkles.Kind.DUST, 1.5)
+				_on_gate_broken(e["cell"] as Vector2i)
+			&"wave_cleared":
+				_on_wave_cleared(int(e.get("gold", 0)))
+			_:
+				continue
+		handled[kind] = int(handled.get(kind, 0)) + 1
 	last_events_usec = Time.get_ticks_usec() - t0
 
 
@@ -458,6 +491,8 @@ func _animate_tower(v: TowerView) -> void:
 
 func _sync_creatures(alpha: float) -> void:
 	_status_items.clear()
+	_crack_cells.clear()
+	_crack_progress.clear()
 	var anim_rate: float = WALK_FPS
 	for e: EnemyState in battle.enemies:
 		var v: CreatureView = _creatures.get(e.id)
@@ -488,6 +523,10 @@ func _sync_creatures(alpha: float) -> void:
 		it.frame = f
 		if it.bar or it.drowsy or it.bubble:
 			_status_items.append(it)
+		if e.breaking > 0:
+			_note_breaker(e)
+		elif not _break_total.is_empty():
+			_break_total.erase(e.id)
 	if _creatures.size() > battle.enemies.size():
 		var gone_ids: Array[int] = []
 		for id: int in _creatures:
@@ -587,16 +626,21 @@ func _build_turns() -> void:
 
 func _level_enemy_types() -> Array[StringName]:
 	var out: Array[StringName] = []
-	var todo: Array[StringName] = []
 	for w: WaveData in level.waves:
 		for g: WaveGroup in w.groups:
-			todo.append(g.enemy)
+			_add_enemy_closure(g.enemy, out)
+	return out
+
+
+## Adds `id` to `out` with every creature it can turn into or let out.
+func _add_enemy_closure(id: StringName, out: Array[StringName]) -> void:
+	var todo: Array[StringName] = [id]
 	while not todo.is_empty():
-		var id: StringName = todo.pop_back()
-		if out.has(id):
+		var next: StringName = todo.pop_back()
+		if out.has(next):
 			continue
-		out.append(id)
-		var t: EnemyType = battle.catalog.enemy(id)
+		out.append(next)
+		var t: EnemyType = battle.catalog.enemy(next)
 		if t == null:
 			continue
 		if t.split_into != &"":
@@ -605,7 +649,27 @@ func _level_enemy_types() -> Array[StringName]:
 			todo.append(StringName(t.summon["enemy"]))
 		if not t.release.is_empty():
 			todo.append(StringName(t.release["enemy"]))
-	return out
+
+
+## Makes sure the sheet has the pictures of what cards add: a tower from an `add_tower` card, and
+## the creatures of a waiting risk card's `add_group`. Looks at the lists only when their sizes
+## change. Returns true when the sheet grew and must be laid out again.
+func _prepare_atlas() -> bool:
+	var sizes: Vector2i = Vector2i(battle.card_effects.size(), battle.risk_waiting.size())
+	if sizes == _prepared:
+		return false
+	_prepared = sizes
+	var before: int = _atlas.entries.size()
+	for effect: Dictionary in battle.card_effects:
+		if String(effect.get("type", "")) == "add_tower":
+			_atlas.add_tower_looks(StringName(effect.get("tower", "")))
+	var wanted: Array[StringName] = []
+	for card: Dictionary in battle.risk_waiting:
+		if String(card.get("type", "")) == "add_group":
+			_add_enemy_closure(StringName(card.get("enemy", "")), wanted)
+	for id: StringName in wanted:
+		_atlas.add_enemy(id)
+	return _atlas.entries.size() != before
 
 
 # Events.
@@ -613,17 +677,27 @@ func _level_enemy_types() -> Array[StringName]:
 func _on_fired(e: Dictionary) -> void:
 	var tower: StringName = e["tower"]
 	var cell: Vector2i = e["cell"]
-	var look: int = MapShots.look_for(tower, int(e["spec"]))
-	var from: Vector2 = MapShots.muzzle(tower, cell)
+	var spec: int = int(e["spec"])
+	var look: int = MapShots.look_for(tower, spec)
 	var v: TowerView = _towers.get(cell)
+	var tier: int = 3
 	if v != null:
 		v.kick_t = _fx_time
+		tier = v.tier
+	var burst_radius: float = 0.0
+	if look == MapShots.Look.ROCKET or look == MapShots.Look.BLOOM:
+		# A burst shows the tower's real splash, card effects included.
+		var state: TowerState = battle.tower_at(cell)
+		var splash: int = state.stats.splash if state != null and state.stats != null else 75
+		burst_radius = float(splash) / 100.0 * CELL
 	var ids: Array = e["targets"]
 	var ats: Array = e["at"]
 	for i: int in ids.size():
 		var id: int = int(ids[i])
 		var to: Vector2 = Vector2(ats[i] as Vector2i) * PX_PER_SUB
-		var arrives: float = _shots.launch(look, from, to, id, _fx_time)
+		var arrives: float = _shots.launch(look, MapShots.muzzle(tower, cell, tier, spec, i), to, id, _fx_time)
+		if burst_radius > 0.0:
+			_shots.add_burst(to, arrives, burst_radius, look == MapShots.Look.BLOOM)
 		_arrival_ids[id] = maxf(float(_arrival_ids.get(id, 0.0)), arrives)
 		_arrival_pos.append(to)
 		_arrival_time.append(arrives)
@@ -649,11 +723,13 @@ func _on_leaked(e: Dictionary) -> void:
 	_leaks.spawn(home, lives, boss, _fx_time)
 
 
-func _on_defeated(id: int, pos_sub: Vector2) -> void:
+func _on_defeated(id: int, pos_sub: Vector2, gold: int) -> void:
 	var v: CreatureView = _find_view(id)
 	var at: Vector2 = pos_sub * PX_PER_SUB
 	if v == null:
 		_sparkles.burst(at, MapSparkles.Kind.DEFEAT, 1.0)
+		if gold > 0:
+			_shots.add_coin(at, _fx_time)
 		return
 	_gone.erase(id)
 	_creatures.erase(id)
@@ -662,10 +738,66 @@ func _on_defeated(id: int, pos_sub: Vector2) -> void:
 	v.item.bar = false
 	var delay: float = _delay_for(id, v.center)
 	v.pop_t = _fx_time + delay
+	if gold > 0:
+		_shots.add_coin(v.center, v.pop_t, 1.4 if v.boss else 1.0)
 	if delay <= 0.0:
 		_pop(v)
 	else:
 		_dying.append(v)
+
+
+## The Mender's ring spreads over its reach, and a "+" rises from each creature that gained health.
+func _on_healed(e: Dictionary) -> void:
+	var mender: CreatureView = _find_view(int(e["id"]))
+	if mender != null:
+		var type: EnemyType = battle.catalog.enemy(mender.type)
+		var reach: float = float(type.heal_reach) / 100.0 * CELL if type != null else CELL
+		_shots.add_pulse(mender.center, _fx_time, reach, MapShots.Hue.HEAL)
+	var ids: Array = e["ids"]
+	for i: int in mini(ids.size(), HEAL_MARKS):
+		var v: CreatureView = _find_view(int(ids[i]))
+		if v != null:
+			_shots.add_plus(v.center, _fx_time)
+
+
+## A poof where creatures are let out: a Puffball's split, a boss's summons or its health release.
+func _on_released(e: Dictionary) -> void:
+	var source: StringName = e["source"]
+	var pos_sub: Vector2 = Vector2(e["pos"] as Vector2i)
+	var at: Vector2 = pos_sub * PX_PER_SUB if Silhouettes.is_flyer(source) else _curve(pos_sub)
+	var boss: bool = Silhouettes.BOSSES.has(source)
+	_shots.add_pulse(at, _fx_time, CELL * (1.0 if boss else 0.5), MapShots.Hue.RELEASE)
+	_sparkles.burst(at, MapSparkles.Kind.RELEASE, 1.4 if boss else 0.8)
+
+
+## Speed lines behind a boss that just got faster.
+func _on_sped_up(id: int) -> void:
+	var v: CreatureView = _find_view(id)
+	if v == null:
+		return
+	_shots.add_whoosh(v.center, _fx_time, v.size_px, v.left)
+	_sparkles.burst(Vector2(v.center.x, v.center.y + v.feet), MapSparkles.Kind.DUST, 1.0)
+
+
+func _on_break_started(cell: Vector2i) -> void:
+	_shots.add_pulse(_center_px(cell), _fx_time, CELL * 0.45, MapShots.Hue.GATE)
+	_sparkles.burst(_center_px(cell), MapSparkles.Kind.DUST, 0.6)
+
+
+func _on_gate_broken(cell: Vector2i) -> void:
+	var at: Vector2 = _center_px(cell)
+	_shots.add_pulse(at, _fx_time, CELL * 0.8, MapShots.Hue.GATE)
+	_sparkles.burst(at, MapSparkles.Kind.DUST, 1.5)
+	_sparkles.burst(at, MapSparkles.Kind.SPLINTER, 1.2)
+
+
+## A few small coins rise from the home when a wave pays its bonus.
+func _on_wave_cleared(gold: int) -> void:
+	if gold <= 0:
+		return
+	var home: Vector2 = _center_px(level.base)
+	for i: int in 3:
+		_shots.add_coin(home + Vector2((float(i) - 1.0) * 0.22 * CELL, 0.0), _fx_time + 0.12 * float(i), 1.1)
 
 
 func _find_view(id: int) -> CreatureView:
@@ -691,6 +823,16 @@ func _delay_for(id: int, at: Vector2) -> float:
 
 # Gates, layers and the sprite pool.
 
+## The look of a placed gate (3.7): BROKEN while it is broken, then OPEN while the battle holds
+## every gate open, then FIXED, else CLOSED.
+static func gate_look(g: GateState, gates_open: bool) -> int:
+	if g.broken:
+		return MapArt.Gate.BROKEN
+	if gates_open:
+		return MapArt.Gate.OPEN
+	return MapArt.Gate.FIXED if g.fixed else MapArt.Gate.CLOSED
+
+
 func _sync_gates() -> void:
 	var cells: Array[Vector2i] = []
 	var looks: Array[int] = []
@@ -701,7 +843,7 @@ func _sync_gates() -> void:
 		var look: int = -1
 		for g: GateState in battle.gates:
 			if g.cell == s:
-				look = MapArt.Gate.FIXED if g.fixed else (MapArt.Gate.BROKEN if g.broken else MapArt.Gate.CLOSED)
+				look = gate_look(g, battle.gates_open)
 		if look < 0 and build and movable:
 			look = MapArt.Gate.SOCKET
 		if refused and s == _refused_cell:
@@ -714,6 +856,31 @@ func _sync_gates() -> void:
 	_gates.set_gates(cells, looks)
 
 
+## A breaker is working on the gate next to it: note which gate and how far along (0 to 1).
+func _note_breaker(e: EnemyState) -> void:
+	var total: int = maxi(int(_break_total.get(e.id, 0)), e.breaking)
+	_break_total[e.id] = total
+	var best: GateState = null
+	var best_d: int = BREAK_REACH * BREAK_REACH
+	for g: GateState in battle.gates:
+		if g.broken:
+			continue
+		var d: Vector2i = Sim.center(g.cell) - e.pos
+		var d2: int = d.x * d.x + d.y * d.y
+		if d2 < best_d:
+			best_d = d2
+			best = g
+	if best == null:
+		return
+	var progress: float = 1.0 - float(e.breaking) / float(total)
+	var at: int = _crack_cells.find(best.cell)
+	if at < 0:
+		_crack_cells.append(best.cell)
+		_crack_progress.append(progress)
+	elif progress > _crack_progress[at]:
+		_crack_progress[at] = progress
+
+
 func _sync_layers() -> void:
 	_shots.advance(_fx_time)
 	_leaks.advance(_fx_time)
@@ -722,14 +889,16 @@ func _sync_layers() -> void:
 	_routes.advance(_real_dt)
 	if _marks.is_animated():
 		_marks.set_pulse(0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.006))
-	if _has_boost and _syncs % 6 == 1:
-		_boosted.clear()
-		for t: TowerState in battle.towers:
-			var type: TowerType = battle.catalog.tower(t.type)
-			if type != null and type.kind == &"attack":
-				var n: Dictionary = battle.tower_numbers(t.cell)
-				if int(n.get("got_pct", 0)) > 0 or int(n.get("got_damage", 0)) > 0:
-					_boosted.append(_center_px(t.cell))
+	_gates.set_cracking(_crack_cells, _crack_progress, _fx_time)
+	if not _crack_cells.is_empty() and _fx_time >= _dust_time:
+		_dust_time = _fx_time + 0.3
+		_dust_turn += 1
+		_sparkles.burst(_center_px(_crack_cells[_dust_turn % _crack_cells.size()]), MapSparkles.Kind.DUST, 0.45)
+	# Boost marks read each tower's own fields (3.1): the sim works them out when towers change.
+	_boosted.clear()
+	for t: TowerState in battle.towers:
+		if t.kind == &"attack" and (t.got_pct > 0 or t.got_damage > 0):
+			_boosted.append(_center_px(t.cell))
 	_status.set_items(_status_items, _boosted)
 
 
@@ -810,6 +979,9 @@ func _clear() -> void:
 	_pool.clear()
 	_status_items.clear()
 	_boosted.clear()
+	_crack_cells.clear()
+	_crack_progress.clear()
+	_break_total.clear()
 	_atlas = null
 	_ground = null
 	_entities = null

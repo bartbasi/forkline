@@ -182,7 +182,7 @@ func add_marks() -> void:
 func add_gates() -> void:
 	if _index.has(gate_key(0, false)):
 		return
-	for look: int in 5:
+	for look: int in MapArt.Gate.size():
 		for across: bool in [false, true]:
 			var g: Entry = Entry.new()
 			g.key = gate_key(look, across)

@@ -8,6 +8,9 @@ extends SceneTree
 ##     godot --path . --script res://tests/render/shots.gd -- --out=<folder>
 ##
 ## The pictures go to the folder given with --out (use a scratch folder, not the repo).
+## --arena=mixed, --arena=crack, --arena=boss or --arena=looks shows the arena map of the phase 7
+## fixtures instead: a mixed wave with every new tower, a Gatecrasher cracking a gate, a boss
+## wave, or the six gate looks side by side.
 ## Optional: --level=r1_l4 for one level, --size=cover or --size=inner for one screen,
 ## --build (the build phase with a gate, route lines, range, selection and hint), --wave=N (0 based wave to start from), --min=N creatures needed, --wait=S seconds, --tag=name.
 
@@ -23,6 +26,7 @@ var _tag: String = ""
 var _min: int = 6
 var _wait: float = 0.0
 var _build: bool = false
+var _arena: String = ""
 
 
 func _initialize() -> void:
@@ -39,6 +43,8 @@ func _initialize() -> void:
 			_tag = arg.trim_prefix("--tag=")
 		elif arg.begins_with("--min="):
 			_min = int(arg.trim_prefix("--min="))
+		elif arg.begins_with("--arena="):
+			_arena = arg.trim_prefix("--arena=")
 		elif arg == "--build":
 			_build = true
 		elif arg.begins_with("--wait="):
@@ -53,6 +59,13 @@ func _run() -> void:
 		return
 	DirAccess.make_dir_recursive_absolute(_out)
 	_theme = UiTheme.build()
+	if not _arena.is_empty():
+		if _only_size.is_empty() or _only_size == "cover":
+			await _shoot_arena(Fx.COVER, "cover")
+		if _only_size.is_empty() or _only_size == "inner":
+			await _shoot_arena(Fx.INNER, "inner")
+		quit(0)
+		return
 	for id: String in Fx.REGION_1:
 		if not _only_level.is_empty() and id != _only_level:
 			continue
@@ -148,3 +161,118 @@ func _shoot(id: String, size: Vector2i, label: String) -> void:
 	print("%s %dx%d creatures=%d projectiles=%d sparkle_emitters=%d bake=%.2f: %s" % [path, img.get_width(), img.get_height(), b.enemies.size(), view.projectile_count(), view.sparkles().active_count(), view.bake_scale(), error_string(err)])
 	host.queue_free()
 	await process_frame
+
+
+## The arena map (render_fixtures.gd) in the scene named by --arena.
+func _shoot_arena(size: Vector2i, label: String) -> void:
+	var host: SubViewport = SubViewport.new()
+	host.size = size
+	host.transparent_bg = false
+	host.disable_3d = true
+	host.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	root.add_child(host)
+	var screen: Control = Control.new()
+	screen.size = Vector2(size)
+	screen.theme = _theme
+	host.add_child(screen)
+	screen.add_child(Backdrop.new())
+	var mixed: Array = [
+		Fx.group("scamp", 6, 300), Fx.group("mender", 2, 600, 1000), Fx.group("bubbler", 4, 400, 2000),
+		Fx.group("puffball", 3, 500, 3000), Fx.group("flitter", 6, 300, 5000), Fx.group("dusk_moth", 2, 500, 6000),
+	]
+	var waves: Array = [mixed]
+	var strength: int = 400
+	match _arena:
+		"crack":
+			waves = [[Fx.group("gatecrasher", 2, 1500)]]
+		"boss":
+			waves = [[Fx.group("old_tusk", 1, 500), Fx.group("scamp", 6, 600, 2000)]]
+	var b: Battle = Fx.arena(waves, strength)
+	var view: MapView = MapView.new()
+	screen.add_child(view)
+	view.setup(b)
+	var landscape: bool = size.y < int(1.5 * float(size.x))
+	var note: Label = Label.new()
+	screen.add_child(note)
+	var rect: Rect2
+	if landscape:
+		var h: float = float(size.y) - 120.0
+		rect = Rect2(40, 60, h * 7.0 / 11.0, h)
+		note.position = Vector2(rect.end.x + 60.0, 80.0)
+	else:
+		var w: float = float(size.x)
+		rect = Rect2(0, 236, w, w / 7.0 * 11.0)
+		note.position = Vector2(40.0, 90.0)
+	view.fit(rect)
+	if _arena != "crack":
+		Fx.build(b, Vector2i(2, 4), &"longbow_loft", 3, 1)
+		Fx.build(b, Vector2i(4, 4), &"firework_tower", 3, 0)
+		Fx.build(b, Vector2i(2, 6), &"sling_post", 3, 0)
+		Fx.build(b, Vector2i(4, 6), &"lullaby_bell", 2)
+		Fx.build(b, Vector2i(4, 2), &"bakery", 2)
+		Fx.build(b, Vector2i(4, 1), &"firework_tower", 3, 1)
+		Fx.build(b, Vector2i(1, 2), &"longbow_loft", 3, 0)
+		Fx.build(b, Vector2i(1, 9), &"firework_tower", 2)
+		Fx.build(b, Vector2i(4, 9), &"pumpkin_catapult", 3, 1)
+	else:
+		Fx.build(b, Vector2i(2, 6), &"lullaby_bell", 2)
+	b.place_gate(Fx.ARENA_SOCKETS[0])
+	for i: int in 10:
+		await process_frame
+		view.sync(0.0)
+	if _arena == "looks":
+		var gates: MapGates = view.get("_gates") as MapGates
+		var cells: Array[Vector2i] = [Vector2i(1, 5), Vector2i(5, 5), Vector2i(1, 6), Vector2i(4, 7), Vector2i(2, 2), Vector2i(3, 9)]
+		var looks: Array[int] = []
+		for look: int in MapArt.Gate.size():
+			looks.append(look)
+		gates.set_gates(cells, looks)
+		note.text = "gate looks: socket, closed, fixed, broken, refused, open"
+		for i: int in 5:
+			await process_frame
+		await _save(host, "arena_looks_%s" % label)
+		host.queue_free()
+		await process_frame
+		return
+	b.start_next_wave()
+	var clock: BattleClock = BattleClock.new()
+	clock.speed = 2
+	var last: int = Time.get_ticks_usec()
+	var started: int = last
+	var held: int = 0
+	while true:
+		await process_frame
+		var now: int = Time.get_ticks_usec()
+		var dt: float = float(now - last) / 1000000.0
+		last = now
+		if b.phase == Battle.Phase.WAVE:
+			for t: int in clock.advance(dt):
+				b.step()
+		var events: Array[Dictionary] = b.take_events()
+		view.sync(clock.alpha())
+		view.play_events(events)
+		note.text = "%s   wave %d of %d   lives %d" % [_arena, b.waves_started, b.wave_count(), b.lives]
+		var elapsed: float = float(now - started) / 1000000.0
+		var ready: bool = false
+		match _arena:
+			"crack":
+				var cracks: Array = view.get("_crack_cells")
+				var progress: PackedFloat32Array = view.get("_crack_progress")
+				ready = not cracks.is_empty() and progress[0] > 0.45
+			"boss":
+				ready = elapsed >= _wait and b.enemies.size() >= 4 and view.projectile_count() >= 2 and b.enemies[0].health < b.enemies[0].max_health
+			_:
+				ready = elapsed >= _wait and b.enemies.size() >= _min and view.projectile_count() >= 2 and view.sparkles().active_count() >= 1
+		held = held + 1 if ready else 0
+		if held >= 2 or elapsed > MAX_SECONDS or b.phase == Battle.Phase.WON or b.phase == Battle.Phase.LOST:
+			break
+	await _save(host, "arena_%s_%s" % [_arena, label])
+	host.queue_free()
+	await process_frame
+
+
+func _save(host: SubViewport, name: String) -> void:
+	await RenderingServer.frame_post_draw
+	var img: Image = host.get_texture().get_image()
+	var path: String = _out.path_join("%s%s.png" % [name, _tag])
+	print("%s %dx%d: %s" % [path, img.get_width(), img.get_height(), error_string(img.save_png(path))])

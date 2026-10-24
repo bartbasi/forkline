@@ -35,6 +35,8 @@ func _run() -> void:
 	for id: String in Fx.REGION_1:
 		for size: Vector2i in [Fx.COVER, Fx.INNER]:
 			await _play(id, size)
+	for size: Vector2i in [Fx.COVER, Fx.INNER]:
+		await _play_arena(size)
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -111,5 +113,92 @@ func _play(id: String, size: Vector2i) -> void:
 	check(view.leaks().active_count() == 0, "%s %s: the hearts end" % [id, size])
 	view.fit(Rect2(0, 0, 500, 900))
 	await process_frame
+	host.queue_free()
+	await process_frame
+
+
+## The arena with every new tower and path, a mixed wave and a boss wave, drawn through real
+## frames, then the one-shot marks made by hand and the six gate looks drawn together.
+func _play_arena(size: Vector2i) -> void:
+	var host: SubViewport = SubViewport.new()
+	host.size = size
+	host.transparent_bg = false
+	host.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	root.add_child(host)
+	var mixed: Array = [
+		Fx.group("scamp", 6, 300), Fx.group("mender", 2, 600, 1000), Fx.group("bubbler", 4, 400, 2000),
+		Fx.group("puffball", 3, 500, 3000), Fx.group("gatecrasher", 2, 800, 4000), Fx.group("flitter", 6, 300, 5000),
+		Fx.group("dusk_moth", 2, 500, 6000),
+	]
+	var b: Battle = Fx.arena([mixed, [Fx.group("ironshell", 1, 500), Fx.group("scamp", 8, 400, 2000)]], 50)
+	var view: MapView = MapView.new()
+	host.add_child(view)
+	view.setup(b)
+	var landscape: bool = size.x * 3 > size.y * 2
+	view.fit(Rect2(24, 60, float(size.y) * 0.5, float(size.y) - 120.0) if landscape else Rect2(0, 236, float(size.x), float(size.x) / 7.0 * 11.0))
+	var label: String = "arena %s" % size
+	b.place_gate(Fx.ARENA_SOCKETS[0])
+	Fx.build(b, Vector2i(2, 4), &"longbow_loft", 3, 1)
+	Fx.build(b, Vector2i(4, 4), &"firework_tower", 3, 0)
+	Fx.build(b, Vector2i(2, 6), &"sling_post", 3, 0)
+	Fx.build(b, Vector2i(4, 6), &"lullaby_bell", 2)
+	Fx.build(b, Vector2i(4, 2), &"bakery", 2)
+	Fx.build(b, Vector2i(4, 1), &"firework_tower", 3, 1)
+	Fx.build(b, Vector2i(1, 2), &"longbow_loft", 3, 0)
+	Fx.build(b, Vector2i(1, 9), &"firework_tower", 2)
+	Fx.build(b, Vector2i(4, 9), &"pumpkin_catapult", 3, 1)
+	for i: int in 3:
+		await process_frame
+		view.sync(0.0)
+	b.start_next_wave()
+	var clock: BattleClock = BattleClock.new()
+	clock.speed = 3
+	var kinds: Dictionary = {}
+	for i: int in 1400:
+		if b.phase == Battle.Phase.WAVE:
+			for t: int in clock.advance(1.0 / 60.0):
+				b.step()
+		else:
+			clock.reset()
+			if b.waves_started < b.level.waves.size():
+				b.start_next_wave()
+		var events: Array[Dictionary] = b.take_events()
+		for e: Dictionary in events:
+			kinds[e["kind"]] = true
+		view.sync(clock.alpha())
+		view.play_events(events)
+		await process_frame
+		check(view.creature_count() == b.enemies.size(), "%s frame %d: a node for each creature" % [label, i])
+		if b.phase == Battle.Phase.WON or b.phase == Battle.Phase.LOST:
+			break
+	for kind: StringName in [&"fired", &"healed", &"released", &"sped_up", &"popped", &"wave_cleared"]:
+		check(kinds.has(kind), "%s: the wave made a %s event, so it was drawn" % [label, kind])
+	# The marks that need a moment of their own, made by hand, then drawn.
+	view.advance_effects(2.0)
+	view.sync(0.0)
+	var shots: MapShots = view.get("_shots") as MapShots
+	for k: int in MapShots.Fx.size():
+		check(shots.marked[k] > 0, "%s: mark %d was made" % [label, k])
+	view.play_events([
+		{"kind": &"healed", "id": 1, "ids": [2]},
+		{"kind": &"released", "id": 1, "source": &"old_tusk", "enemy": &"dusk_moth", "count": 4, "pos": Vector2i(50000, 90000)},
+		{"kind": &"break_started", "id": 1, "cell": Fx.ARENA_SOCKETS[0]},
+		{"kind": &"gate_broken", "cell": Fx.ARENA_SOCKETS[0]},
+		{"kind": &"wave_cleared", "wave": 0, "gold": 40},
+		{"kind": &"defeated", "id": 7, "enemy": &"scamp", "pos": Vector2i(50000, 90000), "gold": 5},
+	])
+	var gates: MapGates = view.get("_gates") as MapGates
+	var cells: Array[Vector2i] = [Vector2i(1, 5), Vector2i(5, 5), Vector2i(1, 6), Vector2i(4, 7), Vector2i(2, 2), Vector2i(3, 9)]
+	var looks: Array[int] = []
+	for look: int in MapArt.Gate.size():
+		looks.append(look)
+	gates.set_gates(cells, looks)
+	for i: int in 4:
+		await process_frame
+	view.advance_effects(2.0)
+	await process_frame
+	var atlas: MapAtlas = view.get("_atlas") as MapAtlas
+	check(atlas.draw_count() >= 1, "%s: the sheet, gate looks included, was drawn" % label)
+	check(MapArt.Gate.size() == 6, "%s: six gate looks" % label)
 	host.queue_free()
 	await process_frame
