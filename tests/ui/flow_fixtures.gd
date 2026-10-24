@@ -69,6 +69,20 @@ static func app(tag: String, fresh: bool = true) -> App:
 	return made
 
 
+## An App for runs: the phone's date is `day` (a Time date dictionary, 2026-10-24 by default),
+## every new run's seed is 1234, and the 12 stars that open the roguelite and the daily are earned.
+static func run_app(tag: String, fresh: bool = true, day: Dictionary = {"year": 2026, "month": 10, "day": 24}) -> App:
+	var made: App = app(tag, fresh)
+	made.date_source = func() -> Dictionary: return day
+	made.seed_source = func() -> int: return 1234
+	if fresh:
+		for id: StringName in [&"r1_l1", &"r1_l2", &"r1_l3", &"r1_l4"]:
+			made.progress.record_level(id, 7)
+		made.save_progress()
+	mark_all_seen(made)
+	return made
+
+
 ## Every tower and creature already met, so no first sight card opens.
 static func mark_all_seen(made: App) -> void:
 	for id: StringName in made.game.catalog.tower_ids():

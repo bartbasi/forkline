@@ -15,14 +15,15 @@ extends Control
 ## loses nothing.
 ##
 ## The flow: Play opens the mode screen. Campaign opens the level list and a
-## level's card. A battle starts from the card, or resumes from the Continue card.
-## One game is saved per mode. A win records its stars; a level that is left or
-## abandoned records nothing.
+## level's card. Roguelite and Daily open their run card. A battle starts from a card,
+## or resumes from the Continue card. One game is saved per mode: a campaign level, a
+## run and a daily. A win records its stars; a level that is left or abandoned records
+## nothing. A run or daily records its counters when it ends, and an abandoned one
+## counts as lost at its current wave (RULES 14.7).
 
 ## The player turned sound on or off in Settings.
 signal sound_changed(on: bool)
-## Taps on the mode screen. The App answers Continue and Campaign itself. Roguelite and
-## Daily have no answer until the run mode exists (their cards are locked until then).
+## Taps on the mode screen. The App answers all four itself.
 signal continue_requested()
 signal campaign_requested()
 signal roguelite_requested()
@@ -30,9 +31,8 @@ signal daily_requested()
 
 ## Stars the roguelite and the daily need until the rules file says otherwise.
 const RUN_STARS_DEFAULT: int = 12
-## Roguelite and Daily are not built yet. They show as coming later, whatever the stars.
-## Set this to true when the run mode exists; the 12 star rule then takes over.
-const RUNS_BUILT: bool = false
+## The run mode exists. Roguelite and Daily open with the stars rules.json asks for (RULES 16).
+const RUNS_BUILT: bool = true
 ## Two back presses closer than this are one press.
 const BACK_GUARD_MS: int = 150
 
@@ -44,9 +44,17 @@ var store: SaveStore = null
 var audio: AudioService = null
 ## Seconds between the last creature and the end panel, so the last sparkles show.
 var end_delay: float = 1.2
+## Where the phone's date comes from: a Callable that returns a Time date dictionary
+## (year, month, day). Empty means the phone's clock. Tests put a stand-in here.
+var date_source: Callable = Callable()
+## Where a new run's seed comes from: a Callable that returns a whole number from 0 to
+## 2^32 - 1. Empty means a fresh random draw, the one unseeded draw in the game.
+var seed_source: Callable = Callable()
 
 var settings: Settings = null
 var progress: Progress = null
+## The daily's best result and streak.
+var daily_record: DailyRecord = null
 ## Every saved game, most recent first.
 var saved_games: Array[SavedGame] = []
 var probe: PerfProbe = null
@@ -114,6 +122,8 @@ func build() -> void:
 	set_process(false)
 	continue_requested.connect(_on_continue)
 	campaign_requested.connect(_on_campaign)
+	roguelite_requested.connect(_on_roguelite)
+	daily_requested.connect(_on_daily)
 	_boot()
 	apply_layout(_window, _safe)
 
@@ -124,15 +134,13 @@ func _boot() -> void:
 	if game == null:
 		game = GameData.load_from(data_root)
 	if not game.problems.is_empty():
-		damaged = true
-		var screen: DamagedScreen = DamagedScreen.new()
-		screen.close_requested.connect(_quit)
-		push_screen(screen)
+		_show_damaged()
 		return
 	if store == null:
 		store = SaveStore.new()
 	settings = store.load_settings()
 	progress = store.load_progress()
+	daily_record = store.load_daily()
 	saved_games = store.load_games(game)
 	sound_on = settings.sound_on
 	if audio == null:
@@ -143,6 +151,14 @@ func _boot() -> void:
 	audio.set_music(&"menu")
 	_fill_info()
 	_refresh_progress()
+
+
+## The damaged message. Nothing else starts after it.
+func _show_damaged() -> void:
+	damaged = true
+	var screen: DamagedScreen = DamagedScreen.new()
+	screen.close_requested.connect(_quit)
+	push_screen(screen)
 
 
 ## The numbers and names the Info guide reads, from the Catalog.
@@ -282,24 +298,62 @@ func open_mode() -> void:
 
 ## The Continue card and the run locks, from the saved games and the progress.
 func _fill_mode(screen: ModeScreen) -> void:
-	screen.set_runs(runs_open, stars, int(rules.get("run_stars", RUN_STARS_DEFAULT)), RUNS_BUILT)
+	screen.set_runs(runs_open, stars, int(rules.get("run_stars", RUN_STARS_DEFAULT)), RUNS_BUILT, daily_detail())
 	if saved_games.is_empty():
 		screen.set_continue("", "")
 		return
 	screen.set_continue("Continue", _saved_text(saved_games[0]))
 
 
+## The Daily button's second line: the day's best and the shown streak. "" keeps the plain line.
+func daily_detail() -> String:
+	var day: String = today()
+	if day.is_empty():
+		return "Check the phone's date."
+	return ModeScreen.daily_detail(_best_for(day), _shown_streak(day))
+
+
+## The phone's date as a day key such as "2026-10-24". "" when the date is not one a daily
+## can use (before 2026 or after 2200), so no new daily starts (RULES 15).
+func today() -> String:
+	var date: Dictionary = date_source.call() if date_source.is_valid() else Time.get_date_dict_from_system()
+	var key: String = RunSeeds.day_key(date)
+	return key if RunSeeds.is_day_key(key) else ""
+
+
+## The best daily result of this day, or {} for none. Another day's best is not shown.
+func _best_for(day: String) -> Dictionary:
+	if daily_record == null or daily_record.day != day:
+		return {}
+	return daily_record.best.duplicate()
+
+
+## The streak the screens show: the saved one while its last day is today or yesterday.
+func _shown_streak(day: String) -> int:
+	if daily_record == null:
+		return 0
+	return Daily.shown_streak(daily_record.streak, daily_record.streak_day, day)
+
+
 ## "Level 1-2, The Fork. Wave 3 of 8." for the Continue card. A Twist says so: "Level 1-2 Twist".
+## A run says "Roguelite run. Wave 3 of 18." and a daily "Daily 2026-10-24. Wave 3 of 18.".
 func _saved_text(saved: SavedGame) -> String:
+	if saved.mode != SavedGame.LEVEL:
+		var head: String = "Daily %s" % saved.run.day if saved.mode == SavedGame.DAILY else "Roguelite run"
+		return head + _progress_text(saved.battle)
 	var level: LevelData = saved.battle.level
 	var text: String = "Level %s, %s" % [CampaignText.number(game, saved.level_id), level.name]
 	if saved.twist:
 		text = "Level %s Twist, %s" % [CampaignText.number(game, saved.level_id), level.name]
-	if saved.battle.waves_started == 0:
-		text += ". Ready to start."
-	else:
-		text += ". Wave %d of %d." % [BattleText.wave_number(saved.battle), level.waves.size()]
-	if saved.battle.relaxed:
+	return text + _progress_text(saved.battle)
+
+
+## ". Wave 3 of 8." or ". Ready to start.", then " Relaxed." on Relaxed.
+func _progress_text(battle: Battle) -> String:
+	var text: String = ". Ready to start."
+	if battle.waves_started > 0:
+		text = ". Wave %d of %d." % [BattleText.wave_number(battle), battle.wave_count()]
+	if battle.relaxed:
 		text += " Relaxed."
 	return text
 
@@ -591,8 +645,7 @@ func start_level(id: StringName, relaxed: bool, twist: bool = false) -> void:
 
 ## Opens a saved game on the Pause menu, at the exact moment it was left.
 func resume_game(saved: SavedGame) -> void:
-	# Runs and the daily resume from phase 7's App flow (U3); until then only levels do.
-	if saved == null or _battle_screen != null or damaged or saved.mode != SavedGame.LEVEL:
+	if saved == null or _battle_screen != null or damaged:
 		return
 	_begin(saved, true)
 
@@ -613,6 +666,8 @@ func _begin(saved: SavedGame, resumed: bool) -> void:
 	_battle_screen = screen
 	push_screen(screen)
 	screen.setup(saved.battle, audio, progress)
+	if saved.run != null:
+		screen.set_run(saved.run)
 	audio.set_music(&"battle")
 	if resumed:
 		screen.pause()
@@ -644,6 +699,9 @@ func _on_battle_ended(result: Dictionary) -> void:
 		return
 	_active = null
 	_end_saved(saved.mode)
+	if saved.run != null:
+		_run_ended(saved, bool(result.get("abandoned", false)))
+		return
 	if bool(result.get("abandoned", false)):
 		_leave_to_front_door()
 		return
@@ -675,6 +733,9 @@ func _show_end() -> void:
 	_end = {}
 	set_process(false)
 	close_all_modals()
+	if pending.has("run"):
+		_show_run_end(pending)
+		return
 	var id: StringName = pending["level"]
 	var result: Dictionary = pending["result"]
 	var twist: bool = bool(pending.get("twist", false))
@@ -705,6 +766,176 @@ func _end_retry(id: StringName, relaxed: bool, twist: bool = false) -> void:
 	if _battle_screen != null and current_screen() == _battle_screen:
 		pop_screen()
 	start_level(id, relaxed, twist)
+
+
+# Runs and the daily (flow steps 2, 3 and 5; RULES 14, 15).
+
+func _on_roguelite() -> void:
+	open_run_card(false)
+
+
+func _on_daily() -> void:
+	open_run_card(true)
+
+
+## Pushes the card before a run or the daily. It needs the stars of RULES 16.
+func open_run_card(daily: bool) -> void:
+	if damaged or _battle_screen != null or not RUNS_BUILT or not runs_open:
+		return
+	var mode: StringName = SavedGame.DAILY if daily else SavedGame.RUN
+	var day: String = today() if daily else ""
+	var card: RunCard = RunCard.new(game, game.run, daily, day, _best_for(day) if daily else {}, _shown_streak(day) if daily else 0, _saved_run_line(saved_game(mode)))
+	card.start_requested.connect(request_start_run.bind(daily))
+	card.resume_requested.connect(func() -> void: resume_game(saved_game(mode)))
+	push_screen(card)
+
+
+## "Your saved run is on wave 4 of 18." for the run card, or "" when no game is saved.
+func _saved_run_line(saved: SavedGame) -> String:
+	if saved == null:
+		return ""
+	var what: String = "run"
+	if saved.mode == SavedGame.DAILY:
+		what = "daily" if saved.run.day == today() else "daily from %s" % saved.run.day
+	if saved.battle.waves_started == 0:
+		return "Your saved %s is ready to start." % what
+	return "Your saved %s is on wave %d of %d." % [what, BattleText.wave_number(saved.battle), saved.battle.wave_count()]
+
+
+## Starts a run or the daily. A saved game of that mode ends first, after a question, and it
+## counts as lost at its current wave (RULES 14.7), so starting over never dodges a loss.
+func request_start_run(relaxed: bool, daily: bool) -> void:
+	var saved: SavedGame = saved_game(SavedGame.DAILY if daily else SavedGame.RUN)
+	if saved == null:
+		_start_mode(daily, relaxed)
+		return
+	var what: String = "daily" if daily else "run"
+	var dialog: ConfirmDialog = ConfirmDialog.new("Start a new %s?" % what,
+		"Your saved %s ends now and counts as lost on its current wave." % what,
+		"Start new %s" % what, "Keep saved game")
+	dialog.confirmed.connect(func() -> void:
+		if _battle_screen != null or saved_game(saved.mode) != saved:
+			return
+		_record_run(saved.run)
+		_end_saved(saved.mode)
+		_start_mode(daily, relaxed))
+	open_modal(dialog)
+
+
+func _start_mode(daily: bool, relaxed: bool) -> void:
+	if daily:
+		start_daily()
+	else:
+		start_run(relaxed)
+
+
+## Starts a normal run: a fresh seed and the pool the progress unlocked. Any saved run is
+## ended by the caller first.
+func start_run(relaxed: bool = false) -> void:
+	if damaged or _battle_screen != null or not RUNS_BUILT or not runs_open:
+		return
+	var pool: Array[StringName] = game.run.pool(progress.unlock_counters())
+	_begin_run(RunSession.start(_new_seed(), "", relaxed, pool, game.run, game.catalog), SavedGame.RUN)
+
+
+## Starts today's daily: the seed is the phone's date, always Normal, with every card in the pool.
+## It does nothing when the date is no good (the card says so).
+func start_daily() -> void:
+	if damaged or _battle_screen != null or not RUNS_BUILT or not runs_open:
+		return
+	var day: String = today()
+	if day.is_empty():
+		return
+	_begin_run(RunSession.start(RunSeeds.daily_seed(day), day, false, game.run.card_ids(), game.run, game.catalog), SavedGame.DAILY)
+
+
+## A run that could not be made means the bundled files are broken (docs/ARCHITECTURE.md 3.4).
+func _begin_run(session: RunSession, mode: StringName) -> void:
+	if session == null:
+		_show_damaged()
+		return
+	_end_saved(mode)
+	var saved: SavedGame = SavedGame.new()
+	saved.mode = mode
+	saved.battle = session.battle
+	saved.run = session
+	_begin(saved, false)
+
+
+func _new_seed() -> int:
+	if seed_source.is_valid():
+		return int(seed_source.call())
+	var generator: RandomNumberGenerator = RandomNumberGenerator.new()
+	generator.randomize()
+	return int(generator.randi())
+
+
+## A run or daily ended: won, lost or abandoned. The counters and the daily record are
+## written, and a won or lost one shows its end panel.
+func _run_ended(saved: SavedGame, abandoned: bool) -> void:
+	var run: RunSession = saved.run
+	var outcome: Dictionary = _record_run(run)
+	if abandoned:
+		_leave_to_front_door()
+		return
+	_end = {"run": outcome, "relaxed": saved.battle.relaxed, "daily": run.daily, "day": run.day}
+	_end_wait = end_delay
+	if end_delay <= 0.0 or not is_inside_tree():
+		_show_end()
+	else:
+		set_process(true)
+
+
+## Records a finished run (flow step 5, RULES 14.6, 15): the highest wave reached, the wins,
+## and for a daily the count, the day's best and the streak. An abandoned run counts as lost
+## at its current wave, which is what `result()` says of it. Returns that result.
+func _record_run(run: RunSession) -> Dictionary:
+	var outcome: Dictionary = run.result()
+	progress.raise(&"best_run_wave", int(outcome["reached"]))
+	if bool(outcome["won"]):
+		progress.bump(&"runs_won", 1)
+		if not run.battle.relaxed:
+			progress.bump(&"runs_won_normal", 1)
+		if int(outcome["risks"]) >= 3:
+			progress.bump(&"risky_wins", 1)
+	if run.daily:
+		progress.bump(&"dailies_finished", 1)
+		daily_record.record_finish(run.day, {"won": outcome["won"], "waves": outcome["waves"], "lives": outcome["lives"]})
+		if store != null and not store.save_daily(daily_record):
+			_log_save_failure()
+	save_progress()
+	return outcome
+
+
+func _show_run_end(pending: Dictionary) -> void:
+	var outcome: Dictionary = pending["run"]
+	var daily: bool = bool(pending.get("daily", false))
+	var relaxed: bool = bool(pending.get("relaxed", false))
+	var day: String = String(pending.get("day", ""))
+	var best: Dictionary = {}
+	var streak: int = 0
+	if daily:
+		best = _best_for(day)
+		var now: String = today()
+		streak = _shown_streak(now if not now.is_empty() else day)
+	var panel: RunEndPanel = RunEndPanel.new(game, outcome, relaxed, day, best, streak)
+	panel.retry_requested.connect(_run_retry.bind(daily, relaxed))
+	panel.menu_requested.connect(_run_menu)
+	open_modal(panel)
+	if audio != null and bool(outcome.get("won", false)):
+		audio.play_ui(&"star")
+
+
+func _run_retry(daily: bool, relaxed: bool) -> void:
+	if _battle_screen != null and current_screen() == _battle_screen:
+		pop_screen()
+	_start_mode(daily, relaxed)
+
+
+## Back to the mode screen, where the Daily button shows the new best and streak.
+func _run_menu() -> void:
+	_leave_to_front_door()
+	open_mode()
 
 
 ## The front door, the mode screen and the level list, with the lists up to date.

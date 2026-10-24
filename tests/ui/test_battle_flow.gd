@@ -469,6 +469,7 @@ func test_roguelite_and_daily_lock_follow_the_progress() -> void:
 	assert_false(made.runs_open)
 	made.open_mode()
 	assert_true((made.current_screen() as ModeScreen).roguelite_button.disabled)
+	assert_true((made.current_screen() as ModeScreen).daily_button.disabled)
 	made.handle_back()
 	for id: StringName in [&"r1_l1", &"r1_l2", &"r1_l3", &"r1_l4"]:
 		made.progress.record_level(id, 7)
@@ -477,15 +478,8 @@ func test_roguelite_and_daily_lock_follow_the_progress() -> void:
 	assert_eq(made.stars, 12)
 	made.open_mode()
 	var mode: ModeScreen = made.current_screen() as ModeScreen
-	assert_true(mode.roguelite_button.disabled, "the run mode is not built, so even 12 stars leave it locked")
-	assert_true(mode.daily_button.disabled)
-	var words: PackedStringArray = PackedStringArray()
-	for button: TapButton in [mode.roguelite_button, mode.daily_button]:
-		for node: Node in button.find_children("*", "Label", true, false):
-			words.append((node as Label).text)
-	var text: String = " ".join(words)
-	assert_true(text.contains("Coming in a later update."), "a plain line says when")
-	assert_false(text.contains("stars"), "and the 12 star rule is not shown as the reason")
+	assert_false(mode.roguelite_button.disabled, "the run mode is built, so 12 stars open it")
+	assert_false(mode.daily_button.disabled)
 
 
 func test_info_gets_its_numbers_and_names_from_the_catalog() -> void:

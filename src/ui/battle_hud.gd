@@ -138,8 +138,8 @@ func refresh(new_battle: Battle = null) -> void:
 		_pulse_at = 0.0
 		_show_pulse()
 	_shown_lives = maxi(battle.lives, 0)
-	lives_label.text = str(maxi(battle.lives, 0))
-	gold_label.text = str(battle.gold)
+	lives_label.text = BattleText.short_number(battle.lives)
+	gold_label.text = BattleText.short_number(battle.gold)
 	wave_label.text = "Wave %d/%d" % [BattleText.wave_number(battle), battle.wave_count()]
 	_refresh_call()
 
@@ -250,7 +250,7 @@ func _refresh_call() -> void:
 	var text: String
 	# A card that is owed comes first: the call button says so and wears a lock, and a tap
 	# explains (RULES 14.4).
-	var owes_card: bool = run != null and refusal != &"over" and refusal != &"no_more_waves" and BattleText.drafts_owed(run) > 0
+	var owes_card: bool = run != null and refusal != &"over" and refusal != &"no_more_waves" and run.drafts_owed() > 0
 	# Honey only for "Start wave N" in a build phase. An early call keeps the plain look with
 	# its "+N", so a new player does not take it for the next step (FUN_REVIEW_R1 item 3).
 	var primary: bool = false

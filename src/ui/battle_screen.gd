@@ -106,8 +106,6 @@ var _card: InfoCard = null
 var _modals: Array[Modal] = []
 ## Closed modals of a screen that is not in a scene tree; freed with the screen.
 var _modals_gone: Array[Modal] = []
-## The cards of the run files, for names and texts. Set by set_run.
-var _run_data: RunData = null
 var _twist_hint_shown: bool = false
 var _routes_sig: Array = []
 var _finished: bool = false
@@ -278,13 +276,9 @@ func setup(new_battle: Battle, new_audio: AudioService, new_progress: Progress) 
 
 
 ## Makes this screen a run or a daily around `new_run` (docs/ARCHITECTURE.md 3.6). Call it after
-## setup(). The run has no stars. `data` holds the cards' names and texts; a screen opened by the
-## App takes them from the game when it is not given.
-func set_run(new_run: RunSession, data: RunData = null) -> void:
+## setup(). The run has no stars. The cards' names and texts come from the run itself.
+func set_run(new_run: RunSession) -> void:
 	run = new_run
-	_run_data = data
-	if _run_data == null and host != null and host.game != null:
-		_run_data = host.game.run
 	stars_in_play = false
 	hud.run = run
 	hud.refresh()
@@ -1063,7 +1057,7 @@ func draft_is_open() -> bool:
 
 ## The card of the run files with this id; {} when unknown.
 func _card_of(id: StringName) -> Dictionary:
-	return _run_data.card(id) if _run_data != null else {}
+	return run.card(id) if run != null else {}
 
 
 ## Opens the draft when the run owes a card in a build phase, and puts it away when it does not.

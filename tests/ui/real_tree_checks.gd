@@ -73,6 +73,14 @@ func _hosted(vp: SubViewport, screen: Control, size: Vector2, safe: Rect2) -> vo
 
 func _run() -> void:
 	Links.opener = recorder.record
+	# `-- --only=hud` runs one group while working on it. No argument runs everything.
+	if OS.get_cmdline_user_args().has("--only=u3"):
+		await _u3_real()
+		Links.opener = Callable()
+		Fx.remove_all()
+		print("%d checks, %d failed" % [checks, failures])
+		quit(1 if failures > 0 else 0)
+		return
 	await _touch_sizes()
 	await _front_door()
 	await _taps()
@@ -83,6 +91,7 @@ func _run() -> void:
 	await _cell_floor()
 	await _u1_real()
 	await _u2_real()
+	await _u3_real()
 	Links.opener = Callable()
 	Fx.remove_all()
 	print("%d checks, %d failed" % [checks, failures])
@@ -1396,7 +1405,7 @@ func _run_screen(vp: SubViewport, size: Vector2, safe: Rect2, run_seed: int) -> 
 	check(session != null, "the fixture run %d starts" % run_seed)
 	var screen: BattleScreen = BattleScreen.new()
 	screen.setup(session.battle, null, _all_seen())
-	screen.set_run(session, data)
+	screen.set_run(session)
 	await _hosted(vp, screen, size, safe)
 	await _frames(4)
 	return screen
@@ -1549,3 +1558,194 @@ func _dock_run(run_seed: int) -> void:
 	check(saw_risk, "%s: a risk card waited at least once" % tag)
 	vp.queue_free()
 	await _frames(2)
+
+
+# Task U3 in a real tree: the HUD with the biggest numbers a tampered save could hold, and the
+# dock test on the run maps of ten fixed seeds with the real data.
+
+func _u3_real() -> void:
+	await _hud_extremes()
+	await _dock_real_runs()
+	await _u3_app_runs()
+
+
+## Lives and gold far beyond anything a player reaches. The HUD must stay inside the screen, the
+## numbers inside the HUD, and nothing may push the pause button or the speed buttons out.
+func _hud_extremes() -> void:
+	var cases: Array[Vector2i] = [Vector2i(20, 300), Vector2i(999, 99999), Vector2i(1000000, 1000000000), Vector2i(999, 1000000000)]
+	for pair: Array in [[COVER, COVER_SAFE, "cover"], [INNER, INNER_SAFE, "inner"]]:
+		var size: Vector2 = pair[0]
+		var safe: Rect2 = pair[1]
+		for numbers: Vector2i in cases:
+			for level_id: StringName in [&"r1_l1", &"r1_l2"]:
+				var b: Battle = BattleFixtures.battle(level_id)
+				b.lives = numbers.x
+				b.gold = numbers.y
+				var vp: SubViewport = _viewport(size)
+				var screen: BattleScreen = BattleScreen.new()
+				screen.setup(b, null, _all_seen())
+				await _hosted(vp, screen, size, safe)
+				await _frames(4)
+				var where: String = "hud lives %d gold %d at %s on %s" % [numbers.x, numbers.y, size, level_id]
+				var hud: Rect2 = screen.hud.get_global_rect()
+				check(safe.grow(0.6).encloses(hud), "%s: the HUD is inside the safe area (%s)" % [where, hud])
+				for part: Control in [screen.hud.lives_label, screen.hud.gold_label, screen.hud.wave_label, screen.hud.pause_button, screen.hud.call_button, screen.hud.speed_buttons[0], screen.hud.speed_buttons[2]]:
+					check(hud.grow(1.0).encloses(part.get_global_rect()), "%s: a HUD part is inside the HUD (%s in %s)" % [where, part.get_global_rect(), hud])
+				var numbers_rect: Rect2 = screen.hud.lives_label.get_global_rect().merge(screen.hud.gold_label.get_global_rect()).merge(screen.hud.wave_label.get_global_rect())
+				check(screen.hud._stats.get_global_rect().grow(1.0).encloses(numbers_rect), "%s: the numbers are inside their row" % where)
+				check(screen.hud.pause_button.get_global_rect().position.x >= screen.hud.wave_label.get_global_rect().end.x - 1.0 or screen.landscape, "%s: the numbers stop before the pause button" % where)
+				_inside_and_big(screen.hud, size, where)
+				vp.queue_free()
+				await _frames(2)
+
+
+## Ten fixed seeds, the real segments, packs and cards: each run's map has 13 rows and a scenery
+## bottom row, and for every one of its 18 waves the build state keeps the home, the spots, the
+## sockets and the entrances in sight with a one line strip (the dock test of section 13).
+func _dock_real_runs() -> void:
+	for run_seed: int in [1, 7, 42, 99, 123, 777, 2024, 31337, 65535, 4294967295]:
+		await _dock_real_run(run_seed)
+
+
+func _dock_real_run(run_seed: int) -> void:
+	var game: GameData = BattleFixtures.game()
+	var session: RunSession = RunSession.start(run_seed, "", false, game.run.pool({}), game.run, game.catalog)
+	var tag: String = "real run %d" % run_seed
+	check(session != null, "%s starts" % tag)
+	if session == null:
+		return
+	var b: Battle = session.battle
+	check(b.level.rows == 13, "%s: the map has 13 rows" % tag)
+	for x: int in Sim.MAP_COLUMNS:
+		check(b.level.kind_at(Vector2i(x, b.level.rows - 1)) == LevelData.Kind.SCENERY, "%s: the bottom row is scenery at column %d" % [tag, x])
+	b.gold = 20000
+	for cell: Vector2i in b.level.spots:
+		b.place_tower(cell, &"sling_post")
+	var vp: SubViewport = _viewport(COVER)
+	var screen: BattleScreen = BattleScreen.new()
+	screen.setup(b, null, _all_seen())
+	screen.set_run(session)
+	await _hosted(vp, screen, COVER, COVER_SAFE)
+	await _frames(6)
+	var must: Array[Vector2i] = _must_see(b)
+	check(screen.gate_tray.visible == (b.gates_in_hand + b.gates.size() > 0), "%s: the gate chip shows when the run has gates" % tag)
+	if screen.gate_tray.visible:
+		var chip: Rect2 = screen.gate_tray.get_global_rect()
+		check(screen.hud.get_global_rect().encloses(chip), "%s: the gate chip is inside the HUD" % tag)
+		check(chip.size.x >= 150.0 and chip.size.y >= 150.0, "%s: the gate chip is a 48 dp target (%s)" % [tag, chip.size])
+	for wave: int in b.wave_count():
+		# Every wave before this one was cleared and its card taken, so no draft covers the dock.
+		b.waves_started = wave
+		while session.picks.size() < mini(wave, RunSession.DRAFTS):
+			session.picks.append(&"gold_purse")
+		screen.preview.refresh()
+		screen._start_fit()
+		await _frames(screen.FIT_FRAMES + 3)
+		var where: String = "%s wave %d" % [tag, wave + 1]
+		check(not screen.draft_is_open(), "%s: no card is owed in this state" % where)
+		await _preview_decision(screen, where)
+		var hit: String = _first_hit(screen, must, _dock_rects(screen))
+		check(hit.is_empty(), "%s: %s" % [where, hit])
+	# During a wave the preview is folded and its strip is one line.
+	b.waves_started = 0
+	session.picks.clear()
+	screen.preview.refresh()
+	b.start_next_wave()
+	BattleFixtures.steps(b, 4)
+	await _frames(3)
+	_strip_is_one_line(screen, "%s during a wave" % tag)
+	var wave_hit: String = _first_hit(screen, must, _dock_rects(screen))
+	check(wave_hit.is_empty(), "%s during a wave: %s" % [tag, wave_hit])
+	vp.queue_free()
+	await _frames(2)
+
+
+## The App's run flow in a real tree at both sizes: the mode screen with the Daily line and a
+## Continue card, the run card, a run and a daily on screen, and Continue after leaving.
+func _u3_app_runs() -> void:
+	for pair: Array in [[COVER, COVER_SAFE, "cover"], [INNER, INNER_SAFE, "inner"]]:
+		var size: Vector2 = pair[0]
+		var safe: Rect2 = pair[1]
+		var tag: String = "real_%s_u3" % pair[2]
+		var where: String = "u3 app at %s" % size
+		var vp: SubViewport = _viewport(size)
+		var made: App = await _battle_app(vp, size, safe, tag)
+		made.date_source = func() -> Dictionary: return {"year": 2026, "month": 10, "day": 24}
+		made.seed_source = func() -> int: return 77
+		for id: StringName in [&"r1_l1", &"r1_l2", &"r1_l3", &"r1_l4"]:
+			made.progress.record_level(id, 7)
+		made.daily_record.record_finish("2026-10-24", {"won": false, "waves": 9, "lives": 0})
+		made.save_progress()
+		made.open_mode()
+		await _frames(3)
+		var mode: ModeScreen = made.current_screen() as ModeScreen
+		check(not mode.roguelite_button.disabled and not mode.daily_button.disabled, "%s: both run buttons are open" % where)
+		_sides_and_buttons(mode, size, "%s mode screen" % where)
+		check(mode.daily_button.get_global_rect().size.y >= 160.0, "%s: the Daily button is tall enough (%s)" % [where, mode.daily_button.size])
+		# A real tap on Roguelite opens the card, a real tap on Start begins the run.
+		_touch(vp, mode.roguelite_button.get_global_rect().get_center())
+		await _frames(3)
+		var card: RunCard = made.current_screen() as RunCard
+		check(card != null, "%s: a real tap on Roguelite opens the run card" % where)
+		if card == null:
+			vp.queue_free()
+			continue
+		_sides_and_buttons(card, size, "%s run card" % where)
+		_touch(vp, card.start_button.get_global_rect().get_center())
+		await _frames(4)
+		var screen: BattleScreen = made.battle_screen()
+		check(screen != null and screen.run != null, "%s: a real tap on Start begins a run" % where)
+		if screen == null:
+			vp.queue_free()
+			continue
+		check(screen.run.run_seed == 77 and screen.clock.speed == 1, "%s: the run has its seed and 1x" % where)
+		check(safe.grow(0.6).encloses(screen.hud.get_global_rect()), "%s: the run's HUD is inside the safe area" % where)
+		screen.pause()
+		await _frames(3)
+		check(made.top_modal() is PausePanel, "%s: Pause opens in a run" % where)
+		(made.top_modal() as PausePanel).leave_requested.emit()
+		await _frames(3)
+		# The daily too, and then Continue shows the most recent.
+		made.open_mode()
+		await _frames(3)
+		mode = made.current_screen() as ModeScreen
+		_touch(vp, mode.daily_button.get_global_rect().get_center())
+		await _frames(3)
+		var daily_card: RunCard = made.current_screen() as RunCard
+		check(daily_card != null and daily_card.daily, "%s: a real tap on Daily opens the daily card" % where)
+		if daily_card != null:
+			check(daily_card.best_label.text == "Best today: Lost with 9 of 18 waves cleared.", "%s: the card shows the best (%s)" % [where, daily_card.best_label.text])
+			_sides_and_buttons(daily_card, size, "%s daily card" % where)
+			_touch(vp, daily_card.start_button.get_global_rect().get_center())
+			await _frames(4)
+		var daily_screen: BattleScreen = made.battle_screen()
+		check(daily_screen != null and daily_screen.run != null and daily_screen.run.daily, "%s: a real tap on Start begins the daily" % where)
+		if daily_screen != null:
+			daily_screen.pause()
+			await _frames(3)
+			(made.top_modal() as PausePanel).leave_requested.emit()
+			await _frames(3)
+		made.open_mode()
+		await _frames(3)
+		mode = made.current_screen() as ModeScreen
+		check(mode.continue_button != null, "%s: the Continue card shows" % where)
+		_sides_and_buttons(mode, size, "%s mode screen with Continue" % where)
+		if mode.continue_button != null:
+			_touch(vp, mode.continue_button.get_global_rect().get_center())
+			await _frames(4)
+			check(made.battle_screen() != null and made.battle_screen().run != null and made.battle_screen().run.daily, "%s: a real tap on Continue resumes the daily, the most recent" % where)
+			check(made.battle_screen() != null and made.battle_screen().is_paused() and made.top_modal() is PausePanel, "%s: paused on the Pause menu" % where)
+		vp.queue_free()
+		Fx.wipe(tag)
+		await _frames(2)
+	# The longest Daily line there can be: a 100000 day streak next to a lost best.
+	for pair: Array in [[COVER, COVER_SAFE], [INNER, INNER_SAFE]]:
+		var size: Vector2 = pair[0]
+		var vp: SubViewport = _viewport(size)
+		var long_mode: ModeScreen = ModeScreen.new()
+		long_mode.set_continue("Continue", "Daily 2026-10-24. Wave 17 of 18. Relaxed.")
+		long_mode.set_runs(true, 14, 12, true, ModeScreen.daily_detail({"won": false, "waves": 17, "lives": 0}, Daily.STREAK_MAX))
+		await _hosted(vp, long_mode, size, pair[1])
+		_sides_and_buttons(long_mode, size, "longest Daily line at %s" % size)
+		vp.queue_free()
+		await _frames(1)

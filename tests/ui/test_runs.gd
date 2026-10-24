@@ -57,7 +57,7 @@ func _run_screen(pool: Array[StringName], run_seed: int = 7, progress: Progress 
 	var screen: BattleScreen = BattleScreen.new()
 	screens.append(screen)
 	screen.setup(session.battle, null, progress if progress != null else _seen_all())
-	screen.set_run(session, data)
+	screen.set_run(session)
 	screen.apply_layout(Fx.COVER, Fx.COVER_SAFE)
 	return screen
 
@@ -162,12 +162,12 @@ func test_a_card_owed_during_a_wave_says_pick_it_after_the_wave() -> void:
 		var screen: BattleScreen = BattleScreen.new()
 		screens.append(screen)
 		screen.setup(session.battle, null, _seen_all())
-		screen.set_run(session, data)
+		screen.set_run(session)
 		screen.apply_layout(Fx.COVER, Fx.COVER_SAFE)
 		var guard: int = 0
 		while player.advance(session) and guard < 60000:
 			guard += 1
-			if session.battle.phase == Battle.Phase.WAVE and BattleText.drafts_owed(session) > 0:
+			if session.battle.phase == Battle.Phase.WAVE and session.drafts_owed() > 0:
 				found = true
 				break
 		if found:
@@ -322,7 +322,7 @@ func test_a_resumed_run_with_a_draft_owed_opens_it() -> void:
 	var first: BattleScreen = BattleScreen.new()
 	screens.append(first)
 	first.setup(session.battle, null, _seen_all())
-	first.set_run(session, data)
+	first.set_run(session)
 	_play_wave(first)
 	var saved_battle: Dictionary = session.battle.to_data()
 	var saved_run: Dictionary = session.to_data()
@@ -332,7 +332,7 @@ func test_a_resumed_run_with_a_draft_owed_opens_it() -> void:
 	var second: BattleScreen = BattleScreen.new()
 	screens.append(second)
 	second.setup(again.battle, null, _seen_all())
-	second.set_run(again, data)
+	second.set_run(again)
 	assert_true(second.draft_is_open(), "a restored run with a card owed shows it at once")
 	assert_eq(second.draft_panel.offered(), first.draft_panel.offered(), "the same offers")
 

@@ -170,14 +170,18 @@ static func pick_refusal(reason: StringName) -> String:
 	return refusal(reason)
 
 
-## Drafts a run owes now: the cleared waves among waves 1 to 17, less the picks made
-## (docs/ARCHITECTURE.md 3.4). The same count RunSession works out for itself.
-static func drafts_owed(run: RunSession) -> int:
-	var cleared: int = 0
-	for w: int in mini(run.battle.waves_started, RunSession.DRAFTS):
-		if not run.battle.running.has(w):
-			cleared += 1
-	return maxi(cleared - run.picks.size(), 0)
+## A HUD number that never gets wider than five characters, so a tampered save with huge lives
+## or gold cannot push the HUD off the screen. Up to 99999 it is shown whole. Then 100K to 999K,
+## 1M to 999M and 1B (a K is a thousand). Below zero it is 0.
+@warning_ignore("integer_division")
+static func short_number(value: int) -> String:
+	if value < 100000:
+		return str(maxi(value, 0))
+	if value < 1000000:
+		return "%dK" % (value / 1000)
+	if value < 1000000000:
+		return "%dM" % (value / 1000000)
+	return "%dB" % mini(value / 1000000000, 999)
 
 
 ## The message when a wave is cleared (event wave_cleared, 0 based wave, the clear bonus).

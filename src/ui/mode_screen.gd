@@ -3,10 +3,11 @@
 class_name ModeScreen
 extends PageFrame
 ## "Play" opens this: Campaign, Roguelite and Daily, with a Continue card on top
-## when a game is saved. Roguelite and Daily show as "Coming in a later update" while
-## the run mode is not built. Once it is, they show as locked, with the number of
-## stars they need, until the App says they are open. The App fills in the
-## numbers; this screen names no level, region or tower.
+## when a game is saved. Roguelite and Daily show as locked, with the number of stars
+## they need, until the App says they are open. Once open, the Daily button also shows
+## the day's best and the streak. (A build with no run mode shows "Coming in a later
+## update" instead.) The App fills in the numbers; this screen names no level, region
+## or tower.
 
 signal continue_pressed()
 signal campaign_pressed()
@@ -23,6 +24,7 @@ var _runs_open: bool = false
 var _runs_built: bool = true
 var _stars_needed: int = 12
 var _stars: int = 0
+var _daily_detail: String = ""
 
 
 func _init() -> void:
@@ -50,12 +52,14 @@ func set_continue(title: String, detail: String) -> void:
 
 
 ## Roguelite and Daily: not built yet, or open, or locked until `stars_needed` stars
-## are earned. `built` false wins over everything else.
-func set_runs(runs_open: bool, stars: int, stars_needed: int, built: bool = true) -> void:
+## are earned. `built` false wins over everything else. `daily_detail` is the Daily
+## button's second line once it is open; "" keeps the plain line.
+func set_runs(runs_open: bool, stars: int, stars_needed: int, built: bool = true, daily_detail: String = "") -> void:
 	_runs_open = runs_open and built
 	_runs_built = built
 	_stars = stars
 	_stars_needed = stars_needed
+	_daily_detail = daily_detail
 	if roguelite_button != null:
 		column.remove_child(roguelite_button)
 		roguelite_button.queue_free()
@@ -69,9 +73,21 @@ func _build_runs() -> void:
 	roguelite_button = _run_card("Roguelite", "One run. Pick a card after each wave.")
 	roguelite_button.tapped.connect(func() -> void: roguelite_pressed.emit())
 	column.add_child(roguelite_button)
-	daily_button = _run_card("Daily", "One run a day. The same for everyone.")
+	daily_button = _run_card("Daily", _daily_detail if not _daily_detail.is_empty() else "One run a day. The same for everyone.")
 	daily_button.tapped.connect(func() -> void: daily_pressed.emit())
 	column.add_child(daily_button)
+
+
+## The Daily button's second line from the day's best ({} for none) and the shown streak:
+## "Best today: Won with 14 lives left. Streak: 3 days." Without a streak that part is left
+## out. With neither a best nor a streak it is "", and the plain line shows.
+static func daily_detail(best: Dictionary, streak: int) -> String:
+	if best.is_empty() and streak <= 0:
+		return ""
+	var text: String = "Not played today." if best.is_empty() else "Best today: %s" % RunCard.best_text(best)
+	if streak > 0:
+		text += " %s." % RunCard.streak_text(streak)
+	return text
 
 
 func _run_card(title: String, detail: String) -> TapButton:
