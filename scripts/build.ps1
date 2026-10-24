@@ -2,6 +2,9 @@
 # Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.
 #
 # Builds the debug APK: build\forkline-debug.apk
+# Works from a fresh clone or worktree in one command. It imports the project
+# itself (retrying a crashed import), exports with a private temp folder, and
+# only reports success when a new, readable APK exists. Any failure exits 1.
 #
 # Run from any folder:
 #   powershell -ExecutionPolicy Bypass -File scripts\build.ps1
@@ -15,44 +18,103 @@ $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
 $Godot = if ($env:GODOT) { $env:GODOT } else { 'godot' }
 $Apk = Join-Path $Root 'build\forkline-debug.apk'
+$ClassCache = Join-Path $Root '.godot\global_script_class_cache.cfg'
 $WantVersion = '4.7.2.stable'
+$Attempts = 3
+$Started = (Get-Date).ToUniversalTime().AddSeconds(-2)
 
-# Godot is a window app. PowerShell only waits for it, and only sets
-# $LASTEXITCODE, when its output is piped, so every Godot call is piped.
-function Invoke-Godot {
-    & $Godot @args | Out-Host
-    return $LASTEXITCODE
+function Stop-Build([string]$Message) {
+    Write-Host "BUILD FAILED: $Message"
+    exit 1
+}
+
+# Runs Godot in this console, waits up to $Seconds, and returns its exit code.
+# A run that goes over the time is ended by its own process id, and returns -1.
+function Invoke-Godot([int]$Seconds, [string[]]$GodotArgs) {
+    $Quoted = $GodotArgs | ForEach-Object { '"' + $_ + '"' }
+    $Proc = Start-Process -FilePath $Godot -ArgumentList $Quoted -NoNewWindow -PassThru
+    $null = $Proc.Handle   # keeps the handle open so ExitCode is readable
+    if (-not $Proc.WaitForExit($Seconds * 1000)) {
+        Stop-Process -Id $Proc.Id -Force
+        return -1
+    }
+    $Proc.WaitForExit()
+    return $Proc.ExitCode
 }
 
 if (-not (Get-Command $Godot -ErrorAction SilentlyContinue)) {
-    Write-Host "Godot was not found as '$Godot'. Install Godot $WantVersion or set GODOT to the full path of its exe."
-    exit 1
+    Stop-Build "Godot was not found as '$Godot'. Install Godot $WantVersion or set GODOT to the full path of its exe."
 }
 
 $Version = (& $Godot --version | Out-String).Trim()
 if (-not $Version.StartsWith($WantVersion)) {
-    Write-Host "This project needs Godot $WantVersion, but '$Godot' is version '$Version'."
-    exit 1
+    Stop-Build "This project needs Godot $WantVersion, but '$Godot' is version '$Version'."
 }
 Write-Host "Godot $Version"
 
+# Import until Godot has written its class cache. The first import of a fresh
+# project can crash or stop early, and a rerun finishes the job.
 Write-Host 'Importing the project...'
-$Code = Invoke-Godot --headless --path $Root --import
-if ($Code -ne 0) {
-    Write-Host "The import failed with exit code $Code. Read the Godot output above."
-    exit 1
+$Imported = $false
+for ($n = 1; $n -le $Attempts; $n++) {
+    if (Test-Path $ClassCache) { Remove-Item -Force $ClassCache }
+    $Code = Invoke-Godot 300 @('--headless', '--path', $Root, '--import')
+    if ($Code -eq 0 -and (Test-Path $ClassCache) -and (Get-Item $ClassCache).Length -gt 0) {
+        $Imported = $true
+        break
+    }
+    Write-Host "Import attempt $n of $Attempts did not finish (exit code $Code)."
+}
+if (-not $Imported) {
+    Stop-Build "the import did not finish after $Attempts attempts. Read the Godot output above."
 }
 
-New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Apk) | Out-Null
-if (Test-Path $Apk) {
-    Remove-Item -Force $Apk
-}
+# Godot names its temporary export files with the clock in whole seconds, in the
+# shared temp folder. Two exports that start in the same second (another Godot
+# project, or a second copy of this script) overwrite each other's files. A
+# private temp folder for this build stops that.
+$BuildDir = Split-Path -Parent $Apk
+New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
+$ExportTmp = Join-Path $BuildDir ('tmp.' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+New-Item -ItemType Directory -Force -Path $ExportTmp | Out-Null
+$OldTemp = $env:TEMP
+$OldTmp = $env:TMP
 
 Write-Host 'Exporting the debug APK...'
-$Code = Invoke-Godot --headless --path $Root --export-debug 'Android' $Apk
-if ($Code -ne 0 -or -not (Test-Path $Apk)) {
-    Write-Host "The export failed (exit code $Code). Read the Godot output above."
-    exit 1
+$Built = $false
+try {
+    $env:TEMP = $ExportTmp
+    $env:TMP = $ExportTmp
+    for ($n = 1; $n -le $Attempts; $n++) {
+        Remove-Item -Force -ErrorAction SilentlyContinue $Apk, "$Apk.idsig"
+        $Code = Invoke-Godot 600 @('--headless', '--path', $Root, '--export-debug', 'Android', $Apk)
+        # A good APK: Godot exited 0, the file is new, over 1 MB, and a valid zip.
+        if ($Code -eq 0 -and (Test-Path $Apk)) {
+            $Item = Get-Item $Apk
+            $Entries = 0
+            try {
+                Add-Type -AssemblyName System.IO.Compression.FileSystem
+                $Zip = [System.IO.Compression.ZipFile]::OpenRead($Apk)
+                $Entries = $Zip.Entries.Count
+                $Zip.Dispose()
+            } catch {
+                $Entries = 0
+            }
+            if ($Item.LastWriteTimeUtc -ge $Started -and $Item.Length -gt 1MB -and $Entries -gt 0) {
+                $Built = $true
+                break
+            }
+        }
+        Write-Host "Export attempt $n of $Attempts failed (exit code $Code)."
+        Remove-Item -Force -ErrorAction SilentlyContinue $Apk
+    }
+} finally {
+    $env:TEMP = $OldTemp
+    $env:TMP = $OldTmp
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $ExportTmp
+}
+if (-not $Built) {
+    Stop-Build "the export did not produce a good APK after $Attempts attempts. Read the Godot output above."
 }
 
 $SizeMb = [math]::Round((Get-Item $Apk).Length / 1MB, 1)
