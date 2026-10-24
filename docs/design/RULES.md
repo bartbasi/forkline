@@ -19,6 +19,7 @@ Phase 7 alignment, 2026-10-24 (task G1), after hard stop B and the contract revi
   - 14.6: Piggy Bank pays after the clear bonus, on all the gold held. An unlocked card joins from the next run on.
 - Made precise, with nothing approved changed: Bubble Night's bubbles come back as a Bubbler's do (13). What Twist and risk card effects reach, and that count changes never touch Puffs or added groups (6.4, 13, 14.5). A tower fires at most once a tick (5.2). A Puffball's first Puff comes on the next tick (6.2, 8.1). The largest wave counts Puffs but not boss summons, which the bots measure (12.5). Route lines and the preview show a waiting risk card (7.5, 9.1). The call button highlight (9.6). Targets per shot in the tower panel (9.3). "Reach wave N" (14.6). Risk rewards, added groups and card floors (14.5, 14.6). Segments, packs and draft details (14.2 to 14.4). The daily's date check (15).
 - New: a card text for every Twist (13), a guide of 4 groups or fewer a wave (12.5), and the balance checks with the plain mixed recipe for every region (12.6).
+- One Twist changed, the same day. Level 1-3's Twist is now Tier 2 Cap, `tier_cap` 2, card text "No tower can go above tier 2.", the same as 3-5's (13). It replaces No Upgrades, which the bots could not win on Normal with tier 1 towers (TUNING_R1.md S4). The DM chose it on 2026-10-24, on the game designer's advice. The level data and contract 2.8 already use it. It changes the Twist list approved at hard stop A, so it is for the DM to tell Bart.
 
 Names follow docs/art/NAMES.md, which Bart approved at hard stop B. The tables in 5.1, 5.3 to 5.8, 6.1, 6.3 and 12.1 give each tower, tier 3 path, creature, boss and region its id from that list, so the data files have one source. In each tower's tier table, the first tier 3 row is spec 0 and the second is spec 1.
 
@@ -1073,7 +1074,7 @@ And the same inputs always give the same result.
 |---|---|---|---|
 | 1-1 | Thin Purse | Start with half the gold, rounded down to a multiple of 10. | Start with half the gold. |
 | 1-2 | Stuck Gate | The level's gate starts placed on a socket the level sets. It cannot be moved or removed, and there is no other gate. | Your gate is stuck on one socket for the whole level. |
-| 1-3 | No Upgrades | Towers stay at tier 1. | Towers stay at tier 1. |
+| 1-3 | Tier 2 Cap | No tower can go above tier 2. | No tower can go above tier 2. |
 | 1-4 | No Catapults | The Pumpkin Catapult cannot be built. | Pumpkin Catapults cannot be built. |
 | 1-5 | Twice the Wings | Every group of flyers has twice as many. | Twice as many flyers in every wave. |
 | 1-6 | Double Trouble | Every group in the final wave has twice as many. Two bosses. | The final wave is twice as big, with two bosses. |
