@@ -1194,7 +1194,7 @@ func _make_mods(w: int, risk: Array) -> WaveMods:
 	var last_start: int = 0
 	for group: WaveGroup in level.waves[w].groups:
 		last_start = maxi(last_start, group.at_tick)
-	# count_pct changes only the wave's own groups. An added group keeps its card's count (RULES 14.3).
+	# count_pct changes only the wave's own groups. An added group keeps its card's count (RULES 14.5).
 	for group: WaveGroup in level.waves[w].groups:
 		var count: int = Modifiers.group_count(mods.effects, group.count, catalog.enemy(group.enemy).flying, last)
 		if count == group.count:

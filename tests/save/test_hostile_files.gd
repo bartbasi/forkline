@@ -11,7 +11,7 @@ var game: GameData = null
 
 func before_each() -> void:
 	Fx.fresh()
-	game = Fx.game()
+	game = Fx.run_game()
 
 
 func after_each() -> void:
@@ -19,7 +19,16 @@ func after_each() -> void:
 
 
 func _valid_game_text(mode: StringName) -> String:
-	return JsonFile.to_text(Fx.saved(mode, Fx.battle_mid_wave(game, &"r1_l1", false, 60)).to_data())
+	return JsonFile.to_text(_game_of(mode, 60).to_data())
+
+
+## A saved game of the mode: a level played a while, or a new run or daily.
+func _game_of(mode: StringName, ticks: int) -> SavedGame:
+	if mode == SavedGame.RUN:
+		return Fx.saved_run(Fx.session(game, ticks))
+	if mode == SavedGame.DAILY:
+		return Fx.saved_run(Fx.daily(game, "2026-10-23"))
+	return Fx.saved(mode, Fx.battle_mid_wave(game, &"r1_l1" if ticks == 60 else &"r1_l2", false, ticks))
 
 
 func test_hostile_settings_give_defaults() -> void:
@@ -60,6 +69,27 @@ func test_hostile_progress_gives_defaults() -> void:
 		assert_eq(SaveStore.new(Fx.WORK).load_progress().stars(), 2, name)
 
 
+func test_hostile_daily_record_gives_defaults() -> void:
+	var good: String = "{\"best\":{\"lives\":3,\"waves\":18,\"won\":true},\"day\":\"2026-10-23\",\"format\":1,\"streak\":4,\"streak_day\":\"2026-10-23\"}"
+	var cases: Dictionary = Fx.hostile_files(good, SaveStore.DAILY_CAP)
+	cases["streak infinite"] = "{\"format\": 1, \"streak\": 1e999}".to_ascii_buffer()
+	cases["streak past ceiling"] = "{\"format\": 1, \"streak\": 100001}".to_ascii_buffer()
+	cases["day with a path"] = "{\"format\": 1, \"day\": \"../../x\", \"best\": {\"won\": true, \"waves\": 1, \"lives\": 1}}".to_ascii_buffer()
+	cases["best of objects"] = "{\"format\": 1, \"day\": \"2026-10-23\", \"best\": {\"won\": {}, \"waves\": [], \"lives\": null}}".to_ascii_buffer()
+	for name: String in cases:
+		Fx.fresh()
+		Fx.write_bytes("daily.json", cases[name])
+		var store: SaveStore = SaveStore.new(Fx.WORK)
+		var loaded: DailyRecord = store.load_daily()
+		assert_eq(loaded.day, "", name)
+		assert_eq(loaded.best, {}, name)
+		assert_eq(loaded.streak, 0, name)
+		var record: DailyRecord = DailyRecord.new()
+		record.record_finish("2026-10-24", {"won": false, "waves": 7, "lives": 0})
+		assert_true(store.save_daily(record), "%s: the next save works" % name)
+		assert_eq(SaveStore.new(Fx.WORK).load_daily().best, {"won": false, "waves": 7, "lives": 0}, name)
+
+
 func test_hostile_saved_games_are_deleted() -> void:
 	for mode: StringName in SavedGame.MODES:
 		var file_name: String = SaveStore.GAME_FILES[mode]
@@ -70,8 +100,7 @@ func test_hostile_saved_games_are_deleted() -> void:
 			var store: SaveStore = SaveStore.new(Fx.WORK)
 			assert_eq(store.load_games(game).size(), 0, "%s %s" % [mode, name])
 			assert_false(Fx.exists(file_name), "%s %s: deleted" % [mode, name])
-			var battle: Battle = Fx.battle_mid_wave(game, &"r1_l2", false, 30)
-			assert_true(store.save_game(Fx.saved(mode, battle)), "%s %s: the next save works" % [mode, name])
+			assert_true(store.save_game(_game_of(mode, 30)), "%s %s: the next save works" % [mode, name])
 			var loaded: Array[SavedGame] = SaveStore.new(Fx.WORK).load_games(game)
 			assert_eq(loaded.size(), 1, "%s %s" % [mode, name])
 

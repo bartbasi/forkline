@@ -5,6 +5,12 @@ extends RefCounted
 ## user://tests/save/ that each test removes in before_each() and after_each(). WORK is
 ## named after the process, so two test runs at once never wipe each other's files.
 
+## The run fixtures of tests/run/: small segments and packs until the real ones exist,
+## and a seeded player. Their pools hold gold_purse, an economy card that is not once, so
+## a draft is never empty.
+const RunFx: GDScript = preload("res://tests/run/fixtures/run_fixtures.gd")
+const Player: GDScript = preload("res://tests/run/fixtures/run_player.gd")
+
 const TEST_ROOT: String = "user://tests/save"
 const DATA: String = "res://data"
 static var WORK: String = "%s/work_%d" % [TEST_ROOT, OS.get_process_id()]
@@ -85,6 +91,59 @@ static func saved(mode: StringName, battle: Battle) -> SavedGame:
 	game_save.level_id = battle.level.id if mode == SavedGame.LEVEL else &""
 	game_save.battle = battle
 	return game_save
+
+
+## The real data with the fixture run data, so runs and dailies can be started and loaded.
+static func run_game() -> GameData:
+	var game_data: GameData = game()
+	game_data.run = RunFx.run_data()
+	return game_data
+
+
+## A new run (day "") or daily on the fixture run data. The pool is the base cards, or
+## every card for a daily, as the App passes them (3.4).
+static func session(game_data: GameData, run_seed: int, day: String = "", relaxed: bool = false) -> RunSession:
+	var pool: Array[StringName] = game_data.run.card_ids() if day != "" else game_data.run.pool({})
+	return RunSession.start(run_seed, day, relaxed, pool, game_data.run, game_data.catalog)
+
+
+## A daily for a day, with its seed from the day.
+static func daily(game_data: GameData, day: String) -> RunSession:
+	return session(game_data, RunSeeds.daily_seed(day), day)
+
+
+## A run played by a seeded player until check(session) is true (or the run ends).
+static func play_until(session_now: RunSession, player: RefCounted, check: Callable) -> bool:
+	for guard: int in 200000:
+		if check.call(session_now):
+			return true
+		if not player.advance(session_now):
+			return false
+	return false
+
+
+## A seeded player with plenty of gold and lives, so fixture runs go on for long.
+static func player(seed_value: int) -> RefCounted:
+	var p: RefCounted = Player.new(seed_value)
+	p.rich = true
+	return p
+
+
+## The saved game of a run or daily.
+static func saved_run(session_now: RunSession) -> SavedGame:
+	var game_save: SavedGame = saved(SavedGame.DAILY if session_now.daily else SavedGame.RUN, session_now.battle)
+	game_save.run = session_now
+	return game_save
+
+
+## A saved game's data after a trip through JSON text, as a file brings it back.
+static func through_json(data: Dictionary) -> Dictionary:
+	return JSON.parse_string(JSON.stringify(data))
+
+
+## Everything that must match after equal play: the battle, the run and the result.
+static func run_text(session_now: RunSession) -> String:
+	return Player.fingerprint(session_now)
 
 
 static func battle_text(battle: Battle) -> String:

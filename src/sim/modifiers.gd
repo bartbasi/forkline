@@ -2,8 +2,9 @@
 # Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.
 class_name Modifiers
 extends RefCounted
-## Twist, card and risk effects (docs/ARCHITECTURE.md 2.8). Only check() is public to
-## other areas. Battle applies them; the helpers below are internal to src/sim/.
+## Twist, card and risk effects (docs/ARCHITECTURE.md 2.8). check(), normalize_all() and
+## group_count() are public to other areas (3.1). Battle applies the effects; every other
+## helper below is internal to src/sim/.
 
 const USES: PackedStringArray = ["twist", "card", "risk"]
 const TOWER_ADD_STATS: PackedStringArray = [

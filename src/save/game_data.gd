@@ -12,11 +12,25 @@ const CAMPAIGN_CAP: int = 16384
 const CAMPAIGN_FILE: String = "campaign.json"
 ## Most levels in one region. RULES 12 plans 6.
 const REGION_LEVELS_MAX: int = 24
+# The run files (2.9 to 2.12), by their path under data/, as RunData.check takes them.
+const RUN_FILE: String = "runs/run.json"
+const CARDS_FILE: String = "cards/cards.json"
+const INDEX_FILE: String = "segments/index.json"
+const PACKS_FILE: String = "segments/packs.json"
+const SEGMENT_DIR: String = "segments"
+const RUN_CAP: int = 16384
+const CARDS_CAP: int = 262144
+const INDEX_CAP: int = 16384
+const PACKS_CAP: int = 262144
+const SEGMENT_CAP: int = 16384
+## Most segments index.json may list (2.9). A longer list is read no further.
+const SEGMENTS_MAX: int = 256
 
 var problems: PackedStringArray = PackedStringArray()   # empty when every file is valid
 var catalog: Catalog = null
 var campaign: Array[Dictionary] = []                    # [{"id": StringName, "name": String, "levels": Array[StringName]}]
 var levels: Dictionary[StringName, LevelData] = {}
+var run: RunData = null                                 # null until every run file is valid
 
 
 static func load_from(root: String = "res://data") -> GameData:
@@ -62,11 +76,64 @@ func _load(root: String) -> void:
 			continue
 		if not listed.has(StringName(file_name.get_basename())):
 			problems.append("%s: is not listed in %s" % [file_name, CAMPAIGN_FILE])
+	_load_run(root)
+
+
+## Reads the run files and hands them to RunData (2.12): only the four fixed files and
+## the segments index.json lists, keyed by their path under data/. A file that is missing
+## is left out, and RunData reports it. A file that cannot be read is left out too, with
+## its own problem line here.
+func _load_run(root: String) -> void:
+	# Stopgap until the level designer adds data/segments/ (task L4): with no segments
+	# folder at all, runs are not built yet, so there is no run and no problem.
+	if not DirAccess.dir_exists_absolute(root.path_join(SEGMENT_DIR)):
+		return
+	var files: Dictionary = {}
+	_read_run_file(root, RUN_FILE, RUN_CAP, files)
+	_read_run_file(root, CARDS_FILE, CARDS_CAP, files)
+	_read_run_file(root, INDEX_FILE, INDEX_CAP, files)
+	_read_run_file(root, PACKS_FILE, PACKS_CAP, files)
+	for id: StringName in _listed_segments(files.get(INDEX_FILE, null)):
+		_read_run_file(root, "%s/%s.json" % [SEGMENT_DIR, id], SEGMENT_CAP, files)
+	var data: RunData = RunData.from_data(files, catalog)
+	if data == null:
+		problems.append_array(RunData.check(files, catalog))
+		return
+	run = data
+
+
+## One run file into files under its path. A missing file adds nothing.
+func _read_run_file(root: String, relative: String, cap: int, files: Dictionary) -> void:
+	var got: Dictionary = JsonFile.read(root.path_join(relative), cap)
+	if got["status"] == JsonFile.MISSING:
+		return
+	var data: Variant = _take(got, relative.get_file(), cap)
+	if data != null:
+		files[relative] = data
+
+
+## The ids index.json lists, when they are a list of at most SEGMENTS_MAX. Only ids in id
+## form are kept, so no path can reach outside the folder. RunData checks the rest.
+static func _listed_segments(index: Variant) -> Array[StringName]:
+	var out: Array[StringName] = []
+	if typeof(index) != TYPE_DICTIONARY:
+		return out
+	var list: Variant = (index as Dictionary).get("segments", null)
+	if typeof(list) != TYPE_ARRAY or (list as Array).size() > SEGMENTS_MAX:
+		return out
+	for item: Variant in list:
+		if DataCheck.is_id(item) and not out.has(StringName(String(item))):
+			out.append(StringName(String(item)))
+	return out
 
 
 ## The parsed file, or null with a problem.
 func _read(path: String, file_name: String, cap: int) -> Variant:
-	var got: Dictionary = JsonFile.read(path, cap)
+	return _take(JsonFile.read(path, cap), file_name, cap)
+
+
+## The data of one JsonFile.read result, or null with a problem.
+func _take(got: Dictionary, file_name: String, cap: int) -> Variant:
 	var status: StringName = got["status"]
 	if status == JsonFile.OK_STATUS:
 		return got["data"]

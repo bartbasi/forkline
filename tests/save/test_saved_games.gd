@@ -12,7 +12,7 @@ var store: SaveStore = null
 
 func before_each() -> void:
 	Fx.fresh()
-	game = Fx.game()
+	game = Fx.run_game()
 	store = SaveStore.new(Fx.WORK)
 
 
@@ -35,17 +35,37 @@ func _modes(list: Array[SavedGame]) -> Array[StringName]:
 	return out
 
 
+## A run or daily played into a wave with creatures on the map.
+func _run_mid_wave(run_seed: int, day: String, relaxed: bool, waves: int) -> RunSession:
+	var session: RunSession = Fx.session(game, run_seed, day, relaxed)
+	assert_not_null(session)
+	var p: RefCounted = Fx.player(run_seed)
+	assert_true(Fx.play_until(session, p, func(s: RunSession) -> bool:
+		return s.battle.waves_started >= waves and s.battle.phase == Battle.Phase.WAVE and s.battle.enemies.size() >= 1))
+	return session
+
+
+func _saved_of(mode: StringName, battle: Battle, runs: Dictionary) -> SavedGame:
+	if runs.has(mode):
+		return Fx.saved_run(runs[mode])
+	return Fx.saved(mode, battle)
+
+
 func test_each_mode_resumes_to_an_identical_battle() -> void:
+	var runs: Dictionary = {
+		SavedGame.RUN: _run_mid_wave(77, "", true, 3),
+		SavedGame.DAILY: _run_mid_wave(20261023, "2026-10-23", false, 4),
+	}
 	var battles: Dictionary = {
 		SavedGame.LEVEL: Fx.battle_mid_wave(game, &"r1_l1", false, 150),
-		SavedGame.RUN: Fx.battle_mid_wave(game, &"r1_l5", true, 260),
-		SavedGame.DAILY: Fx.battle_mid_wave(game, &"r1_l6", false, 333),
+		SavedGame.RUN: (runs[SavedGame.RUN] as RunSession).battle,
+		SavedGame.DAILY: (runs[SavedGame.DAILY] as RunSession).battle,
 	}
 	for mode: StringName in battles:
 		var battle: Battle = battles[mode]
 		assert_eq(battle.phase, Battle.Phase.WAVE, String(mode))
 		assert_false(battle.enemies.is_empty(), "%s has creatures on the map" % mode)
-		assert_true(store.save_game(Fx.saved(mode, battle)), String(mode))
+		assert_true(store.save_game(_saved_of(mode, battle, runs)), String(mode))
 	var loaded: Array[SavedGame] = SaveStore.new(Fx.WORK).load_games(game)
 	assert_eq(loaded.size(), 3)
 	for mode: StringName in battles:
@@ -56,6 +76,12 @@ func test_each_mode_resumes_to_an_identical_battle() -> void:
 			continue
 		assert_eq(Fx.battle_text(saved.battle), Fx.battle_text(original), "%s resumes at the exact moment" % mode)
 		assert_eq(saved.level_id, original.level.id if mode == SavedGame.LEVEL else &"")
+		if mode == SavedGame.LEVEL:
+			assert_null(saved.run)
+		else:
+			assert_not_null(saved.run, String(mode))
+			assert_true(saved.run.battle == saved.battle, "the run is around the saved battle")
+			assert_eq(JSON.stringify(saved.run.to_data()), JSON.stringify((runs[mode] as RunSession).to_data()))
 		# Played on, the resumed battle stays the same as the one never saved.
 		for i: int in 400:
 			original.step()
@@ -76,8 +102,8 @@ func test_build_phase_resumes_too() -> void:
 
 func test_continue_picks_the_most_recent() -> void:
 	assert_true(store.save_game(Fx.saved(SavedGame.LEVEL, Fx.battle_mid_wave(game, &"r1_l1", false, 10))))
-	assert_true(store.save_game(Fx.saved(SavedGame.DAILY, Fx.battle_mid_wave(game, &"r1_l2", false, 10))))
-	assert_true(store.save_game(Fx.saved(SavedGame.RUN, Fx.battle_mid_wave(game, &"r1_l3", false, 10))))
+	assert_true(store.save_game(Fx.saved_run(Fx.daily(game, "2026-10-23"))))
+	assert_true(store.save_game(Fx.saved_run(Fx.session(game, 5))))
 	var next: SaveStore = SaveStore.new(Fx.WORK)
 	var loaded: Array[SavedGame] = next.load_games(game)
 	assert_eq(_modes(loaded), [SavedGame.RUN, SavedGame.DAILY, SavedGame.LEVEL] as Array[StringName])
@@ -91,8 +117,8 @@ func test_continue_picks_the_most_recent() -> void:
 
 func test_modes_stay_separate() -> void:
 	assert_true(store.save_game(Fx.saved(SavedGame.LEVEL, Fx.battle_mid_wave(game, &"r1_l1", false, 10))))
-	assert_true(store.save_game(Fx.saved(SavedGame.RUN, Fx.battle_mid_wave(game, &"r1_l2", false, 10))))
-	assert_true(store.save_game(Fx.saved(SavedGame.DAILY, Fx.battle_mid_wave(game, &"r1_l3", false, 10))))
+	assert_true(store.save_game(Fx.saved_run(Fx.session(game, 9))))
+	assert_true(store.save_game(Fx.saved_run(Fx.daily(game, "2026-11-02"))))
 	assert_true(Fx.exists("game_level.json"))
 	assert_true(Fx.exists("game_run.json"))
 	assert_true(Fx.exists("game_daily.json"))
@@ -110,6 +136,22 @@ func test_games_that_cannot_be_saved_are_refused() -> void:
 	assert_false(store.save_game(null))
 	var empty: SavedGame = SavedGame.new()
 	assert_false(store.save_game(empty), "no battle")
+	var run: RunSession = Fx.session(game, 3)
+	var daily: RunSession = Fx.daily(game, "2026-10-23")
+	assert_false(store.save_game(Fx.saved(SavedGame.RUN, run.battle)), "a run without its run")
+	assert_false(store.save_game(Fx.saved(SavedGame.DAILY, daily.battle)), "a daily without its run")
+	var level_with_run: SavedGame = Fx.saved(SavedGame.LEVEL, Fx.battle_mid_wave(game, &"r1_l1", false, 5))
+	level_with_run.run = run
+	assert_false(store.save_game(level_with_run), "a campaign level with a run")
+	var other_battle: SavedGame = Fx.saved_run(run)
+	other_battle.battle = Fx.session(game, 3).battle
+	assert_false(store.save_game(other_battle), "a run around another battle")
+	var daily_as_run: SavedGame = Fx.saved_run(daily)
+	daily_as_run.mode = SavedGame.RUN
+	assert_false(store.save_game(daily_as_run), "a daily in the run's file")
+	var run_as_daily: SavedGame = Fx.saved_run(run)
+	run_as_daily.mode = SavedGame.DAILY
+	assert_false(store.save_game(run_as_daily), "a run in the daily's file")
 	var odd: SavedGame = Fx.saved(SavedGame.LEVEL, Fx.battle_mid_wave(game, &"r1_l1", false, 5))
 	odd.mode = &"arena"
 	assert_false(store.save_game(odd), "unknown mode")
@@ -213,15 +255,16 @@ func test_tampered_fields_make_the_game_invalid() -> void:
 
 
 func test_daily_is_always_normal() -> void:
-	var relaxed: Battle = Fx.battle_mid_wave(game, &"r1_l1", true, 10)
-	var data: Dictionary = Fx.saved(SavedGame.DAILY, relaxed).to_data()
-	assert_null(SavedGame.from_data(JSON.parse_string(JSON.stringify(data)), game))
-	data["mode"] = "run"
-	assert_not_null(SavedGame.from_data(JSON.parse_string(JSON.stringify(data)), game))
+	var data: Dictionary = Fx.through_json(Fx.saved_run(Fx.daily(game, "2026-10-23")).to_data())
+	assert_not_null(SavedGame.from_data(data, game), "the Normal daily loads")
+	data["battle"]["relaxed"] = true
+	assert_null(SavedGame.from_data(data, game), "a Relaxed daily")
+	var relaxed_run: Dictionary = Fx.through_json(Fx.saved_run(Fx.session(game, 4, "", true)).to_data())
+	assert_not_null(SavedGame.from_data(relaxed_run, game), "a Relaxed run loads")
 
 
 func test_game_in_the_wrong_file_is_deleted() -> void:
-	var data: Dictionary = Fx.saved(SavedGame.RUN, Fx.battle_mid_wave(game, &"r1_l1", false, 10)).to_data()
+	var data: Dictionary = Fx.saved_run(Fx.session(game, 11)).to_data()
 	Fx.write_text("game_daily.json", JSON.stringify(data))
 	assert_eq(store.load_games(game).size(), 0)
 	assert_false(Fx.exists("game_daily.json"))
@@ -273,16 +316,19 @@ func test_a_campaign_game_holds_no_cards_and_a_run_no_twist_rules_13_and_14() ->
 	assert_eq(battle.add_effects([{"type": "bounty_pct", "pct": 200}] as Array[Dictionary], false), Battle.DONE)
 	var as_level: Dictionary = JSON.parse_string(JSON.stringify(Fx.saved(SavedGame.LEVEL, battle).to_data()))
 	assert_null(SavedGame.from_data(as_level, game), "a campaign level with a card")
-	var as_run: Dictionary = JSON.parse_string(JSON.stringify(Fx.saved(SavedGame.RUN, battle).to_data()))
+	var run: RunSession = Fx.session(game, 21)
+	assert_eq(run.battle.add_effects([{"type": "bounty_pct", "pct": 200}] as Array[Dictionary], false), Battle.DONE)
+	var as_run: Dictionary = Fx.through_json(Fx.saved_run(run).to_data())
 	assert_not_null(SavedGame.from_data(as_run, game), "a run takes cards")
 	var twisted: Dictionary = as_run.duplicate(true)
 	twisted["battle"]["twist"] = [{"type": "no_selling"}]
 	assert_null(SavedGame.from_data(twisted, game), "a run has no Twist")
 
 
-## A campaign battle on 1-1 after a card or risk card the campaign never offers.
-func _after_card(effects: Array[Dictionary], risk: bool) -> Battle:
-	var battle: Battle = Battle.create(game.levels[&"r1_l1"], game.catalog, false, [])
+## A battle after a card or risk card the campaign never offers: 1-1, or a run's battle
+## when run is given.
+func _after_card(effects: Array[Dictionary], risk: bool, run: RunSession = null) -> Battle:
+	var battle: Battle = Battle.create(game.levels[&"r1_l1"], game.catalog, false, []) if run == null else run.battle
 	battle.place_tower(battle.level.spots[0], battle.level.towers[0])
 	assert_eq(battle.add_effects(effects, risk), Battle.DONE, str(effects))
 	battle.start_next_wave()
@@ -296,17 +342,20 @@ func test_a_campaign_game_holds_nothing_only_cards_give_contract_2_8() -> void:
 	# Only risk cards make a wave take a risk card or open every gate, and only cards add
 	# gates. Each of these loads as a run and is refused as a campaign level.
 	var cases: Array = [
-		["a wave that took a risk card", _after_card([{"type": "reward_gold", "amount": 50}] as Array[Dictionary], true), "wave_risk"],
-		["gates standing open", _after_card([{"type": "gates_open"}] as Array[Dictionary], true), "gates_open"],
-		["gates added by a card", _after_card([{"type": "add_gates", "count": 1}] as Array[Dictionary], false), "gates_added"],
+		["a wave that took a risk card", [{"type": "reward_gold", "amount": 50}] as Array[Dictionary], true, "wave_risk"],
+		["gates standing open", [{"type": "gates_open"}] as Array[Dictionary], true, "gates_open"],
+		["gates added by a card", [{"type": "add_gates", "count": 1}] as Array[Dictionary], false, "gates_added"],
 	]
 	for item: Array in cases:
-		var battle: Battle = item[1]
-		var as_run: Dictionary = JSON.parse_string(JSON.stringify(Fx.saved(SavedGame.RUN, battle).to_data()))
+		var run: RunSession = Fx.session(game, 31)
+		_after_card(item[1], item[2], run)
+		var as_run: Dictionary = Fx.through_json(Fx.saved_run(run).to_data())
 		assert_not_null(SavedGame.from_data(as_run, game), "%s loads as a run" % item[0])
+		var battle: Battle = _after_card(item[1], item[2])
 		var as_level: Dictionary = JSON.parse_string(JSON.stringify(Fx.saved(SavedGame.LEVEL, battle).to_data()))
 		var inner: Dictionary = as_level["battle"]
-		assert_true(inner[item[2]] is Array and not (inner[item[2]] as Array).is_empty() or inner[item[2]] is bool and inner[item[2]] or inner[item[2]] is float and inner[item[2]] > 0, "%s shows in %s" % [item[0], item[2]])
+		var key: String = item[3]
+		assert_true(inner[key] is Array and not (inner[key] as Array).is_empty() or inner[key] is bool and inner[key] or inner[key] is float and inner[key] > 0, "%s shows in %s" % [item[0], key])
 		assert_true((inner["effects"] as Array).is_empty() and (inner["risk"] as Array).is_empty(), "%s keeps no card" % item[0])
 		assert_null(SavedGame.from_data(as_level, game), "%s is refused as a campaign level" % item[0])
 	var plain: Battle = Fx.battle_mid_wave(game, &"r1_l1", false, 40)

@@ -140,3 +140,93 @@ func test_missing_root_is_a_problem_not_a_crash() -> void:
 	assert_false(game.problems.is_empty())
 	assert_null(game.catalog)
 	assert_eq(game.levels.size(), 0)
+
+
+# phase 7: the run files (2.9 to 2.12)
+
+const RunFx: GDScript = preload("res://tests/run/fixtures/run_fixtures.gd")
+
+
+## The real run plan and cards, with the fixture segments and packs of tests/run/ until
+## the real ones exist.
+func _add_run_files() -> void:
+	for relative: String in ["runs/run.json", "cards/cards.json"]:
+		DirAccess.make_dir_recursive_absolute(root.path_join(relative.get_base_dir()))
+		_put(relative, FileAccess.get_file_as_string(Fx.DATA.path_join(relative)))
+	DirAccess.make_dir_recursive_absolute(root.path_join("segments"))
+	var files: Dictionary = RunFx.files()
+	for key: String in files:
+		if key.begins_with("segments/"):
+			_put(key, JSON.stringify(files[key]))
+
+
+func test_the_run_files_load() -> void:
+	_add_run_files()
+	var game: GameData = GameData.load_from(root)
+	assert_eq(game.problems, PackedStringArray())
+	assert_not_null(game.run)
+	if game.run == null:
+		return
+	assert_eq(game.run.card_ids().size(), 34, "the real cards")
+	var order: Array[StringName] = []
+	for id: String in RunFx.INDEX_ORDER:
+		order.append(StringName(id))
+	assert_eq(game.run.segment_ids, order, "the index order")
+	assert_eq(game.run.packs.size(), 26)
+	# A run builds from what was loaded.
+	assert_not_null(RunSession.start(7, "", false, game.run.pool({}), game.run, game.catalog))
+
+
+func test_no_segments_folder_means_no_run_yet() -> void:
+	# Stopgap until data/segments/ lands (task L4): no folder, no run and no problem.
+	var game: GameData = GameData.load_from(root)
+	assert_eq(game.problems, PackedStringArray())
+	assert_null(game.run)
+	_add_run_files()
+	assert_not_null(GameData.load_from(root).run, "with the folder, runs load")
+
+
+func test_run_file_problems_are_reported_and_give_no_run() -> void:
+	var cases: Dictionary = {
+		"a listed segment missing": [func() -> void: DirAccess.remove_absolute(root.path_join("segments/mid_bend.json")), "mid_bend.json: is missing"],
+		"packs not JSON": [func() -> void: _put("segments/packs.json", "{\"format\": 1, \"packs\": ["), "packs.json: is over"],
+		"run plan missing": [func() -> void: DirAccess.remove_absolute(root.path_join("runs/run.json")), "run.json: is missing"],
+		"cards missing": [func() -> void: DirAccess.remove_absolute(root.path_join("cards/cards.json")), "cards.json: is missing"],
+		"index missing": [func() -> void: DirAccess.remove_absolute(root.path_join("segments/index.json")), "index.json: is missing"],
+		"run plan over its cap": [func() -> void: _put("runs/run.json", "{\"pad\": \"" + "a".repeat(GameData.RUN_CAP) + "\"}"), "run.json: is over"],
+		"segment over its cap": [func() -> void: _put("segments/top_one.json", "{\"pad\": \"" + "a".repeat(GameData.SEGMENT_CAP) + "\"}"), "top_one.json: is over"],
+		"segment of high bytes": [func() -> void: _put("segments/bot_home.json", "{\"id\": \"café\"}"), "bot_home.json"],
+		"segment id not its file name": [func() -> void: _edit_json("segments/bot_edge.json", func(d: Dictionary) -> void: d["id"] = "bot_home"), "bot_edge"],
+		"index naming a path": [func() -> void: _edit_json("segments/index.json", func(d: Dictionary) -> void: (d["segments"] as Array).append("../stats/rules")), "index.json"],
+		"cards broken": [func() -> void: _edit_json("cards/cards.json", func(d: Dictionary) -> void: d["cards"][0]["once"] = "yes"), "cards.json"],
+	}
+	for name: String in cases:
+		before_each()
+		_add_run_files()
+		var item: Array = cases[name]
+		(item[0] as Callable).call()
+		var game: GameData = GameData.load_from(root)
+		assert_true(_has_problem(game, item[1]), "%s: %s" % [name, str(game.problems)])
+		assert_null(game.run, name)
+		assert_not_null(game.catalog, "%s: the rest still loads" % name)
+
+
+func test_only_listed_segments_are_read() -> void:
+	_add_run_files()
+	# A file the index does not list is never read, so even a broken one changes nothing.
+	# tests/levels/ checks that every file in the folder is listed (2.9).
+	_put("segments/stray.json", "{\"format\": 1, \"id\": ")
+	var game: GameData = GameData.load_from(root)
+	assert_eq(game.problems, PackedStringArray())
+	assert_not_null(game.run)
+	assert_false(game.run.segment_ids.has(&"stray"))
+	# An index over 256 entries is a problem, and none of its files are read.
+	_edit_json("segments/index.json", _grow_index)
+	game = GameData.load_from(root)
+	assert_null(game.run)
+	assert_true(_has_problem(game, "index.json"), str(game.problems))
+
+
+func _grow_index(d: Dictionary) -> void:
+	for i: int in 300:
+		(d["segments"] as Array).append("seg_%d" % i)

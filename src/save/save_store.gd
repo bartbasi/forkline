@@ -7,11 +7,13 @@ extends RefCounted
 
 const SETTINGS_FILE: String = "settings.json"
 const PROGRESS_FILE: String = "progress.json"
+const DAILY_FILE: String = "daily.json"
 const GAME_FILES: Dictionary[StringName, String] = {
 	&"level": "game_level.json", &"run": "game_run.json", &"daily": "game_daily.json",
 }
 const SETTINGS_CAP: int = 4096
 const PROGRESS_CAP: int = 65536
+const DAILY_CAP: int = 4096
 const GAME_CAP: int = 1048576
 const ROOT: String = "user://"
 
@@ -54,6 +56,17 @@ func save_progress(progress: Progress) -> bool:
 	return _write(PROGRESS_FILE, progress.to_data(), PROGRESS_CAP)
 
 
+func load_daily() -> DailyRecord:
+	var got: Dictionary = _load_plain(DAILY_FILE, DAILY_CAP, DailyRecord.FORMAT)
+	return DailyRecord.from_data(got.get("data", null))
+
+
+func save_daily(daily: DailyRecord) -> bool:
+	if daily == null:
+		return false
+	return _write(DAILY_FILE, daily.to_data(), DAILY_CAP)
+
+
 ## Every valid saved game, most recent first. When no copy of a mode's game is valid,
 ## all of its copies are deleted, so a bad save never comes back.
 func load_games(game: GameData) -> Array[SavedGame]:
@@ -93,8 +106,9 @@ func _path(file_name: String) -> String:
 	return _dir.path_join(file_name)
 
 
-## Loads settings or progress (5.4). "Valid" means a JSON object with this build's format;
-## the caller's from_data then checks each field. {"data": Variant}, with no "data" for defaults.
+## Loads settings, progress or the daily record (5.4). "Valid" means a JSON object with
+## this build's format; the caller's from_data then checks each field. {"data": Variant},
+## with no "data" for defaults.
 func _load_plain(file_name: String, cap: int, format: int) -> Dictionary:
 	if _find_lock(file_name):
 		return {}

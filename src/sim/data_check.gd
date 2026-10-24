@@ -3,8 +3,9 @@
 class_name DataCheck
 extends RefCounted
 ## Field by field checks for parsed JSON data and saved battles (docs/ARCHITECTURE.md 2.12).
-## Internal to src/sim/. Each reader checks one field, records a plain problem line
-## when it is wrong, and returns a safe fallback so the caller can keep checking.
+## Used by src/sim/, src/save/ and src/run/. Nobody else. Each reader checks one field,
+## records a plain problem line when it is wrong, and returns a safe fallback so the
+## caller can keep checking.
 ## Godot's JSON parser gives every number as a non-integer type, so a number is
 ## accepted when it is whole, finite and in range, and is then converted to int.
 

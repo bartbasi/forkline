@@ -18,19 +18,29 @@ var order: int = 0                                     # higher is more recent; 
 var level_id: StringName = &""                         # the campaign level; &"" for runs
 var twist: bool = false
 var battle: Battle = null
+var run: RunSession = null                             # the run around battle; null for a campaign level
 
 
-## The file shape. The run session joins in phase 7; until then "run" is null.
+## The file shape (5.5). "run" is null for a campaign level.
 func to_data() -> Dictionary:
 	return {
 		"format": FORMAT, "mode": String(mode), "order": order, "level_id": String(level_id),
-		"twist": twist, "battle": battle.to_data() if battle != null else {}, "run": null,
+		"twist": twist, "battle": battle.to_data() if battle != null else {},
+		"run": run.to_data() if run != null else null,
 	}
 
 
-## True when this game can be saved: a known mode and a battle still being played.
+## True when this game can be saved: a known mode and a battle still being played. A run
+## or daily also needs its run around this battle, a daily with a day and a run without;
+## a campaign level has no run. So a save never holds what from_data refuses.
 func can_save() -> bool:
-	return MODES.has(mode) and battle != null and (battle.phase == Battle.Phase.BUILD or battle.phase == Battle.Phase.WAVE)
+	if not MODES.has(mode) or battle == null:
+		return false
+	if battle.phase != Battle.Phase.BUILD and battle.phase != Battle.Phase.WAVE:
+		return false
+	if mode == LEVEL:
+		return run == null
+	return run != null and run.battle == battle and run.daily == (mode == DAILY)
 
 
 ## Null when any field is invalid. All or nothing.
@@ -49,8 +59,10 @@ static func from_data(data: Variant, game: GameData) -> SavedGame:
 	saved.mode = StringName(String(mode_value))
 	saved.order = chk.integer(top, "order", "", 0, ORDER_MAX)
 	saved.twist = chk.boolean(top, "twist", "")
-	if top["run"] != null:
-		chk.fail("run", "runs are saved from phase 7")
+	if saved.mode == LEVEL and top["run"] != null:
+		chk.fail("run", "must be null for a campaign level")
+	if saved.mode != LEVEL and (game.run == null or typeof(top["run"]) != TYPE_DICTIONARY):
+		chk.fail("run", "must be a run")
 	var id_value: Variant = top["level_id"]
 	if saved.mode == LEVEL:
 		saved.level_id = chk.ident(top, "level_id", "")
@@ -84,4 +96,10 @@ static func from_data(data: Variant, game: GameData) -> SavedGame:
 		return null
 	if saved.mode == DAILY and saved.battle.relaxed:
 		return null
+	if saved.mode != LEVEL:
+		# The run is checked around the battle saved with it (5.6). A daily has a day and a
+		# normal run has none, so neither can pass as the other.
+		saved.run = RunSession.from_data(top["run"], saved.battle, game.run)
+		if saved.run == null or saved.run.daily != (saved.mode == DAILY):
+			return null
 	return saved
