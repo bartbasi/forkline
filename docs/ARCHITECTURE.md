@@ -912,7 +912,7 @@ class_name App extends Control                         # src/ui/app.gd, root of 
 ## Creates GameData, SaveStore, Settings, Progress, the saved games and AudioService once and passes them down with setup().
 ## Routes between screens, saves on lifecycle notifications, handles the back button.
 signal sound_changed(on: bool)                         # the Settings toggle
-signal continue_requested()                            # the mode screen's taps; the battle flow answers them
+signal continue_requested()                            # the mode screen's taps; the battle flow answers them (Roguelite and Daily from phase 7)
 signal campaign_requested()
 signal roguelite_requested()
 signal daily_requested()
@@ -949,7 +949,7 @@ func alpha() -> float                                  # 0 to 1: how far between
 func reset() -> void                                   # drops the leftover time
 
 class_name BattleScreen extends ScreenFrame            # src/ui/battle_screen.gd: map, HUD, panels, input
-signal save_requested()                                # a build phase began, a card was picked, the HUD pause button paused the game, or pause() opened Pause
+signal save_requested()                                # a build phase began, a card was picked, the HUD pause button paused the game, or Pause opened
 signal ended(result: Dictionary)                       # won, lost, or abandoned from Pause after a confirm (then won is false)
 signal left()                                          # "Back to menu" in Pause; the game stays saved
 func setup(battle: Battle, audio: AudioService, progress: Progress) -> void
@@ -967,9 +967,9 @@ class_name Links extends RefCounted                    # src/ui/links.gd (sectio
 App flow:
 
 1. **Launch.** `GameData.load_from()`. If it has problems, show the damaged message and stop. Load settings, progress and the saved games (an invalid one is deleted), and in phase 7 the daily record. Create the AudioService (3.8). Apply `UiTheme.build()`. Show the front door. Set `get_tree().quit_on_go_back = false`.
-2. **Play** opens ModeScreen. When any game is saved, the Continue card on top resumes the most recent one in one tap. A saved game also resumes from its own way in: the Roguelite or Daily button, or the saved level's card. Playing a different campaign level or Twist while one is saved asks first; a level and its own Twist count as different, since `SavedGame` has a `twist` flag. If the player confirms, the saved game ends as if abandoned from Pause, and nothing is recorded (RULES 4.10). Roguelite and Daily stay locked until `runs_open()`, and in phase 5 they stay locked. Until the run mode exists (`App.RUNS_BUILT`), Roguelite and Daily show "Coming in a later update." whatever the stars.
+2. **Play** opens ModeScreen. When any game is saved, the Continue card on top resumes the most recent one in one tap. A saved game also resumes from its own way in: the Roguelite or Daily button, or the saved level's card. Playing a different campaign level or Twist while one is saved asks first; a level and its own Twist count as different, since `SavedGame` has a `twist` flag. If the player confirms, the saved game ends as if abandoned from Pause, and nothing is recorded (RULES 4.10). Roguelite and Daily stay locked until `runs_open()`, and in phase 5 they stay locked. Until the run mode exists (`App.RUNS_BUILT`), the Roguelite and Daily cards are locked with "Coming in a later update." whatever the stars, and tapping them does nothing.
 3. **Battle.** A campaign level: `Battle.create(level, catalog, relaxed, effects)`, where `effects` is the level's `twist_effects` when playing its Twist and empty otherwise. A run or the daily (phase 7): `RunSession.start(...)`. Then `BattleScreen.setup()`. Every battle starts at 1x. A resumed game opens paused, on the Pause menu.
-4. **Saving.** On `save_requested` the App saves that mode's game. A new level is also saved as soon as its battle opens. Pause opened from the Paused strip's Menu button does not save; the strip shows only after the HUD pause button, which saved. On `NOTIFICATION_APPLICATION_PAUSED`, `NOTIFICATION_APPLICATION_FOCUS_OUT` and `NOTIFICATION_WM_CLOSE_REQUEST` while a battle is open, it calls `battle_screen.pause()` if a wave is running, then saves. Settings and progress save when they change.
+4. **Saving.** On `save_requested` the App saves that mode's game. A new level is also saved as soon as its battle opens. On `NOTIFICATION_APPLICATION_PAUSED`, `NOTIFICATION_APPLICATION_FOCUS_OUT` and `NOTIFICATION_WM_CLOSE_REQUEST` while a battle is open, it calls `battle_screen.pause()` if a wave is running, then saves. Settings and progress save when they change.
 5. **End.** On `ended`: record the stars (`Progress.record_level`, or `record_twist` for a won Twist), the counters for a run or daily and the daily record for a daily (phase 7), delete that mode's saved game, save, and show EndPanel. An abandoned campaign level records nothing. An abandoned run or daily counts as lost at its current wave (RULES 14.7).
 6. **Back button.** One press does exactly one step. `handle_back()`: close or answer the top modal first (a first sight card closes whole and counts as read), then go back one screen. A page opened from a modal, such as About from Settings, goes back before that modal closes. In a battle, an open build, tower or creature panel closes first, and the next press opens Pause. In the short wait between a battle's end and its end panel, a press shows the panel at once. On the front door or the damaged message, quit; everything is already saved. `handle_back()` returns `&"modal"` for a closed modal, a closed battle panel, Pause opening, or the end panel shown at once. A back press from the go-back notification and one from `ui_cancel` go through one entry that ignores a second press within 150 ms.
 7. **Resize.** The App connects its viewport's `size_changed` and calls `apply_layout(window, safe)` with `Layout.safe_rect()`, which lays out every screen and modal (7.5).
@@ -1142,7 +1142,7 @@ All in `user://` (the app's private storage, removed on uninstall). Each may hav
 |---|---|---|---|
 | settings.json | sound on or off | when it changes | 4 KB |
 | progress.json | star bits per level, Twists won, seen ids, counters | when any of it changes | 64 KB |
-| game_level.json, game_run.json, game_daily.json | one saved game per mode (Bart, hard stop A), at the exact moment | when a new level opens, when a build phase begins, after a card pick, when the HUD pause button pauses the game, when Pause opens (except from the Paused strip's Menu button), on focus loss, app pause and close request, and when leaving the battle. Deleted when that game ends. | 1 MB each |
+| game_level.json, game_run.json, game_daily.json | one saved game per mode (Bart, hard stop A), at the exact moment | when a new level opens, when a build phase begins, after a card pick, when the HUD pause button pauses the game, when Pause opens, on focus loss, app pause and close request, and when leaving the battle. Deleted when that game ends. | 1 MB each |
 | daily.json (phase 7) | the day's best daily result and the streak | when a daily ends | 4 KB |
 
 Writes are synchronous on the main thread. The largest file is under 100 KB in the biggest wave, a few milliseconds to write. A write whose text equals the last text written to that file is skipped.
