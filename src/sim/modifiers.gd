@@ -3,8 +3,7 @@
 class_name Modifiers
 extends RefCounted
 ## Twist, card and risk effects (docs/ARCHITECTURE.md 2.8). Only check() is public to
-## other areas. Phase 5 checks every effect type; Battle applies none of them yet
-## (Twists and cards come in phase 7).
+## other areas. Battle applies them; the helpers below are internal to src/sim/.
 
 const USES: PackedStringArray = ["twist", "card", "risk"]
 const TOWER_ADD_STATS: PackedStringArray = [
@@ -12,6 +11,11 @@ const TOWER_ADD_STATS: PackedStringArray = [
 ]
 const TOWER_PCT_STATS: PackedStringArray = ["damage", "reload_ms"]
 const MAX_FIXED_CELLS: int = 8
+## Card effects that change the state once and are not kept (2.8).
+const INSTANT: PackedStringArray = ["add_gates", "add_gold", "add_lives"]
+const MAX_KEPT: int = 64                               # kept card effects in one battle (5.6)
+const MAX_WAITING: int = 8                             # effects of the one waiting risk card (5.6)
+const MAX_TWIST: int = 8                               # a Twist's effects (a level file allows 2)
 
 ## type: [uses, {field: rule}]. Rules: pct 1 to 1,000; refund 1 to 100 (4.6); count 1 to 200; gates 0 to
 ## max_gates; lives 1 to 1,000; cells; tower and enemy ids; tier 1 or 2; bool;
@@ -135,6 +139,11 @@ static func _check_one(data: Variant, path: String, catalog: Catalog, use: Strin
 					if seen.has(cell):
 						chk.fail("%s[%d]" % [field_path, k], "repeats a cell")
 					seen.append(cell)
+	# 2.8: a Twist changes how fast a gate breaker breaks; it never makes a new one.
+	if type == "break_ms" and DataCheck.is_id(effect.get("enemy", null)):
+		var breaker: EnemyType = catalog.enemy(StringName(String(effect["enemy"])))
+		if breaker != null and breaker.break_ms <= 0:
+			chk.fail(DataCheck.join(path, "enemy"), "must already break gates")
 	var last_wave: Variant = effect.get("last_wave", false)
 	if type == "count_pct" and use != "twist" and typeof(last_wave) == TYPE_BOOL and last_wave:
 		chk.fail(DataCheck.join(path, "last_wave"), "is for Twists only")
@@ -192,3 +201,90 @@ static func group_count(effects: Array[Dictionary], count: int, flying: bool, la
 			continue
 		result = Sim.pct_up(result, effect["pct"])
 	return result
+
+
+## A tower's stat block with every card effect for that tower (2.8, RULES 8.7): the
+## data, then every tower_add, then every tower_pct, then tower_hits_air and cost_add.
+## first_step: the price is a build price, else an upgrade price. No stat goes below
+## what the data allows (2.6), so no card can make a stat the sim cannot use; a stat
+## block with no slow gets no slow from a card.
+static func tower_stats(base: TowerStats, tower: StringName, effects: Array[Dictionary], first_step: bool) -> TowerStats:
+	var out: TowerStats = base.copy()
+	var id: String = String(tower)
+	for effect: Dictionary in effects:
+		if effect["type"] != "tower_add" or effect["tower"] != id:
+			continue
+		var amount: int = effect["amount"]
+		match String(effect["stat"]):
+			"damage":
+				out.damage += amount
+			"reload_ms":
+				out.reload_ms += amount
+			"reach":
+				out.reach += amount
+			"splash":
+				out.splash += amount
+			"slow_pct":
+				out.slow_pct += amount
+			"targets":
+				out.targets += amount
+			"boost_pct":
+				out.boost_pct += amount
+			"boost_damage":
+				out.boost_damage += amount
+	for effect: Dictionary in effects:
+		if effect["type"] != "tower_pct" or effect["tower"] != id:
+			continue
+		if effect["stat"] == "damage":
+			out.damage = Sim.pct_half_up(maxi(out.damage, 0), effect["pct"])
+		else:
+			out.reload_ms = Sim.pct_half_up(maxi(out.reload_ms, 0), effect["pct"])
+	for effect: Dictionary in effects:
+		if effect["type"] == "tower_hits_air" and effect["tower"] == id:
+			out.hits_air = true
+		elif effect["type"] == "cost_add":
+			out.cost += int(effect["build"]) if first_step else int(effect["upgrade"])
+	out.cost = maxi(out.cost, 10)                      # 2.8: never below 10
+	out.reach = maxi(out.reach, 1)
+	out.reload_ms = maxi(out.reload_ms, Sim.MS_PER_TICK)
+	out.damage = maxi(out.damage, 1 if base.damage > 0 else 0)
+	out.splash = maxi(out.splash, 0)
+	out.targets = maxi(out.targets, 1)
+	out.slow_pct = clampi(out.slow_pct, 1, 90) if base.slow_ms > 0 else 0
+	out.boost_pct = maxi(out.boost_pct, 0)
+	out.boost_damage = maxi(out.boost_damage, 0)
+	return out
+
+
+## The product of every speed_pct effect, as one percent (2.8). Each step truncates.
+static func speed_pct(effects: Array[Dictionary]) -> int:
+	var pct: int = 100
+	for effect: Dictionary in effects:
+		if effect["type"] == "speed_pct":
+			pct = pct * int(effect["pct"]) / 100
+	return maxi(pct, 1)
+
+
+## value with every effect of this type applied in turn, each rounded half up (RULES 2).
+static func scale_all(effects: Array[Dictionary], type: String, value: int) -> int:
+	var out: int = value
+	for effect: Dictionary in effects:
+		if effect["type"] == type:
+			out = Sim.pct_half_up(out, effect["pct"])
+	return out
+
+
+## The last effect of this type, or {} for none.
+static func last_of(effects: Array[Dictionary], type: String) -> Dictionary:
+	var found: Dictionary = {}
+	for effect: Dictionary in effects:
+		if effect["type"] == type:
+			found = effect
+	return found
+
+
+static func has_type(effects: Array[Dictionary], type: String) -> bool:
+	for effect: Dictionary in effects:
+		if effect["type"] == type:
+			return true
+	return false

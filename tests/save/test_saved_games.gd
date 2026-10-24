@@ -231,3 +231,50 @@ func test_needs_valid_game_data() -> void:
 	var data: Dictionary = Fx.saved(SavedGame.LEVEL, Fx.battle_mid_wave(game, &"r1_l1", false, 10)).to_data()
 	assert_null(SavedGame.from_data(data, null))
 	assert_null(SavedGame.from_data(data, GameData.new()))
+
+
+## r1_l1 with a Twist added, as a level file would give it.
+func _twist_game() -> GameData:
+	var data: Dictionary = game.levels[&"r1_l1"].to_data()
+	data["twist"] = {"name": "Thin Purse", "text": "Start with half the gold.",
+		"effects": [{"type": "start_gold_pct", "pct": 50}, {"type": "speed_pct", "pct": 120}]}
+	var twisted: LevelData = LevelData.from_data(JSON.parse_string(JSON.stringify(data)), game.catalog)
+	assert_not_null(twisted)
+	game.levels[&"r1_l1"] = twisted
+	return game
+
+
+func test_a_twist_game_must_hold_its_levels_twist_rules_13() -> void:
+	var twisted: GameData = _twist_game()
+	var level: LevelData = twisted.levels[&"r1_l1"]
+	var battle: Battle = Battle.create(level, twisted.catalog, false, level.twist_effects)
+	battle.place_tower(level.spots[0], level.towers[0])
+	battle.start_next_wave()
+	for i: int in 40:
+		battle.step()
+	var saved: SavedGame = Fx.saved(SavedGame.LEVEL, battle)
+	saved.twist = true
+	var data: Dictionary = JSON.parse_string(JSON.stringify(saved.to_data()))
+	assert_not_null(SavedGame.from_data(data, twisted), "the Twist game loads")
+	var plain: Dictionary = data.duplicate(true)
+	plain["twist"] = false
+	assert_null(SavedGame.from_data(plain, twisted), "a Twist battle saved as the plain level")
+	var other: Dictionary = data.duplicate(true)
+	other["battle"]["twist"] = [{"type": "start_gold_pct", "pct": 50}]
+	assert_null(SavedGame.from_data(other, twisted), "Twist effects that are not the level's")
+	var plain_battle: Dictionary = Fx.saved(SavedGame.LEVEL, Fx.battle_mid_wave(twisted, &"r1_l1", false, 40)).to_data()
+	var claimed: Dictionary = JSON.parse_string(JSON.stringify(plain_battle))
+	claimed["twist"] = true
+	assert_null(SavedGame.from_data(claimed, twisted), "a plain battle claiming the Twist")
+
+
+func test_a_campaign_game_holds_no_cards_and_a_run_no_twist_rules_13_and_14() -> void:
+	var battle: Battle = Fx.battle_mid_wave(game, &"r1_l1", false, 40)
+	assert_eq(battle.add_effects([{"type": "bounty_pct", "pct": 200}] as Array[Dictionary], false), Battle.DONE)
+	var as_level: Dictionary = JSON.parse_string(JSON.stringify(Fx.saved(SavedGame.LEVEL, battle).to_data()))
+	assert_null(SavedGame.from_data(as_level, game), "a campaign level with a card")
+	var as_run: Dictionary = JSON.parse_string(JSON.stringify(Fx.saved(SavedGame.RUN, battle).to_data()))
+	assert_not_null(SavedGame.from_data(as_run, game), "a run takes cards")
+	var twisted: Dictionary = as_run.duplicate(true)
+	twisted["battle"]["twist"] = [{"type": "no_selling"}]
+	assert_null(SavedGame.from_data(twisted, game), "a run has no Twist")

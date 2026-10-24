@@ -28,10 +28,17 @@ var prev_pos: Vector2i = Vector2i.ZERO                 # sub-units, after the la
 ## Internal to src/sim/. Worked out at spawn from the type, the wave's strength and
 ## effects, and again on load, so they are not saved.
 var armor: int = 0
-var speed: int = 0
+var speed: int = 0                                     # hundredths of a tile a second, with speed ups (RULES 6.3)
+var speed_pct: int = 100                               # speed_pct effects on its wave (contract 2.8)
 var lives: int = 1
 var bounty: int = 1
-## Internal and saved: ticks until a popped bubble is back (0 when up), and the tick
-## of the next summon batch (0 for none).
+var break_ms: int = 0                                  # a gate breaker's time per gate, 0 for none (RULES 7.7)
+var watched: bool = false                              # it has a speed up or a health release (RULES 6.3)
+## Internal and saved: ticks until a popped bubble is back (0 when up), the tick of
+## the next summon batch (0 for none), the tick of the next heal (0 for none), the
+## speed ups taken so far, and whether its health release has begun.
 var bubble_ticks: int = 0
 var summon_at: int = 0
+var heal_at: int = 0
+var ups: int = 0
+var released: bool = false

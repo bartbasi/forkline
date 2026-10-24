@@ -5,11 +5,10 @@ extends RefCounted
 ## One map being defended (docs/ARCHITECTURE.md 3.1). Every rule and number comes
 ## from docs/design/RULES.md; section numbers in comments are RULES sections.
 ##
-## Phase 5 builds region 1: attacking towers (the Sling Post, the Pumpkin Catapult
-## and both of their paths; the same code serves any attacking tower), walkers,
-## flyers, bubbles, slows and boss summons. Bells, Bakeries, heals, splits, gate
-## breakers, boss speed ups and health releases, and every Twist and card effect
-## come in phase 7, each in the place marked "phase 7".
+## Every tower, creature and boss of RULES 5 and 6 runs here: attacking towers, Bells
+## and Bakeries; walkers, flyers, bubbles, slows, splits, heals, gate breakers, boss
+## summons, speed ups and health releases. Twist, card and risk effects (contract 2.8)
+## come in through create() and add_effects().
 
 enum Phase { BUILD, WAVE, WON, LOST }
 const FORMAT: int = 1
@@ -19,16 +18,21 @@ const PHASE_NAMES: PackedStringArray = ["build", "wave", "won", "lost"]
 const AIM_NAMES: PackedStringArray = ["first", "last", "strong"]
 const MAX_ENEMIES: int = 4000
 const MAX_RELEASES: int = 1000
+const MAX_LIVES: int = 1000000
 const ID_CEILING: int = 2147483648                     # 2^31
 const BIG: int = 1000000000
 const SAVE_KEYS: PackedStringArray = [
-	"format", "level", "relaxed", "effects", "risk", "tick", "phase", "waves_started",
-	"running", "wave_start", "gold", "lives", "start_lives", "gates_in_hand", "gates",
-	"towers", "enemies", "releases", "next_id", "record",
+	"format", "level", "relaxed", "twist", "effects", "risk", "tick", "phase", "waves_started",
+	"running", "wave_start", "wave_risk", "gates_open", "gold", "lives", "start_lives",
+	"gates_in_hand", "gates_added", "gates", "towers", "enemies", "releases", "next_id", "record",
 ]
 const RECORD_KEYS: PackedStringArray = [
 	"early_calls", "max_towers", "built", "max_tier", "max_gates_at_start", "gates_whole",
 	"waves_cleared",
+]
+const ENEMY_KEYS: PackedStringArray = [
+	"id", "type", "wave", "health", "max_health", "bubble", "bubble_ticks", "slow_pct",
+	"slow_ticks", "summon_at", "heal_at", "breaking", "ups", "released",
 ]
 
 
@@ -45,11 +49,20 @@ class Release extends RefCounted:
 	var pos: Vector2i = Vector2i.ZERO                  # a released flyer's start
 
 
+## One wave with its effects folded in: the Twist plus the wave's risk card. Internal,
+## worked out again on load.
+class WaveMods extends RefCounted:
+	var effects: Array[Dictionary] = []
+	var groups: Array[WaveGroup] = []                  # counts changed, added groups last
+	var speed_pct: int = 100
+
+
 # Fixed for the whole battle. Read only.
 var level: LevelData = null
 var catalog: Catalog = null
 var map: RoadMap = null
 var relaxed: bool = false
+var twist_effects: Array[Dictionary] = []              # the Twist, for the whole battle (13)
 
 # State. Read only outside src/sim/.
 var tick: int = 0
@@ -63,16 +76,34 @@ var gates_in_hand: int = 0
 var gates: Array[GateState] = []                       # cell order
 var towers: Array[TowerState] = []                     # cell order
 var enemies: Array[EnemyState] = []                    # id order
-var risk_waiting: Array[Dictionary] = []               # phase 7; always [] in phase 5
+var risk_waiting: Array[Dictionary] = []               # a risk card's effects waiting for the next wave; [] for none
+var card_effects: Array[Dictionary] = []               # kept card effects, in the order taken (14.5, 14.6)
+var gates_open: bool = false                           # a Gateless Night is on: gates block nothing (14.5)
 var record_events: bool = true                         # bots set false for speed
 
 var _wave_start: Array[int] = []                       # the tick each started wave began
+var _wave_risk: Dictionary = {}                        # running wave index to its risk card's effects
+var _wave_mods: Dictionary = {}                        # running wave index to its WaveMods
 var _releases: Array[Release] = []                     # in the order they began
 var _summoners: Array[EnemyState] = []                 # creatures with a summon, in id order
 var _next_id: int = 0
+var _gates_added: int = 0                              # gates gained from cards (add_gates)
 var _events: Array[Dictionary] = []
 var _dist: PackedInt32Array = PackedInt32Array()       # walker distances for the closed set now
 var _free_dist: PackedInt32Array = PackedInt32Array()  # distances with no gates (the breaker route)
+var _closed_mask: PackedByteArray = PackedByteArray()  # 1 for a cell closed to walkers now
+var _has_bells: bool = false
+# Effects folded once (2.8), worked out again when they change.
+var _banned: Array[StringName] = []
+var _added_towers: Array[StringName] = []
+var _tier_cap: int = 3
+var _no_selling: bool = false
+var _armor_add: int = 0
+var _all_bubbles: bool = false
+var _break_ms_of: Dictionary = {}                      # creature id to its Twist break time
+var _gates_stay: bool = false
+var _refund_pct: int = 0
+var _stat_cache: Dictionary = {}                       # "type:tier:spec" to TowerStats with card effects
 # What the star rules need (2.7).
 var _early_calls: int = 0
 var _max_towers: int = 0
@@ -88,24 +119,47 @@ var _flyer_list: PackedInt32Array = PackedInt32Array()
 var _removed: bool = false
 
 
-static func create(level_data: LevelData, stats: Catalog, is_relaxed: bool, twist_effects: Array[Dictionary]) -> Battle:
+## A Twist's effects apply first, then Relaxed (11, contract 3.1). Null when the level,
+## the catalog or an effect is not valid.
+static func create(level_data: LevelData, stats: Catalog, is_relaxed: bool, twist: Array[Dictionary]) -> Battle:
 	if level_data == null or stats == null or stats.rules == null:
 		return null
-	# Twist effects come in phase 7. Until then a Twist cannot be played.
-	if not twist_effects.is_empty():
+	if twist.size() > Modifiers.MAX_TWIST or not Modifiers.check(twist, stats, &"twist").is_empty():
 		return null
 	var battle: Battle = new()
 	battle._setup(level_data, stats)
 	battle.relaxed = is_relaxed
+	battle.twist_effects = Modifiers.normalize_all(twist)
+	battle._fold()
 	var rules: GameRules = stats.rules
-	battle.start_lives = rules.start_lives
-	battle.gold = level_data.start_gold
+	var lives_now: int = rules.start_lives
+	var gold_now: int = level_data.start_gold
+	for effect: Dictionary in battle.twist_effects:
+		match String(effect["type"]):
+			"start_gold_pct":
+				gold_now = gold_now * int(effect["pct"]) / 100 / 10 * 10
+			"set_lives":
+				lives_now = effect["lives"]
+	var given: int = battle._given_gates()
+	var fixed: Array[Vector2i] = Modifiers.fixed_cells(battle.twist_effects)
+	if fixed.size() > given or battle.map.seals(fixed):
+		return null
+	for cell: Vector2i in fixed:
+		if not level_data.sockets.has(cell):
+			return null
+	battle.start_lives = lives_now
+	battle.gold = gold_now
 	if is_relaxed:
 		# 11: Relaxed lives, and gold rounded up to a multiple of 10.
-		battle.start_lives = rules.start_lives * rules.relaxed_lives_pct / 100
-		battle.gold = (level_data.start_gold * rules.relaxed_gold_pct + 999) / 1000 * 10
+		battle.start_lives = lives_now * rules.relaxed_lives_pct / 100
+		battle.gold = (gold_now * rules.relaxed_gold_pct + 999) / 1000 * 10
 	battle.lives = battle.start_lives
-	battle.gates_in_hand = level_data.gates
+	for cell: Vector2i in fixed:
+		var gate: GateState = GateState.new()
+		gate.cell = cell
+		gate.fixed = true
+		battle.gates.append(gate)
+	battle.gates_in_hand = given - fixed.size()
 	battle._refresh_dist()
 	return battle
 
@@ -116,6 +170,8 @@ func _setup(level_data: LevelData, stats: Catalog) -> void:
 	map = RoadMap.new(level_data)
 	_free_dist = map.distances([])
 	_head.resize(map.size())
+	_closed_mask.resize(map.size())
+	_refund_pct = stats.rules.refund_pct
 
 
 ## One tick (8.1). Does nothing unless phase is WAVE.
@@ -124,7 +180,7 @@ func step() -> void:
 		return
 	_spawn_step()
 	_timer_step()
-	# Step 3, Bells, comes in phase 7.
+	_bell_step()
 	_move_step()
 	if phase == Phase.LOST:
 		tick += 1
@@ -153,7 +209,7 @@ func place_tower(cell: Vector2i, type: StringName) -> StringName:
 		return &"occupied"
 	if not _offered(type):
 		return &"not_offered"
-	var price: int = catalog.tower(type).stats(1, -1).cost
+	var price: int = _tower_stats(type, 1, -1).cost
 	if gold < price:
 		return &"too_poor"
 	gold -= price
@@ -167,7 +223,8 @@ func place_tower(cell: Vector2i, type: StringName) -> StringName:
 			at = i
 			break
 	towers.insert(at, tower)
-	_refresh_reach(tower)
+	_refresh_tower(tower)
+	_refresh_boosts()
 	if not _built.has(type):
 		_built.append(type)
 	_max_towers = maxi(_max_towers, towers.size())
@@ -186,14 +243,15 @@ func upgrade_tower(cell: Vector2i, spec: int = -1) -> StringName:
 	var refusal: StringName = _upgrade_refusal(tower, spec)
 	if refusal != &"":
 		return refusal
-	var price: int = _stats_at(tower.type, tower.tier + 1, spec).cost
+	var price: int = _tower_stats(tower.type, tower.tier + 1, spec).cost
 	gold -= price
 	_pay(tower, price)
 	tower.tier += 1
 	tower.spec = spec
+	_refresh_tower(tower)
 	# 5.2: the timer keeps running but never stays above the new reload.
-	tower.reload = mini(tower.reload, _stats(tower).reload_ms * 100)
-	_refresh_reach(tower)
+	tower.reload = mini(tower.reload, tower.stats.reload_ms * 100)
+	_refresh_boosts()
 	_max_tier = maxi(_max_tier, tower.tier)
 	_emit({"kind": &"upgraded", "cell": cell, "tower": tower.type, "tier": tower.tier, "spec": tower.spec, "gold": price})
 	return DONE
@@ -205,10 +263,12 @@ func sell_tower(cell: Vector2i) -> StringName:
 	var tower: TowerState = tower_at(cell)
 	if tower == null:
 		return &"no_tower"
-	# A Twist's no_selling comes in phase 7.
+	if _no_selling:
+		return &"no_selling"
 	var refund: int = sell_value(cell)
 	gold += refund
 	towers.erase(tower)
+	_refresh_boosts()
 	_emit({"kind": &"sold", "cell": cell, "tower": tower.type, "tier": tower.tier, "spec": tower.spec, "gold": refund})
 	return DONE
 
@@ -219,7 +279,7 @@ func set_aim(cell: Vector2i, aim: TowerState.Aim) -> StringName:
 	var tower: TowerState = tower_at(cell)
 	if tower == null:
 		return &"no_tower"
-	if catalog.tower(tower.type).kind != &"attack":
+	if tower.kind != &"attack":
 		return &"no_aim"
 	if aim < 0 or aim >= AIM_NAMES.size():
 		return &"bad_aim"
@@ -306,6 +366,20 @@ func start_next_wave() -> StringName:
 		tower.spent_before += tower.spent_now
 		tower.spent_now = 0
 	var index: int = waves_started
+	# A waiting risk card changes this wave only (14.4, contract 2.8).
+	if not risk_waiting.is_empty():
+		_wave_risk[index] = risk_waiting
+		risk_waiting = []
+	var mods: WaveMods = _make_mods(index, _wave_risk.get(index, []))
+	_wave_mods[index] = mods
+	# 14.6 Iron Gate: every placed gate locks for good.
+	if _gates_stay:
+		for gate: GateState in gates:
+			gate.fixed = true
+	# 14.5 Gateless Night: gates stand open until the next build phase.
+	if not gates_open and Modifiers.has_type(mods.effects, "gates_open"):
+		gates_open = true
+		_refresh_dist()
 	_wave_start.append(tick)
 	waves_started += 1
 	running.append(index)
@@ -314,11 +388,45 @@ func start_next_wave() -> StringName:
 	return DONE
 
 
-## A picked card (phase 7). Phase 5 battles take no effects.
-func add_effects(_effects: Array[Dictionary], _risk: bool) -> StringName:
+## A picked card: its effects, checked first (contract 2.8). risk: a risk card, whose
+## effects wait for the next wave that starts. Instant effects change the state once;
+## the rest are kept for the rest of the battle.
+func add_effects(effects: Array[Dictionary], risk: bool) -> StringName:
 	if _over():
 		return &"over"
-	return &"bad_effect"
+	if effects.is_empty() or not Modifiers.check(effects, catalog, &"risk" if risk else &"card").is_empty():
+		return &"bad_effect"
+	var clean: Array[Dictionary] = Modifiers.normalize_all(effects)
+	if not _entrances_ok(clean):
+		return &"bad_effect"
+	if risk:
+		if not risk_waiting.is_empty():
+			return &"risk_waiting"
+		if clean.size() > Modifiers.MAX_WAITING:
+			return &"bad_effect"
+		risk_waiting = clean
+		return DONE
+	var kept: Array[Dictionary] = []
+	for effect: Dictionary in clean:
+		if not Modifiers.INSTANT.has(String(effect["type"])):
+			kept.append(effect)
+	if card_effects.size() + kept.size() > Modifiers.MAX_KEPT:
+		return &"bad_effect"
+	for effect: Dictionary in clean:
+		match String(effect["type"]):
+			"add_gates":
+				var room: int = catalog.rules.max_gates - gates.size() - gates_in_hand
+				var gained: int = clampi(int(effect["count"]), 0, maxi(room, 0))
+				gates_in_hand += gained
+				_gates_added += gained
+			"add_gold":
+				gold = mini(gold + maxi(int(effect["amount"]) + int(effect["per_wave"]) * _waves_cleared, 0), BIG)
+			"add_lives":
+				lives = mini(lives + maxi(int(effect["amount"]), 0), MAX_LIVES)
+	if not kept.is_empty():
+		card_effects.append_array(kept)
+		_effects_changed()
+	return DONE
 
 
 # Queries.
@@ -350,10 +458,8 @@ func build_options(cell: Vector2i) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if level.kind_at(cell) != LevelData.Kind.SPOT or tower_at(cell) != null:
 		return out
-	for type: StringName in level.towers:
-		if not _offered(type):
-			continue
-		var stats: TowerStats = _stats_at(type, 1, -1)
+	for type: StringName in _offered_list():
+		var stats: TowerStats = _tower_stats(type, 1, -1)
 		out.append({"tower": type, "cost": stats.cost, "affordable": gold >= stats.cost, "numbers": stats.numbers()})
 	return out
 
@@ -362,11 +468,10 @@ func tower_numbers(cell: Vector2i) -> Dictionary:
 	var tower: TowerState = tower_at(cell)
 	if tower == null:
 		return {}
-	var numbers: Dictionary = _stats(tower).numbers()
-	var boost: Vector2i = _boost_for(tower)
-	numbers["got_pct"] = boost.x
-	numbers["got_damage"] = boost.y
-	numbers["boosting"] = 0                            # Bakeries come in phase 7
+	var numbers: Dictionary = tower.stats.numbers()
+	numbers["got_pct"] = tower.got_pct
+	numbers["got_damage"] = tower.got_damage
+	numbers["boosting"] = tower.boosting
 	numbers["spent"] = tower.spent_now + tower.spent_before
 	numbers["sell"] = sell_value(cell)
 	numbers["aim"] = tower.aim
@@ -384,9 +489,9 @@ func upgrade_options(cell: Vector2i) -> Array[Dictionary]:
 		specs.append(-1)
 	else:
 		specs.append_array([0, 1])
-	var before: Dictionary = _stats(tower).numbers()
+	var before: Dictionary = tower.stats.numbers()
 	for spec: int in specs:
-		var after: TowerStats = _stats_at(tower.type, tower.tier + 1, spec)
+		var after: TowerStats = _tower_stats(tower.type, tower.tier + 1, spec)
 		var refusal: StringName = &"over" if _over() else _upgrade_refusal(tower, spec)
 		out.append({"spec": spec, "cost": after.cost, "refusal": refusal, "before": before, "after": after.numbers()})
 	return out
@@ -397,7 +502,7 @@ func sell_value(cell: Vector2i) -> int:
 	var tower: TowerState = tower_at(cell)
 	if tower == null:
 		return 0
-	return tower.spent_now + tower.spent_before * catalog.rules.refund_pct / 100
+	return tower.spent_now + tower.spent_before * _refund_pct / 100
 
 
 func enemy_numbers(id: int) -> Dictionary:
@@ -407,7 +512,7 @@ func enemy_numbers(id: int) -> Dictionary:
 	var type: EnemyType = catalog.enemy(enemy.type)
 	return {
 		"health": enemy.health, "max_health": enemy.max_health, "armor": enemy.armor,
-		"speed": enemy.speed * (100 - enemy.slow_pct) / 100, "base_speed": enemy.speed,
+		"speed": enemy.speed * enemy.speed_pct * (100 - enemy.slow_pct) / 10000, "base_speed": enemy.speed,
 		"flying": enemy.flying, "lives": enemy.lives, "bounty": enemy.bounty,
 		"heal": _scaled(type.heal, enemy.wave) if type.heal > 0 else 0,
 		"slow_pct": enemy.slow_pct, "slow_ms": enemy.slow_ticks * Sim.MS_PER_TICK,
@@ -416,29 +521,48 @@ func enemy_numbers(id: int) -> Dictionary:
 	}
 
 
-## The sockets closed to walkers right now, in cell order.
+## The sockets closed to walkers right now, in cell order: placed gates that are not
+## broken, and none while a Gateless Night is on (contract 4.2).
 func closed_cells() -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
+	if gates_open:
+		return out
 	for gate: GateState in gates:
 		if not gate.broken:
 			out.append(gate.cell)
 	return out
 
 
-## Route lines (docs/ARCHITECTURE.md 4.8), one entry per entrance.
+## Route lines (docs/ARCHITECTURE.md 4.8), one entry per entrance. "The next wave"
+## includes the Twist and a waiting risk card; with gates_open waiting, every gate
+## shows open (RULES 14.5).
 func routes(closed: Array[Vector2i]) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
-	var dist: PackedInt32Array = map.distances(closed)
+	var next: WaveMods = _mods_for(waves_started) if waves_started < level.waves.size() else null
+	var shut: Array[Vector2i] = closed
+	if next != null and Modifiers.has_type(next.effects, "gates_open"):
+		shut = []
+	var dist: PackedInt32Array = map.distances(shut)
 	for i: int in level.entrances.size():
 		var fly: bool = false
-		if waves_started < level.waves.size():
-			for group: WaveGroup in level.waves[waves_started].groups:
-				if group.entrance == i and catalog.enemy(group.enemy).flying:
+		var breaker: bool = false
+		if next != null:
+			for group: WaveGroup in next.groups:
+				if group.entrance != i:
+					continue
+				if catalog.enemy(group.enemy).flying:
 					fly = true
-		var no_cells: Array[Vector2i] = []
-		# The breaker route and its cracks come with gate breakers in phase 7.
-		out.append({"entrance": i + 1, "walk": map.route(level.entrances[i], dist),
-			"break": no_cells, "cracks": no_cells.duplicate(), "fly": fly})
+				elif _break_ms(group.enemy) > 0:
+					breaker = true
+		var walk_line: Array[Vector2i] = map.route(level.entrances[i], dist)
+		var break_line: Array[Vector2i] = []
+		var cracks: Array[Vector2i] = []
+		if breaker:
+			break_line = map.route(level.entrances[i], _free_dist)
+			for cell: Vector2i in break_line:
+				if shut.has(cell):
+					cracks.append(cell)
+		out.append({"entrance": i + 1, "walk": walk_line, "break": break_line, "cracks": cracks, "fly": fly})
 	return out
 
 
@@ -450,16 +574,18 @@ func wave_count() -> int:
 	return level.waves.size()
 
 
-## One row per group in spawn order, at that wave's strength (9.1).
+## One row per group in spawn order, at that wave's strength, with the Twist and, for
+## the next wave, a waiting risk card (9.1).
 func wave_preview(index: int) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if index < 0 or index >= level.waves.size():
 		return out
-	for group: WaveGroup in level.waves[index].groups:
+	var mods: WaveMods = _mods_for(index)
+	for group: WaveGroup in mods.groups:
 		var type: EnemyType = catalog.enemy(group.enemy)
 		out.append({
 			"enemy": group.enemy, "count": group.count, "entrance": group.entrance + 1,
-			"health": _scaled(type.health, index), "bounty": _scaled(type.bounty, index),
+			"health": _max_health(group.enemy, index, mods), "bounty": _bounty(type.bounty, index),
 			"heal": _scaled(type.heal, index) if type.heal > 0 else 0,
 		})
 	return out
@@ -477,13 +603,59 @@ func result() -> Dictionary:
 	return {"won": won, "stars": _stars() if won else 0, "lives_left": maxi(lives, 0), "waves_cleared": _waves_cleared}
 
 
+## The stars this battle can still earn, as bits (1, 2, 4), for the star lines in play.
+## Once WON: the stars earned. Once LOST: 0. Relaxed: star 1 only (10.4).
+func stars_possible() -> int:
+	if phase == Phase.LOST:
+		return 0
+	if phase == Phase.WON:
+		return _stars()
+	if relaxed:
+		return 1
+	var bits: int = 1
+	if lives >= catalog.rules.star2_lives:
+		bits |= 2
+	var star3_open: bool = _star3_met()
+	if level.star3["kind"] == &"early_calls_at_least":
+		# Every wave still to start could yet be called early, except one started from a build phase.
+		var left: int = level.waves.size() - waves_started - (1 if phase == Phase.BUILD else 0)
+		star3_open = _early_calls + maxi(left, 0) >= int(level.star3["value"])
+	if star3_open:
+		bits |= 4
+	return bits
+
+
+## True only while star 3 can still be earned and the action would break it (contract
+## 3.1). &"build": one more `tower`. &"upgrade": a tower reaching `tier`. &"gate": one
+## more gate placed, which loses the star only if a wave starts that way. Changes nothing.
+func loses_star3(action: StringName, tower: StringName = &"", tier: int = 0) -> bool:
+	if stars_possible() & 4 == 0:
+		return false
+	var value: int = level.star3["value"]
+	match action:
+		&"build":
+			match level.star3["kind"]:
+				&"towers_at_most":
+					return towers.size() >= value
+				&"tower_ban":
+					return tower == level.star3["tower"]
+				&"kinds_at_most":
+					return not _built.has(tower) and _built.size() >= value
+		&"upgrade":
+			return level.star3["kind"] == &"tier_at_most" and tier > value
+		&"gate":
+			return level.star3["kind"] == &"gates_at_most" and gates.size() >= value
+	return false
+
+
 # The tick.
 
 ## Step 1: group spawns in wave data order, waves in start order, then releases (8.1).
 func _spawn_step() -> void:
 	for w: int in running:
 		var elapsed: int = tick - _wave_start[w]
-		for group: WaveGroup in level.waves[w].groups:
+		var mods: WaveMods = _wave_mods[w]
+		for group: WaveGroup in mods.groups:
 			var since: int = elapsed - group.at_tick
 			if since < 0 or since % group.every_ticks != 0 or since / group.every_ticks >= group.count:
 				continue
@@ -507,7 +679,7 @@ func _spawn_step() -> void:
 			if boss.summon_at > tick:
 				continue
 			var summon: Dictionary = catalog.enemy(boss.type).summon
-			_begin_release(boss, summon["enemy"], summon["count"], summon["gap_ms"] / Sim.MS_PER_TICK)
+			_begin_release(boss, summon["enemy"], summon["count"], summon["gap_ms"] / Sim.MS_PER_TICK, tick)
 			boss.summon_at += summon["every_ms"] / Sim.MS_PER_TICK
 		_summoners = alive
 	# Releases that are due. A begun release always finishes (6.2).
@@ -533,21 +705,23 @@ func _spawn_step() -> void:
 			r += 1
 
 
-func _begin_release(source: EnemyState, type: StringName, count: int, gap: int) -> void:
+## A release of `count` creatures at the source's spot, the first on tick `first` (6.2).
+func _begin_release(source: EnemyState, type: StringName, count: int, gap: int, first: int) -> void:
 	var release: Release = Release.new()
 	release.enemy = type
 	release.wave = source.wave
 	release.left = count
-	release.next = tick
+	release.next = first
 	release.gap = gap
 	release.from_cell = source.from_cell
 	release.to_cell = source.to_cell
 	release.progress = source.progress
 	release.pos = source.pos
 	_releases.append(release)
+	_emit({"kind": &"released", "id": source.id, "source": source.type, "enemy": type, "count": count, "pos": source.pos})
 
 
-## Step 2: bubbles, slows. Heals and break timers come in phase 7.
+## Step 2, per creature in id order: bubbles, slows, heals, break timers (8.1).
 func _timer_step() -> void:
 	for enemy: EnemyState in enemies:
 		if enemy.bubble_ticks > 0:
@@ -558,13 +732,83 @@ func _timer_step() -> void:
 			enemy.slow_ticks -= 1
 			if enemy.slow_ticks == 0:
 				enemy.slow_pct = 0
+		if enemy.heal_at > 0 and enemy.heal_at <= tick:
+			_heal(enemy)
+		if enemy.breaking > 0:
+			_break_tick(enemy)
+
+
+## 6.2: every other creature within reach gains the heal, up to its max health. The
+## event lists the creatures that gained health.
+func _heal(mender: EnemyState) -> void:
+	var type: EnemyType = catalog.enemy(mender.type)
+	mender.heal_at += type.heal_ms / Sim.MS_PER_TICK
+	var amount: int = _scaled(type.heal, mender.wave)
+	var reach: int = type.heal_reach * 200
+	var reach_sq: int = reach * reach
+	var ids: Array[int] = []
+	for other: EnemyState in enemies:
+		if other == mender or other.health >= other.max_health:
+			continue
+		var d: Vector2i = other.pos - mender.pos
+		if d.x * d.x + d.y * d.y > reach_sq:
+			continue
+		other.health = mini(other.health + amount, other.max_health)
+		ids.append(other.id)
+	if not ids.is_empty():
+		_emit({"kind": &"healed", "id": mender.id, "ids": ids})
+
+
+## 7.7: a breaker's timer runs at (1 minus its slow). When it runs out the gate ahead
+## breaks now and distances are worked out again (7.8). If the gate ahead is no longer
+## closed (another breaker broke it), the breaking is over and it walks on.
+func _break_tick(enemy: EnemyState) -> void:
+	var ahead: Vector2i = map.next_step(enemy.to_cell, _free_dist)
+	if not _is_closed(ahead):
+		enemy.breaking = 0
+		return
+	enemy.breaking -= Sim.MS_PER_TICK * (100 - enemy.slow_pct)
+	if enemy.breaking > 0:
+		return
+	enemy.breaking = 0
+	_gate_at(ahead).broken = true
+	_gates_whole = false
+	_refresh_dist()
+	_emit({"kind": &"gate_broken", "cell": ahead})
+
+
+## Step 3: every creature of the right kind in a Bell's ring gets its slow with the
+## Bell's time left (8.5). A slow is not a hit, so bubbles do not stop it.
+func _bell_step() -> void:
+	if not _has_bells:
+		return
+	_bucket()
+	for tower: TowerState in towers:
+		if tower.kind != &"slow":
+			continue
+		var stats: TowerStats = tower.stats
+		var reach: int = stats.reach * 200
+		var reach_sq: int = reach * reach
+		var center: Vector2i = Sim.center(tower.cell)
+		var ticks: int = stats.slow_ms / Sim.MS_PER_TICK
+		if stats.hits_ground:
+			for cell: int in tower.near_cells:
+				var i: int = _head[cell]
+				while i >= 0:
+					if _in_range(enemies[i], center, reach_sq):
+						_slow(enemies[i], stats.slow_pct, ticks)
+					i = _link[i]
+		if stats.hits_air:
+			for i: int in _flyer_list:
+				if _in_range(enemies[i], center, reach_sq):
+					_slow(enemies[i], stats.slow_pct, ticks)
 
 
 ## Step 4: movement. A creature at the base center is removed and costs its lives.
 func _move_step() -> void:
 	for enemy: EnemyState in enemies:
 		enemy.prev_pos = enemy.pos
-		var amount: int = enemy.speed * 10 * (100 - enemy.slow_pct) / 100
+		var amount: int = enemy.speed * 10 * enemy.speed_pct * (100 - enemy.slow_pct) / 10000
 		var through: bool = false
 		if enemy.flying:
 			enemy.flown += amount
@@ -593,7 +837,9 @@ func _move_step() -> void:
 	_compact()
 
 
-## Moves a walker along cell centers (7.3). Returns true when it reaches the base.
+## Moves a walker along cell centers (7.3). Returns true when it reaches the base. A
+## breaker whose next cell holds a closed gate stops at this center and starts breaking
+## it (7.7); the rest of its movement this tick is lost.
 func _walk(enemy: EnemyState, amount: int) -> bool:
 	var dist: PackedInt32Array = _free_dist if enemy.breaker else _dist
 	var budget: int = amount
@@ -602,11 +848,16 @@ func _walk(enemy: EnemyState, amount: int) -> bool:
 			if enemy.to_cell == level.base:
 				_place(enemy)
 				return true
-			if budget <= 0:
-				break
 			var next: Vector2i = map.next_step(enemy.to_cell, dist)
-			if next == enemy.to_cell:
+			if enemy.breaker and _is_closed(next):
+				# It starts breaking the moment it reaches the center (7.7).
+				if enemy.breaking == 0:
+					enemy.breaking = enemy.break_ms * 100
+					_emit({"kind": &"break_started", "id": enemy.id, "cell": next})
 				break
+			if budget <= 0 or next == enemy.to_cell:
+				break
+			enemy.breaking = 0
 			enemy.from_cell = enemy.to_cell
 			enemy.to_cell = next
 			enemy.progress = 0
@@ -620,16 +871,15 @@ func _walk(enemy: EnemyState, amount: int) -> bool:
 	return false
 
 
-## Step 5: towers in spot order. Hits land at once (5.2, 8.2 to 8.5).
+## Step 5: attacking towers in spot order. Hits land at once (5.2, 8.2 to 8.6).
 func _tower_step() -> void:
 	_bucket()
 	for tower: TowerState in towers:
-		var type: TowerType = catalog.tower(tower.type)
-		if type.kind != &"attack":
-			continue                                   # Bells and Bakeries: phase 7
-		var stats: TowerStats = _stats(tower)
-		var boost: Vector2i = _boost_for(tower)
-		tower.reload -= Sim.MS_PER_TICK * (100 + boost.x)
+		if tower.kind != &"attack":
+			continue
+		var stats: TowerStats = tower.stats
+		# 5.2, 8.6: the timer runs down by the tick times the rate multiplier.
+		tower.reload -= Sim.MS_PER_TICK * (100 + tower.got_pct)
 		if tower.reload > 0:
 			continue
 		var picks: Array[int] = _pick_targets(tower, stats)
@@ -648,21 +898,50 @@ func _tower_step() -> void:
 			if target.health <= 0:
 				continue                               # already defeated by this shot's splash
 			if stats.splash <= 0:
-				_hit(target, stats, boost.y)
+				_hit(target, stats, tower.got_damage)
 				continue
 			for victim: int in _splash_victims(target.pos, stats):
-				_hit(enemies[victim], stats, boost.y)
+				_hit(enemies[victim], stats, tower.got_damage)
 
 
-## Step 6: defeats pay their bounties (4.5). Splits and boss health events: phase 7.
+## Step 6: defeats pay their bounties and Puffballs queue their Puffs (4.5, 6.2), then
+## boss health events, in id order: speed ups from the next tick, health releases
+## starting on the next tick, even if the same hit defeated the boss (6.3).
 func _defeat_step() -> void:
+	var watched: bool = false
 	for enemy: EnemyState in enemies:
+		if enemy.watched:
+			watched = true
 		if enemy.health > 0:
 			continue
 		gold += enemy.bounty
 		_removed = true
 		_emit({"kind": &"defeated", "id": enemy.id, "enemy": enemy.type, "pos": enemy.pos, "gold": enemy.bounty})
+		var type: EnemyType = catalog.enemy(enemy.type)
+		if type.split_into != &"":
+			_begin_release(enemy, type.split_into, type.split_count, type.split_gap_ms / Sim.MS_PER_TICK, tick + 1)
+	if watched:
+		for enemy: EnemyState in enemies:
+			if enemy.watched:
+				_health_events(enemy)
 	_compact()
+
+
+func _health_events(enemy: EnemyState) -> void:
+	var type: EnemyType = catalog.enemy(enemy.type)
+	if not type.speed_up.is_empty() and enemy.health > 0:
+		var crossed: int = 0
+		for pct: int in type.speed_up["at_pct"]:
+			if enemy.health * 100 <= enemy.max_health * pct:
+				crossed += 1
+		if crossed > enemy.ups:
+			enemy.ups = crossed
+			_derive(enemy)
+			_emit({"kind": &"sped_up", "id": enemy.id, "speed": enemy.speed})
+	if not type.release.is_empty() and not enemy.released \
+			and enemy.health * 100 <= enemy.max_health * int(type.release["at_pct"]):
+		enemy.released = true
+		_begin_release(enemy, type.release["enemy"], type.release["count"], int(type.release["gap_ms"]) / Sim.MS_PER_TICK, tick + 1)
 
 
 ## Step 7: wave checks (4.1, 4.5, 8.1).
@@ -679,6 +958,8 @@ func _wave_step() -> void:
 		running.erase(w)
 		var bonus: int = _clear_bonus(w)
 		gold += bonus
+		_wave_risk.erase(w)
+		_wave_mods.erase(w)
 		_waves_cleared += 1
 		_emit({"kind": &"wave_cleared", "wave": w, "gold": bonus})
 	if not running.is_empty():
@@ -687,11 +968,21 @@ func _wave_step() -> void:
 		phase = Phase.WON
 		_emit({"kind": &"won"})
 		return
-	# A new build phase. Broken gates mend, closed, on their sockets (7.6).
+	# A new build phase. Broken gates mend, closed, on their sockets (7.6), and a
+	# Gateless Night ends (14.5).
 	phase = Phase.BUILD
 	for gate: GateState in gates:
 		gate.broken = false
+	gates_open = false
 	_refresh_dist()
+	# 14.6 Piggy Bank: a share of unspent gold, rounded down, up to its most.
+	var interest: int = 0
+	for effect: Dictionary in card_effects:
+		if effect["type"] == "interest":
+			interest += clampi(gold * int(effect["pct"]) / 100, 0, maxi(int(effect["max"]), 0))
+	if interest > 0:
+		gold = mini(gold + interest, BIG)
+		_emit({"kind": &"interest", "gold": interest})
 	_emit({"kind": &"build_started", "wave": waves_started})
 
 
@@ -800,6 +1091,7 @@ func _splash_victims(at: Vector2i, stats: TowerStats) -> Array[int]:
 
 
 ## One hit on one creature (8.3): a bubble pops and blocks it; else armor, damage, slow.
+## bonus is the best Bakery damage bonus on the tower (8.6), counted before armor.
 func _hit(enemy: EnemyState, stats: TowerStats, bonus: int) -> void:
 	if enemy.bubble:
 		enemy.bubble = false
@@ -816,11 +1108,148 @@ func _hit(enemy: EnemyState, stats: TowerStats, bonus: int) -> void:
 ## One slow slot per creature: a stronger slow replaces it, an equal one keeps the
 ## longer time, a weaker one changes nothing (8.5).
 func _slow(enemy: EnemyState, pct: int, ticks: int) -> void:
+	if ticks <= 0:
+		return
 	if pct > enemy.slow_pct:
 		enemy.slow_pct = pct
 		enemy.slow_ticks = ticks
 	elif pct == enemy.slow_pct:
 		enemy.slow_ticks = maxi(enemy.slow_ticks, ticks)
+
+
+# Effects.
+
+## Folds the Twist and the kept card effects into plain fields (contract 2.8).
+func _fold() -> void:
+	_banned.clear()
+	_added_towers.clear()
+	_tier_cap = 3
+	_no_selling = false
+	_armor_add = 0
+	_all_bubbles = false
+	_break_ms_of.clear()
+	_gates_stay = false
+	_refund_pct = catalog.rules.refund_pct
+	_stat_cache.clear()
+	for effect: Dictionary in twist_effects:
+		match String(effect["type"]):
+			"ban_tower":
+				_banned.append(StringName(String(effect["tower"])))
+			"tier_cap":
+				_tier_cap = mini(_tier_cap, int(effect["tier"]))
+			"no_selling":
+				_no_selling = true
+			"armor_add":
+				_armor_add += int(effect["amount"])
+			"all_bubbles":
+				_all_bubbles = true
+			"break_ms":
+				_break_ms_of[StringName(String(effect["enemy"]))] = int(effect["ms"])
+	for effect: Dictionary in card_effects:
+		match String(effect["type"]):
+			"add_tower":
+				var type: StringName = StringName(String(effect["tower"]))
+				if not _added_towers.has(type):
+					_added_towers.append(type)
+			"refund_pct":
+				_refund_pct = effect["pct"]
+			"gates_stay":
+				_gates_stay = true
+
+
+## Card effects changed: tower stats, reaches and boosts again; a changed reload never
+## leaves a timer above the new reload (5.2); creature numbers again (bounties).
+func _effects_changed() -> void:
+	_fold()
+	for tower: TowerState in towers:
+		_refresh_tower(tower)
+		if tower.kind == &"attack":
+			tower.reload = mini(tower.reload, tower.stats.reload_ms * 100)
+	_refresh_boosts()
+	for enemy: EnemyState in enemies:
+		_derive(enemy)
+
+
+## A tower's own stats with card effects (2.8). Without card effects, the catalog's.
+func _tower_stats(type: StringName, tier: int, spec: int) -> TowerStats:
+	var base: TowerStats = catalog.tower(type).stats(tier, spec)
+	if card_effects.is_empty() or base == null:
+		return base
+	var key: String = "%s:%d:%d" % [type, tier, spec]
+	if not _stat_cache.has(key):
+		_stat_cache[key] = Modifiers.tower_stats(base, type, card_effects, tier == 1)
+	return _stat_cache[key]
+
+
+## The Twist plus a risk card for wave w (contract 2.8): counts, added groups, speed.
+func _make_mods(w: int, risk: Array) -> WaveMods:
+	var mods: WaveMods = WaveMods.new()
+	mods.effects.append_array(twist_effects)
+	for effect: Dictionary in risk:
+		mods.effects.append(effect)
+	var last: bool = w == level.waves.size() - 1
+	var last_start: int = 0
+	for group: WaveGroup in level.waves[w].groups:
+		last_start = maxi(last_start, group.at_tick)
+	var all: Array[WaveGroup] = level.waves[w].groups.duplicate()
+	for effect: Dictionary in mods.effects:
+		if effect["type"] != "add_group":
+			continue
+		var added: WaveGroup = WaveGroup.new()
+		added.enemy = StringName(String(effect["enemy"]))
+		added.count = effect["count"]
+		added.entrance = int(effect["entrance"]) - 1
+		added.at_tick = int(effect["at_ms"]) / Sim.MS_PER_TICK + (last_start if effect["after_last"] else 0)
+		added.every_ticks = int(effect["every_ms"]) / Sim.MS_PER_TICK
+		all.append(added)
+	for group: WaveGroup in all:
+		var count: int = Modifiers.group_count(mods.effects, group.count, catalog.enemy(group.enemy).flying, last)
+		if count == group.count:
+			mods.groups.append(group)
+			continue
+		var changed: WaveGroup = WaveGroup.new()
+		changed.enemy = group.enemy
+		changed.count = count
+		changed.entrance = group.entrance
+		changed.at_tick = group.at_tick
+		changed.every_ticks = group.every_ticks
+		mods.groups.append(changed)
+	mods.speed_pct = Modifiers.speed_pct(mods.effects)
+	return mods
+
+
+## A started wave's mods, or for a wave to come: the Twist, plus the waiting risk card
+## for the next wave.
+func _mods_for(w: int) -> WaveMods:
+	if _wave_mods.has(w):
+		return _wave_mods[w]
+	if w == waves_started:
+		return _make_mods(w, risk_waiting)
+	return _make_mods(w, [])
+
+
+## Every add_group names an entrance of this map.
+func _entrances_ok(effects: Array[Dictionary]) -> bool:
+	for effect: Dictionary in effects:
+		if effect["type"] == "add_group" and int(effect["entrance"]) > level.entrances.size():
+			return false
+	return true
+
+
+func _given_gates() -> int:
+	var given: int = level.gates
+	for effect: Dictionary in twist_effects:
+		if effect["type"] == "set_gates":
+			given = effect["count"]
+	return given
+
+
+## A creature's gate breaking time with the Twist (7.7, 13); 0 for flyers and others.
+func _break_ms(type: StringName) -> int:
+	var data: EnemyType = catalog.enemy(type)
+	if data.flying:
+		return 0
+	return _break_ms_of.get(type, data.break_ms)
 
 
 # Helpers.
@@ -834,9 +1263,17 @@ func _emit(event: Dictionary) -> void:
 		_events.append(event)
 
 
+## The towers this battle offers: the level's, plus run cards, minus a Twist's ban.
 func _offered(type: StringName) -> bool:
-	# A Twist's ban_tower and a run's add_tower come in phase 7.
-	return level.towers.has(type) and catalog.has_tower(type)
+	return (level.towers.has(type) or _added_towers.has(type)) and catalog.has_tower(type) and not _banned.has(type)
+
+
+func _offered_list() -> Array[StringName]:
+	var out: Array[StringName] = []
+	for type: StringName in level.towers + _added_towers:
+		if _offered(type) and not out.has(type):
+			out.append(type)
+	return out
 
 
 func _pay(tower: TowerState, price: int) -> void:
@@ -846,31 +1283,52 @@ func _pay(tower: TowerState, price: int) -> void:
 		tower.spent_before += price
 
 
-## A tower's own stats. Card effects fold in here in phase 7.
-func _stats(tower: TowerState) -> TowerStats:
-	return _stats_at(tower.type, tower.tier, tower.spec)
+## A tower's kind, stats with card effects and reach cells.
+func _refresh_tower(tower: TowerState) -> void:
+	tower.kind = catalog.tower(tower.type).kind
+	tower.stats = _tower_stats(tower.type, tower.tier, tower.spec)
+	_refresh_reach(tower)
 
 
-func _stats_at(type: StringName, tier: int, spec: int) -> TowerStats:
-	return catalog.tower(type).stats(tier, spec)
-
-
-## The best Bakery rate boost and damage bonus a tower gets (8.6). Phase 7.
-func _boost_for(_tower: TowerState) -> Vector2i:
-	return Vector2i.ZERO
+## 8.6: each attacking tower takes the best rate boost and the best damage bonus of the
+## Bakeries whose reach covers its tile center. Bells, Bakeries and the Bakery itself
+## get nothing. Worked out again whenever a tower or a card effect changes.
+func _refresh_boosts() -> void:
+	_has_bells = false
+	for tower: TowerState in towers:
+		tower.got_pct = 0
+		tower.got_damage = 0
+		tower.boosting = 0
+		if tower.kind == &"slow":
+			_has_bells = true
+	for bakery: TowerState in towers:
+		if bakery.kind != &"boost":
+			continue
+		var reach: int = bakery.stats.reach * 200
+		var center: Vector2i = Sim.center(bakery.cell)
+		for tower: TowerState in towers:
+			if tower.kind != &"attack":
+				continue
+			var d: Vector2i = Sim.center(tower.cell) - center
+			if d.x * d.x + d.y * d.y > reach * reach:
+				continue
+			bakery.boosting += 1
+			tower.got_pct = maxi(tower.got_pct, bakery.stats.boost_pct)
+			tower.got_damage = maxi(tower.got_damage, bakery.stats.boost_damage)
 
 
 func _upgrade_refusal(tower: TowerState, spec: int) -> StringName:
 	if tower.tier >= 3:
 		return &"top_tier"
-	# A Twist's tier_cap comes in phase 7.
+	if tower.tier + 1 > _tier_cap:
+		return &"tier_cap"
 	if tower.tier == 1 and spec != -1:
 		return &"bad_spec"
 	if tower.tier == 2 and spec == -1:
 		return &"pick_spec"
 	if tower.tier == 2 and spec != 0 and spec != 1:
 		return &"bad_spec"
-	if gold < _stats_at(tower.type, tower.tier + 1, spec).cost:
+	if gold < _tower_stats(tower.type, tower.tier + 1, spec).cost:
 		return &"too_poor"
 	return &""
 
@@ -903,7 +1361,15 @@ func _add_gate(cell: Vector2i) -> void:
 
 
 func _refresh_dist() -> void:
-	_dist = map.distances(closed_cells())
+	var closed: Array[Vector2i] = closed_cells()
+	_dist = map.distances(closed)
+	_closed_mask.fill(0)
+	for cell: Vector2i in closed:
+		_closed_mask[map.index(cell)] = 1
+
+
+func _is_closed(cell: Vector2i) -> bool:
+	return map.inside(cell) and _closed_mask[map.index(cell)] == 1
 
 
 func _wave_refusal() -> StringName:
@@ -922,7 +1388,7 @@ func _wave_refusal() -> StringName:
 
 ## True when every group of wave w has spawned by `elapsed` ticks after it began.
 func _spawned_all(w: int, elapsed: int) -> bool:
-	for group: WaveGroup in level.waves[w].groups:
+	for group: WaveGroup in _mods_for(w).groups:
 		if group.at_tick + (group.count - 1) * group.every_ticks > elapsed:
 			return false
 	return true
@@ -941,15 +1407,31 @@ func _early_bonus() -> int:
 	return Sim.pct_up(total, catalog.rules.early_bonus_pct)
 
 
-## 4.5: (20 + 5 x wave number) x strength / 100, rounded half up.
+## 4.5: (20 + 5 x wave number) x strength / 100, rounded half up, with Feast Days; plus
+## a risk card's reward at the wave's strength (14.5).
 func _clear_bonus(w: int) -> int:
 	var rules: GameRules = catalog.rules
-	return Sim.pct_half_up(rules.clear_bonus + rules.clear_bonus_per_wave * (w + 1), level.waves[w].strength)
+	var bonus: int = Sim.pct_half_up(rules.clear_bonus + rules.clear_bonus_per_wave * (w + 1), level.waves[w].strength)
+	bonus = Modifiers.scale_all(card_effects, "clear_bonus_pct", bonus)
+	for effect: Dictionary in _wave_risk.get(w, []):
+		if effect["type"] == "reward_gold":
+			bonus += Sim.pct_half_up(maxi(int(effect["amount"]), 0), level.waves[w].strength)
+	return bonus
 
 
 ## A base number at wave w's strength, rounded half up, at least 1 (6.4).
 func _scaled(base_value: int, w: int) -> int:
 	return maxi(1, Sim.pct_half_up(base_value, level.waves[w].strength))
+
+
+## Max health: the data, then strength, then the wave's health effects (6.4, 2.8).
+func _max_health(type: StringName, w: int, mods: WaveMods) -> int:
+	return maxi(1, Modifiers.scale_all(mods.effects, "health_pct", _scaled(catalog.enemy(type).health, w)))
+
+
+## Bounty: the data, then strength, then card effects (6.4, 14.5).
+func _bounty(base_value: int, w: int) -> int:
+	return maxi(1, Modifiers.scale_all(card_effects, "bounty_pct", _scaled(base_value, w)))
 
 
 func _new_enemy(type: StringName, w: int) -> EnemyState:
@@ -959,25 +1441,32 @@ func _new_enemy(type: StringName, w: int) -> EnemyState:
 	enemy.type = type
 	enemy.wave = w
 	_derive(enemy)
+	enemy.max_health = _max_health(type, w, _wave_mods[w])
 	enemy.health = enemy.max_health
 	var data: EnemyType = catalog.enemy(type)
-	enemy.bubble = data.bubble
+	enemy.bubble = data.bubble or _all_bubbles
 	if not data.summon.is_empty():
 		enemy.summon_at = tick + int(data.summon["every_ms"]) / Sim.MS_PER_TICK
+	if data.heal > 0:
+		enemy.heal_at = tick + data.heal_ms / Sim.MS_PER_TICK
 	return enemy
 
 
-## Numbers worked out from the type and the wave's strength (6.4). Creature effects
-## (phase 7) apply after strength.
+## Numbers worked out from the type, the wave and the effects (6.4, 2.8): the same at
+## spawn, after a card, and on load. Max health is saved, so it is not here.
 func _derive(enemy: EnemyState) -> void:
 	var data: EnemyType = catalog.enemy(enemy.type)
-	enemy.max_health = _scaled(data.health, enemy.wave)
-	enemy.bounty = _scaled(data.bounty, enemy.wave)
-	enemy.armor = data.armor
+	enemy.armor = maxi(0, data.armor + _armor_add)
 	enemy.speed = data.speed
+	if not data.speed_up.is_empty():
+		enemy.speed += enemy.ups * int(data.speed_up["add"])
+	enemy.speed_pct = (_wave_mods[enemy.wave] as WaveMods).speed_pct
 	enemy.lives = data.lives
+	enemy.bounty = _bounty(data.bounty, enemy.wave)
 	enemy.flying = data.flying
-	enemy.breaker = false                              # gate breakers come in phase 7
+	enemy.break_ms = _break_ms(enemy.type)
+	enemy.breaker = enemy.break_ms > 0
+	enemy.watched = not data.speed_up.is_empty() or not data.release.is_empty()
 
 
 ## A flyer flies straight from `start` to the base center (6.5).
@@ -1026,7 +1515,7 @@ func _compact() -> void:
 ## The road cells a walker in reach could stand on (docs/ARCHITECTURE.md 9.3).
 func _refresh_reach(tower: TowerState) -> void:
 	tower.near_cells = PackedInt32Array()
-	var reach: int = _stats(tower).reach * 200
+	var reach: int = tower.stats.reach * 200
 	var center: Vector2i = Sim.center(tower.cell)
 	for row: int in map.rows:
 		for column: int in Sim.MAP_COLUMNS:
@@ -1094,7 +1583,7 @@ func to_data() -> Dictionary:
 			"id": enemy.id, "type": String(enemy.type), "wave": enemy.wave, "health": enemy.health,
 			"max_health": enemy.max_health, "bubble": enemy.bubble, "bubble_ticks": enemy.bubble_ticks,
 			"slow_pct": enemy.slow_pct, "slow_ticks": enemy.slow_ticks, "summon_at": enemy.summon_at,
-			"breaking": enemy.breaking,
+			"heal_at": enemy.heal_at, "breaking": enemy.breaking, "ups": enemy.ups, "released": enemy.released,
 		}
 		if enemy.flying:
 			item["fly_from"] = DataCheck.cell_data(enemy.fly_from)
@@ -1117,14 +1606,21 @@ func to_data() -> Dictionary:
 			item["to"] = DataCheck.cell_data(release.to_cell)
 			item["progress"] = release.progress
 		release_out.append(item)
+	var risk_out: Array = []
+	for w: int in running:
+		if _wave_risk.has(w):
+			risk_out.append({"wave": w, "effects": (_wave_risk[w] as Array).duplicate(true)})
 	var built_out: Array = []
 	for type: StringName in _built:
 		built_out.append(String(type))
 	return {
-		"format": FORMAT, "level": level.to_data(), "relaxed": relaxed, "effects": [], "risk": [],
+		"format": FORMAT, "level": level.to_data(), "relaxed": relaxed,
+		"twist": twist_effects.duplicate(true), "effects": card_effects.duplicate(true),
+		"risk": risk_waiting.duplicate(true),
 		"tick": tick, "phase": PHASE_NAMES[phase], "waves_started": waves_started,
-		"running": running.duplicate(), "wave_start": _wave_start.duplicate(),
-		"gold": gold, "lives": lives, "start_lives": start_lives, "gates_in_hand": gates_in_hand,
+		"running": running.duplicate(), "wave_start": _wave_start.duplicate(), "wave_risk": risk_out,
+		"gates_open": gates_open, "gold": gold, "lives": lives, "start_lives": start_lives,
+		"gates_in_hand": gates_in_hand, "gates_added": _gates_added,
 		"gates": gate_out, "towers": tower_out, "enemies": enemy_out, "releases": release_out,
 		"next_id": _next_id,
 		"record": {
@@ -1158,9 +1654,8 @@ func _load(data: Variant, stats: Catalog, chk: DataCheck) -> bool:
 	_setup(level_data, stats)
 	var rules: GameRules = stats.rules
 	relaxed = chk.boolean(top, "relaxed", "")
-	# Phase 5 battles hold no effects (Twists and cards come in phase 7).
-	chk.array(top, "effects", "", 0, 0)
-	chk.array(top, "risk", "", 0, 0)
+	if not _load_effects(top, chk):
+		return false
 	tick = chk.integer(top, "tick", "", 0, BIG)
 	var phase_value: Variant = top["phase"]
 	if not DataCheck.is_string(phase_value) or not ["build", "wave"].has(String(phase_value)):
@@ -1187,10 +1682,19 @@ func _load(data: Variant, stats: Catalog, chk: DataCheck) -> bool:
 		chk.fail("phase", "a build phase has no wave running and a wave to come")
 	if phase == Phase.WAVE and running.is_empty():
 		chk.fail("phase", "a wave phase has a wave running")
+	_load_wave_risk(top["wave_risk"], chk)
+	if not chk.ok():
+		return false
+	for w: int in running:
+		_wave_mods[w] = _make_mods(w, _wave_risk.get(w, []))
+	gates_open = chk.boolean(top, "gates_open", "")
+	if gates_open and phase == Phase.BUILD:
+		chk.fail("gates_open", "gates close when a build phase begins")
 	gold = chk.integer(top, "gold", "", 0, BIG)
-	lives = chk.integer(top, "lives", "", 1, 1000000, 1, 1)
-	start_lives = chk.integer(top, "start_lives", "", 1, 1000000, 1, 1)
+	lives = chk.integer(top, "lives", "", 1, MAX_LIVES, 1, 1)
+	start_lives = chk.integer(top, "start_lives", "", 1, MAX_LIVES, 1, 1)
 	gates_in_hand = chk.integer(top, "gates_in_hand", "", 0, rules.max_gates)
+	_gates_added = chk.integer(top, "gates_added", "", 0, rules.max_gates)
 	_load_gates(top["gates"], chk)
 	if not chk.ok():
 		return false
@@ -1202,11 +1706,69 @@ func _load(data: Variant, stats: Catalog, chk: DataCheck) -> bool:
 	_load_enemies(top["enemies"], chk)
 	_load_releases(top["releases"], chk)
 	_load_record(top["record"], chk)
+	if not chk.ok():
+		return false
+	_refresh_boosts()
+	return true
+
+
+## The Twist, the kept card effects and the waiting risk card, each checked for its use.
+func _load_effects(top: Dictionary, chk: DataCheck) -> bool:
+	var twist: Array = chk.array(top, "twist", "", 0, Modifiers.MAX_TWIST)
+	var cards: Array = chk.array(top, "effects", "", 0, Modifiers.MAX_KEPT)
+	var risk: Array = chk.array(top, "risk", "", 0, Modifiers.MAX_WAITING)
+	for line: String in Modifiers.check(twist, catalog, &"twist"):
+		chk.fail("twist", line)
+	for line: String in Modifiers.check(cards, catalog, &"card"):
+		chk.fail("effects", line)
+	for line: String in Modifiers.check(risk, catalog, &"risk"):
+		chk.fail("risk", line)
+	if not chk.ok():
+		return false
+	twist_effects = Modifiers.normalize_all(twist)
+	card_effects = Modifiers.normalize_all(cards)
+	risk_waiting = Modifiers.normalize_all(risk)
+	for effect: Dictionary in card_effects:
+		if Modifiers.INSTANT.has(String(effect["type"])):
+			chk.fail("effects", "instant effects are not kept")
+	if not _entrances_ok(risk_waiting):
+		chk.fail("risk", "names an entrance the map does not have")
+	for cell: Vector2i in Modifiers.fixed_cells(twist_effects):
+		if not level.sockets.has(cell):
+			chk.fail("twist", "fixed gates must stand on sockets")
+	_fold()
 	return chk.ok()
+
+
+## The risk card of each running wave that had one, in start order.
+func _load_wave_risk(data: Variant, chk: DataCheck) -> void:
+	var list: Array = chk.array_value(data, "wave_risk", 0, running.size())
+	var last: int = -1
+	for i: int in list.size():
+		var path: String = "wave_risk[%d]" % i
+		if not chk.object(list[i], path, ["wave", "effects"]) or not chk.ok():
+			return
+		var item: Dictionary = list[i]
+		var w: int = chk.integer(item, "wave", path, 0, level.waves.size() - 1, 1, -1)
+		if not running.has(w) or w <= last:
+			chk.fail(path + ".wave", "must be a running wave, in start order")
+			return
+		last = w
+		var effects: Array = chk.array(item, "effects", path, 1, Modifiers.MAX_WAITING)
+		for line: String in Modifiers.check(effects, catalog, &"risk"):
+			chk.fail(path, line)
+		if not chk.ok():
+			return
+		var clean: Array[Dictionary] = Modifiers.normalize_all(effects)
+		if not _entrances_ok(clean):
+			chk.fail(path, "names an entrance the map does not have")
+			return
+		_wave_risk[w] = clean
 
 
 func _load_gates(data: Variant, chk: DataCheck) -> void:
 	var list: Array = chk.array_value(data, "gates", 0, level.sockets.size())
+	var fixed_cells: Array[Vector2i] = Modifiers.fixed_cells(twist_effects)
 	for i: int in list.size():
 		var path: String = "gates[%d]" % i
 		if not chk.object(list[i], path, ["cell", "fixed", "broken"]) or not chk.ok():
@@ -1220,13 +1782,19 @@ func _load_gates(data: Variant, chk: DataCheck) -> void:
 			chk.fail(path + ".cell", "must be in cell order with one gate per socket")
 		gate.fixed = chk.boolean(item, "fixed", path)
 		gate.broken = chk.boolean(item, "broken", path)
-		if gate.fixed:
-			chk.fail(path + ".fixed", "fixed gates come from Twists (phase 7)")
+		if gate.fixed and not fixed_cells.has(gate.cell) and not _gates_stay:
+			chk.fail(path + ".fixed", "only a Twist or Iron Gate fixes a gate")
+		if fixed_cells.has(gate.cell) and not gate.fixed:
+			chk.fail(path + ".fixed", "the Twist fixes this gate")
 		if gate.broken and phase == Phase.BUILD:
 			chk.fail(path + ".broken", "gates mend when a build phase begins")
 		gates.append(gate)
-	if gates.size() + gates_in_hand != level.gates:
-		chk.fail("gates", "placed and in hand must add up to the level's gates")
+	for cell: Vector2i in fixed_cells:
+		if _gate_at(cell) == null:
+			chk.fail("gates", "the Twist's fixed gates must stand")
+	var total: int = gates.size() + gates_in_hand
+	if total != _given_gates() + _gates_added or total > catalog.rules.max_gates:
+		chk.fail("gates", "placed and in hand must add up to the gates given")
 
 
 func _load_towers(data: Variant, chk: DataCheck) -> void:
@@ -1244,9 +1812,9 @@ func _load_towers(data: Variant, chk: DataCheck) -> void:
 			chk.fail(path + ".cell", "must be in cell order with one tower per spot")
 		tower.type = chk.ident(item, "type", path)
 		if not _offered(tower.type):
-			chk.fail(path + ".type", "must be a tower this level offers")
+			chk.fail(path + ".type", "must be a tower this battle offers")
 			continue
-		tower.tier = chk.integer(item, "tier", path, 1, 3, 1, 1)
+		tower.tier = chk.integer(item, "tier", path, 1, _tier_cap, 1, 1)
 		tower.spec = chk.integer(item, "spec", path, -1, 1, 1, -1)
 		if (tower.tier < 3) != (tower.spec == -1):
 			chk.fail(path + ".spec", "must be -1 below tier 3 and 0 or 1 at tier 3")
@@ -1256,19 +1824,31 @@ func _load_towers(data: Variant, chk: DataCheck) -> void:
 			chk.fail(path + ".aim", "must be first, last or strong")
 		else:
 			tower.aim = AIM_NAMES.find(String(aim_value)) as TowerState.Aim
-		# Between ticks a timer is 0 to the tower's own reload (5.2). It starts at 0. A tick
-		# drains it by MS_PER_TICK x 100 = 5000, and every reload_ms x 100 is at least that,
-		# so a shot taken at 0 or below lands it back at 0 or more; an idle tower sets 0; an
-		# upgrade caps it at the new reload. Phase 7: recheck the floor once Bakery boosts
-		# make the drain larger.
-		tower.reload = chk.integer(item, "reload", path, 0, _stats(tower).reload_ms * 100)
+		_refresh_tower(tower)
+		tower.reload = chk.integer(item, "reload", path, _reload_floor(tower), tower.stats.reload_ms * 100)
 		tower.spent_now = chk.integer(item, "spent_now", path, 0, BIG)
 		tower.spent_before = chk.integer(item, "spent_before", path, 0, BIG)
 		if phase == Phase.WAVE and tower.spent_now != 0:
 			chk.fail(path + ".spent_now", "is 0 during a wave")
 		towers.append(tower)
-		if chk.ok():
-			_refresh_reach(tower)
+
+
+## The lowest timer a tower can hold between ticks (5.2). It starts at 0. A tick takes
+## MS_PER_TICK x (100 + rate boost) off; a shot at 0 or below adds reload_ms x 100,
+## keeping the leftover; an idle tower sets 0. So while the reload is at least the
+## largest tick a Bakery could make, the timer stays 0 or more. Every tower and Bakery
+## in the data keeps it so (the shortest reload, 0.2 s, against a 1.4 times boost).
+## If cards ever broke that, a far floor applies instead.
+func _reload_floor(tower: TowerState) -> int:
+	var most: int = 0
+	for type: StringName in catalog.tower_ids():
+		if catalog.tower(type).kind != &"boost":
+			continue
+		for key: Array in [[1, -1], [2, -1], [3, 0], [3, 1]]:
+			most = maxi(most, _tower_stats(type, key[0], key[1]).boost_pct)
+	if tower.stats.reload_ms * 100 >= Sim.MS_PER_TICK * (100 + most):
+		return 0
+	return -BIG
 
 
 func _load_enemies(data: Variant, chk: DataCheck) -> void:
@@ -1276,10 +1856,6 @@ func _load_enemies(data: Variant, chk: DataCheck) -> void:
 	if phase == Phase.BUILD and not list.is_empty():
 		chk.fail("enemies", "a build phase has no creatures")
 		return
-	var base_keys: PackedStringArray = [
-		"id", "type", "wave", "health", "max_health", "bubble", "bubble_ticks", "slow_pct",
-		"slow_ticks", "summon_at", "breaking",
-	]
 	for i: int in list.size():
 		var path: String = "enemies[%d]" % i
 		if typeof(list[i]) != TYPE_DICTIONARY:
@@ -1292,7 +1868,7 @@ func _load_enemies(data: Variant, chk: DataCheck) -> void:
 		if type == null:
 			chk.fail(path + ".type", "names no creature")
 			return
-		var keys: PackedStringArray = base_keys.duplicate()
+		var keys: PackedStringArray = ENEMY_KEYS.duplicate()
 		keys.append_array(["fly_from", "flown"] if type.flying else ["from", "to", "progress"])
 		if not chk.object(item, path, keys) or not chk.ok():
 			return
@@ -1303,14 +1879,20 @@ func _load_enemies(data: Variant, chk: DataCheck) -> void:
 		if not running.has(enemy.wave):
 			chk.fail(path + ".wave", "must be a running wave")
 			return
+		var ups_most: int = (type.speed_up["at_pct"] as Array).size() if not type.speed_up.is_empty() else 0
+		enemy.ups = chk.integer(item, "ups", path, 0, ups_most)
+		enemy.released = chk.boolean(item, "released", path)
+		if enemy.released and type.release.is_empty():
+			chk.fail(path + ".released", "only a creature with a health release releases")
 		_derive(enemy)
 		enemy.max_health = chk.integer(item, "max_health", path, 1, BIG, 1, 1)
 		enemy.health = chk.integer(item, "health", path, 1, enemy.max_health, 1, 1)
+		var has_bubble: bool = type.bubble or _all_bubbles
 		enemy.bubble = chk.boolean(item, "bubble", path)
-		var bubble_cap: int = catalog.rules.bubble_ms / Sim.MS_PER_TICK if type.bubble else 0
+		var bubble_cap: int = catalog.rules.bubble_ms / Sim.MS_PER_TICK if has_bubble else 0
 		enemy.bubble_ticks = chk.integer(item, "bubble_ticks", path, 0, bubble_cap)
-		if (enemy.bubble and not type.bubble) or (enemy.bubble and enemy.bubble_ticks > 0) \
-				or (type.bubble and not enemy.bubble and enemy.bubble_ticks == 0):
+		if (enemy.bubble and not has_bubble) or (enemy.bubble and enemy.bubble_ticks > 0) \
+				or (has_bubble and not enemy.bubble and enemy.bubble_ticks == 0):
 			chk.fail(path + ".bubble", "does not match the bubble timer")
 		enemy.slow_pct = chk.integer(item, "slow_pct", path, 0, 90)
 		enemy.slow_ticks = chk.integer(item, "slow_ticks", path, 0, 60000 / Sim.MS_PER_TICK)
@@ -1321,7 +1903,11 @@ func _load_enemies(data: Variant, chk: DataCheck) -> void:
 		else:
 			var every: int = int(type.summon["every_ms"]) / Sim.MS_PER_TICK
 			enemy.summon_at = chk.integer(item, "summon_at", path, tick, tick + every, 1, tick)
-		enemy.breaking = chk.integer(item, "breaking", path, 0, 0)
+		if type.heal <= 0:
+			enemy.heal_at = chk.integer(item, "heal_at", path, 0, 0)
+		else:
+			enemy.heal_at = chk.integer(item, "heal_at", path, tick, tick + type.heal_ms / Sim.MS_PER_TICK, 1, tick)
+		enemy.breaking = chk.integer(item, "breaking", path, 0, enemy.break_ms * 100)
 		if type.flying:
 			var high: Vector2i = Vector2i(Sim.MAP_COLUMNS * Sim.UNIT, level.rows * Sim.UNIT)
 			var start: Vector2i = chk.pair(item["fly_from"], path + ".fly_from", 0, maxi(high.x, high.y))
@@ -1336,6 +1922,8 @@ func _load_enemies(data: Variant, chk: DataCheck) -> void:
 			enemy.from_cell = _loaded_from
 			enemy.to_cell = _loaded_to
 			enemy.progress = _loaded_progress
+			if enemy.breaking > 0 and enemy.progress != Sim.UNIT:
+				chk.fail(path + ".breaking", "a breaker breaks from a cell center")
 		if not chk.ok():
 			return
 		_place(enemy)
@@ -1365,9 +1953,8 @@ func _load_step(item: Dictionary, path: String, breaker: bool, chk: DataCheck) -
 		chk.fail(path, "must walk between joined cells")
 	elif gap == Vector2i.ZERO and _loaded_progress != Sim.UNIT:
 		chk.fail(path + ".progress", "must be at the cell center")
-	var closed: Array[Vector2i] = closed_cells()
 	var dist: PackedInt32Array = _free_dist if breaker else _dist
-	if closed.has(_loaded_from) or closed.has(_loaded_to) or dist[map.index(_loaded_to)] < 0:
+	if _is_closed(_loaded_from) or _is_closed(_loaded_to) or dist[map.index(_loaded_to)] < 0:
 		chk.fail(path, "must have an open route to the base")
 
 
@@ -1419,11 +2006,11 @@ func _load_record(data: Variant, chk: DataCheck) -> void:
 	var item: Dictionary = data
 	_early_calls = chk.integer(item, "early_calls", "record", 0, waves_started)
 	_max_towers = chk.integer(item, "max_towers", "record", towers.size(), LevelData.MAX_SPOTS)
-	var list: Array = chk.array(item, "built", "record", 0, level.towers.size())
+	var list: Array = chk.array(item, "built", "record", 0, _offered_list().size())
 	for i: int in list.size():
 		var type: StringName = chk.ident_value(list[i], "record.built[%d]" % i)
 		if not _offered(type) or _built.has(type):
-			chk.fail("record.built[%d]" % i, "must be a tower this level offers, once")
+			chk.fail("record.built[%d]" % i, "must be a tower this battle offers, once")
 		_built.append(type)
 	for tower: TowerState in towers:
 		if not _built.has(tower.type):

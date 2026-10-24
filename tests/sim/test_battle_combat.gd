@@ -353,14 +353,3 @@ func test_a_defeated_creature_is_not_targeted_again_rules_8_1() -> void:
 	assert_eq(defeated.size(), 1)
 	assert_eq(defeated[0], {"kind": &"defeated", "id": 0, "enemy": &"pip", "pos": Sim.center(Vector2i(3, 0)) + Vector2i(0, pip.speed * 10), "gold": pip.bounty})
 
-
-func test_bells_and_bakeries_do_nothing_yet_rules_5_5_and_5_8_phase_7() -> void:
-	# Bell and Bakery effects come in phase 7. They can be built and sold but do not act.
-	var b: Battle = _battle([Fx.group("scamp", 1)])
-	assert_eq(b.place_tower(Vector2i(2, 1), &"lullaby_bell"), Battle.DONE)
-	assert_eq(b.place_tower(Vector2i(4, 1), &"bakery"), Battle.DONE)
-	b.start_next_wave()
-	Fx.steps(b, 10)
-	assert_eq(b.enemy_with_id(0).slow_pct, 0)
-	assert_eq(b.tower_numbers(Vector2i(2, 1))["slow_pct"], 35)
-	assert_eq(b.tower_numbers(Vector2i(4, 1))["boost_pct"], 15)

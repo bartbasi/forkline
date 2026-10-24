@@ -67,6 +67,16 @@ static func from_data(data: Variant, game: GameData) -> SavedGame:
 		return null
 	if saved.mode == LEVEL and saved.battle.level.id != saved.level_id:
 		return null
+	# A campaign level plays its Twist's effects or none, and takes no cards (RULES 13, 14).
+	# A run has no Twist.
+	if saved.mode == LEVEL:
+		var twist: Array[Dictionary] = game.levels[saved.level_id].twist_effects if saved.twist else ([] as Array[Dictionary])
+		if saved.battle.twist_effects != twist:
+			return null
+		if not saved.battle.card_effects.is_empty() or not saved.battle.risk_waiting.is_empty():
+			return null
+	elif not saved.battle.twist_effects.is_empty():
+		return null
 	if saved.mode == DAILY and saved.battle.relaxed:
 		return null
 	return saved

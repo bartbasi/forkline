@@ -53,12 +53,18 @@ func test_create_sets_starting_numbers_rules_4_1_and_11() -> void:
 	assert_eq(gated.gates_in_hand, 2)
 
 
-func test_create_refuses_twist_effects_until_phase_7() -> void:
+func test_create_checks_its_inputs_contract_3_1() -> void:
 	var level: LevelData = Fx.level(Fx.LINE_GRID, [{"groups": [Fx.group("scamp", 1)]}], {}, catalog)
-	assert_null(Battle.create(level, catalog, false, [{"type": "no_selling"}] as Array[Dictionary]))
 	assert_null(Battle.create(null, catalog, false, []))
 	assert_null(Battle.create(level, null, false, []))
-	assert_eq(Battle.create(level, catalog, false, []).add_effects([{"type": "gates_stay"}] as Array[Dictionary], false), &"bad_effect")
+	assert_null(Battle.create(level, catalog, false, [{"type": "gates_stay"}] as Array[Dictionary]), "a card effect is not a Twist")
+	assert_null(Battle.create(level, catalog, false, [{"type": "no_selling", "extra": 1}] as Array[Dictionary]), "exact fields")
+	assert_null(Battle.create(level, catalog, false, [{"type": "fixed_gates", "cells": [[3, 2]]}] as Array[Dictionary]), "a fixed gate needs a socket and a gate to give")
+	assert_not_null(Battle.create(level, catalog, false, [{"type": "no_selling"}] as Array[Dictionary]))
+	var b: Battle = Battle.create(level, catalog, false, [])
+	assert_eq(b.add_effects([{"type": "no_selling"}] as Array[Dictionary], false), &"bad_effect", "a Twist effect is not a card")
+	assert_eq(b.add_effects([] as Array[Dictionary], false), &"bad_effect", "a card has effects")
+	assert_eq(b.card_effects.size(), 0)
 
 
 func test_nothing_moves_in_a_build_phase_rules_4_2() -> void:

@@ -15,6 +15,13 @@ var reload: int = 0                                    # 1/100 ms until it may f
 var spent_now: int = 0                                 # bought in the current build phase: refunded in full
 var spent_before: int = 0                              # every other purchase: refunded at the refund percent
 
-## Internal to src/sim/: cell indexes a walker in reach could stand on, rebuilt when
-## the tower is built or upgraded.
+## Internal to src/sim/, worked out again whenever towers or card effects change:
+## cell indexes a walker in reach could stand on, the tower's own stats with card
+## effects, the best Bakery rate boost and damage bonus it gets (RULES 8.6), and for a
+## Bakery, how many attacking towers it reaches.
 var near_cells: PackedInt32Array = PackedInt32Array()
+var kind: StringName = &"attack"                       # the tower type's kind
+var stats: TowerStats = null
+var got_pct: int = 0
+var got_damage: int = 0
+var boosting: int = 0

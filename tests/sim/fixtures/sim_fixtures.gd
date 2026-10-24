@@ -47,6 +47,48 @@ const TRIPLE_GRID: Array = [
 	"...B...",
 ]
 
+## A straight road down column 3 between two pairs of spot columns, so spots touch:
+## for Bakery reach (RULES 5.8, 8.6). Spots in columns 1, 2, 4 and 5 of rows 1 and 2.
+const CLUSTER_GRID: Array = [
+	"...1...",
+	".oo#oo.",
+	".oo#oo.",
+	"...#...",
+	"...#...",
+	"...#...",
+	"...#...",
+	"...B...",
+]
+
+## Two branches of equal length; the tie break sends walkers (and breakers) west. The
+## west branch holds two sockets, [1, 4] and [1, 6], one after the other (RULES 7.7).
+const TWO_SOCKET_GRID: Array = [
+	"...1...",
+	"...#...",
+	".#####.",
+	".#...#.",
+	".G.o.#.",
+	".#...#.",
+	".G...#.",
+	".#...#.",
+	".#####.",
+	"...B...",
+]
+
+## Entrance [0, 0]. The short road goes down column 0 through the socket [0, 1]; the
+## long road goes east along row 0 and back along row 4. A walker on the long road
+## near the entrance turns back when the socket opens (RULES 7.8).
+const LOOP_GRID: Array = [
+	"1######",
+	"G.....#",
+	"#.o...#",
+	"#.....#",
+	"#######",
+	"...#...",
+	"...#...",
+	"...B...",
+]
+
 
 static func parse(path: String) -> Variant:
 	return JSON.parse_string(FileAccess.get_file_as_string(path))
@@ -58,6 +100,17 @@ static func stats_files() -> Array:
 
 static func catalog() -> Catalog:
 	var files: Array = stats_files()
+	return Catalog.from_data(files[0], files[1], files[2])
+
+
+## A catalog from the real files with one tower's stat block changed: tiers 0 and 1,
+## then specs 0 and 1, as index 0 to 3.
+static func catalog_with_tower(id: String, index: int, changes: Dictionary) -> Catalog:
+	var files: Array = stats_files()
+	for item: Dictionary in files[0]["towers"]:
+		if item["id"] == id:
+			var block: Dictionary = item["tiers"][index] if index < 2 else item["specs"][index - 2]
+			block.merge(changes, true)
 	return Catalog.from_data(files[0], files[1], files[2])
 
 
@@ -128,3 +181,38 @@ static func snapshot(b: Battle) -> String:
 ## A copy through JSON text, as a save file would give it.
 static func restored(b: Battle) -> Battle:
 	return Battle.from_data(JSON.parse_string(JSON.stringify(b.to_data())), b.catalog)
+
+
+## The [tick, event] pairs of a run of n ticks (or until the phase leaves WAVE).
+static func log_ticks(b: Battle, n: int) -> Array:
+	var out: Array = []
+	for i: int in n:
+		if b.phase != Battle.Phase.WAVE:
+			break
+		var at: int = b.tick
+		b.step()
+		for event: Dictionary in b.take_events():
+			out.append([at, event])
+	return out
+
+
+## The entries of a log with this event kind.
+static func of_kind(log: Array, kind: StringName) -> Array:
+	var out: Array = []
+	for entry: Array in log:
+		if entry[1]["kind"] == kind:
+			out.append(entry)
+	return out
+
+
+## The ticks of a log's entries.
+static func ticks(entries: Array) -> Array[int]:
+	var out: Array[int] = []
+	for entry: Array in entries:
+		out.append(entry[0])
+	return out
+
+
+## The stat block of a tower tier (spec -1) or path, from a catalog.
+static func stats(cat: Catalog, tower: StringName, tier: int, spec: int = -1) -> TowerStats:
+	return cat.tower(tower).stats(tier, spec)

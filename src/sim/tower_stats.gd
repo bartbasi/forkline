@@ -28,3 +28,22 @@ func numbers() -> Dictionary:
 		"hits_ground": hits_ground, "hits_air": hits_air,
 		"boost_pct": boost_pct, "boost_damage": boost_damage,
 	}
+
+
+## A copy with the same numbers.
+func copy() -> TowerStats:
+	var out: TowerStats = new()
+	out.cost = cost
+	out.reach = reach
+	out.hits_ground = hits_ground
+	out.hits_air = hits_air
+	out.damage = damage
+	out.reload_ms = reload_ms
+	out.splash = splash
+	out.targets = targets
+	out.pierce = pierce
+	out.slow_pct = slow_pct
+	out.slow_ms = slow_ms
+	out.boost_pct = boost_pct
+	out.boost_damage = boost_damage
+	return out

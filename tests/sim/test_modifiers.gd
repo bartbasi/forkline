@@ -90,6 +90,8 @@ func test_ranges_ids_and_types_are_checked() -> void:
 		["twist", {"type": "armor_add", "amount": 1001}],
 		["twist", {"type": "break_ms", "enemy": "gatecrasher", "ms": 2010}],
 		["twist", {"type": "break_ms", "enemy": "ghost", "ms": 2000}],
+		["twist", {"type": "break_ms", "enemy": "scamp", "ms": 2000}],
+		["twist", {"type": "break_ms", "enemy": "dusk_moth", "ms": 2000}],
 		["risk", {"type": "add_group", "enemy": "pip", "count": 201, "entrance": 1, "at_ms": 0, "every_ms": 300, "after_last": false}],
 		["risk", {"type": "add_group", "enemy": "pip", "count": 2, "entrance": 5, "at_ms": 0, "every_ms": 300, "after_last": false}],
 		["risk", {"type": "add_group", "enemy": "pip", "count": 2, "entrance": 1, "at_ms": 0, "every_ms": 0, "after_last": false}],

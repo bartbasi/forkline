@@ -129,3 +129,144 @@ func test_summons_count_for_their_wave_rules_4_9() -> void:
 	Fx.steps(b, 127)
 	# Boss bounty 100 plus two Scamps at 5: half of 110.
 	assert_eq(b.next_wave_info()["bonus"], 55)
+
+
+func test_ironshell_speeds_up_at_each_quarter_from_the_next_tick_rules_6_3() -> void:
+	var catalog: Catalog = Fx.catalog()
+	var shell: EnemyType = catalog.enemy(&"ironshell")
+	var add: int = shell.speed_up["add"]
+	var at: Array = shell.speed_up["at_pct"]
+	assert_eq(at, [75, 50, 25], "RULES 6.3: 75%, 50% and 25%")
+	var b: Battle = Fx.battle(Fx.LINE_GRID, [{"groups": [Fx.group("ironshell", 1)]}], {}, catalog)
+	b.start_next_wave()
+	b.step()
+	var boss: EnemyState = b.enemy_with_id(0)
+	assert_eq(boss.speed, shell.speed)
+	boss.health = boss.max_health * 76 / 100
+	b.step()
+	assert_eq(boss.speed, shell.speed, "above 75%: no change")
+	boss.health = boss.max_health * 75 / 100
+	b.take_events()
+	var before: Vector2i = boss.pos
+	b.step()
+	assert_eq((boss.pos - before).y, shell.speed * 10, "this tick still moves at the old speed")
+	assert_eq(boss.speed, shell.speed + add, "at 75%: faster from the next tick")
+	assert_eq(Fx.events_of(b.take_events(), &"sped_up"), [{"kind": &"sped_up", "id": 0, "speed": shell.speed + add}] as Array[Dictionary])
+	before = boss.pos
+	b.step()
+	assert_eq((boss.pos - before).y, (shell.speed + add) * 10)
+	boss.health = boss.max_health
+	b.step()
+	assert_eq(boss.speed, shell.speed + add, "healing never undoes a speed up")
+	boss.health = boss.max_health * 20 / 100
+	b.step()
+	assert_eq(boss.speed, shell.speed + 3 * add, "one fall past 50% and 25% counts both: 0.4, 0.5, 0.6, 0.7")
+	assert_eq(b.enemy_numbers(0)["base_speed"], shell.speed + 3 * add)
+
+
+func test_moon_moth_releases_flitters_that_fly_from_its_spot_rules_6_3_and_6_5() -> void:
+	var catalog: Catalog = Fx.catalog()
+	var moth: EnemyType = catalog.enemy(&"moon_moth")
+	var every: int = int(moth.summon["every_ms"]) / Sim.MS_PER_TICK
+	var gap: int = int(moth.summon["gap_ms"]) / Sim.MS_PER_TICK
+	var b: Battle = Fx.battle(Fx.LINE_GRID, [{"groups": [Fx.group("moon_moth", 1)]}], {}, catalog, true)
+	b.start_next_wave()
+	Fx.steps(b, every)
+	var spot: Vector2i = b.enemy_with_id(0).pos
+	var log: Array = _log(b, gap * 3)
+	var flitters: Array = _spawns(log, moth.summon["enemy"])
+	assert_eq(flitters.size(), moth.summon["count"])
+	var ticks: Array[int] = []
+	for entry: Array in flitters:
+		ticks.append(entry[0])
+		assert_eq(entry[1]["pos"], spot, "each at the spot where the batch began")
+		var flitter: EnemyState = b.enemy_with_id(int(entry[1]["id"]))
+		assert_true(flitter.flying)
+		assert_eq(flitter.fly_from, spot, "flying straight to the base from there")
+		assert_eq(flitter.wave, 0)
+	assert_eq(ticks, [every, every + gap, every + 2 * gap] as Array[int])
+
+
+func test_a_night_bell_slows_the_moon_moth_rules_6_3_and_5_5() -> void:
+	var catalog: Catalog = Fx.catalog()
+	var night: TowerStats = catalog.tower(&"lullaby_bell").stats(3, 1)
+	var b: Battle = Fx.battle(Fx.LINE_GRID, [{"groups": [Fx.group("moon_moth", 1)]}], {"start_gold": 2000, "towers": ["lullaby_bell"]}, catalog, true)
+	b.place_tower(Vector2i(2, 1), &"lullaby_bell")
+	b.upgrade_tower(Vector2i(2, 1))
+	b.upgrade_tower(Vector2i(2, 1), 1)
+	b.start_next_wave()
+	Fx.steps(b, 5)
+	assert_eq(b.enemy_with_id(0).slow_pct, night.slow_pct)
+
+
+func test_old_tusk_breaks_gates_in_its_own_time_rules_6_3_and_7_7() -> void:
+	var catalog: Catalog = Fx.catalog()
+	var tusk: EnemyType = catalog.enemy(&"old_tusk")
+	assert_true(tusk.break_ms < catalog.enemy(&"gatecrasher").break_ms)
+	var b: Battle = Fx.battle(Fx.FORK_GRID, [{"groups": [Fx.group("old_tusk", 1)]}], {"gates": 1}, catalog, true)
+	b.place_gate(Vector2i(1, 3))
+	b.start_next_wave()
+	var log: Array = _log(b, 4000)
+	var started: int = -1
+	var broken: int = -1
+	for entry: Array in log:
+		if entry[1]["kind"] == &"break_started":
+			started = entry[0]
+		if entry[1]["kind"] == &"gate_broken":
+			broken = entry[0]
+	var arrive: int = (4 * Sim.UNIT + tusk.speed * 10 - 1) / (tusk.speed * 10) - 1
+	assert_eq(started, arrive, "at the center before the gate, 4 tiles along its own route")
+	assert_eq(broken - started, tusk.break_ms / Sim.MS_PER_TICK)
+
+
+func test_old_tusk_releases_dusk_moths_once_at_half_health_rules_6_3() -> void:
+	var catalog: Catalog = Fx.catalog()
+	var tusk: EnemyType = catalog.enemy(&"old_tusk")
+	var rel: Dictionary = tusk.release
+	var gap: int = int(rel["gap_ms"]) / Sim.MS_PER_TICK
+	var b: Battle = Fx.battle(Fx.LINE_GRID, [{"groups": [Fx.group("old_tusk", 1)]}], {}, catalog, true)
+	b.start_next_wave()
+	Fx.steps(b, 30)
+	var boss: EnemyState = b.enemy_with_id(0)
+	boss.health = boss.max_health * (int(rel["at_pct"]) + 1) / 100
+	b.step()
+	assert_eq(b._releases.size(), 0, "above half: nothing")
+	boss.health = boss.max_health * int(rel["at_pct"]) / 100
+	var fell_at: int = b.tick
+	var log: Array = _log(b, 1 + gap * int(rel["count"]))
+	var spot: Vector2i = Vector2i.ZERO
+	for entry: Array in log:
+		if entry[1]["kind"] == &"released":
+			spot = entry[1]["pos"]
+			assert_eq(entry[0], fell_at)
+	var moths: Array = _spawns(log, rel["enemy"])
+	var ticks: Array[int] = []
+	for entry: Array in moths:
+		ticks.append(entry[0])
+		assert_eq(entry[1]["pos"], spot)
+	var expected: Array[int] = []
+	for k: int in int(rel["count"]):
+		expected.append(fell_at + 1 + k * gap)
+	assert_eq(ticks, expected, "starting on the next tick, 0.3 s apart")
+	boss.health = 1
+	assert_eq(_spawns(_log(b, 40), rel["enemy"]).size(), 0, "only the first time")
+
+
+func test_old_tusk_releases_its_moths_even_if_the_same_hit_defeats_it_rules_6_3() -> void:
+	var catalog: Catalog = Fx.catalog_with_enemy("old_tusk", {"health": 100})
+	var bow: TowerStats = catalog.tower(&"longbow_loft").stats(3, 0)
+	assert_true(bow.damage >= 100)
+	var b: Battle = Fx.battle(Fx.LINE_GRID, [{"groups": [Fx.group("old_tusk", 1)]}], {"start_gold": 2000, "towers": ["longbow_loft"]}, catalog, true)
+	b.place_tower(Vector2i(2, 1), &"longbow_loft")
+	b.upgrade_tower(Vector2i(2, 1))
+	b.upgrade_tower(Vector2i(2, 1), 0)
+	b.start_next_wave()
+	var log: Array = _log(b, 200)
+	var defeated: int = -1
+	for entry: Array in log:
+		if entry[1]["kind"] == &"defeated" and entry[1]["enemy"] == &"old_tusk":
+			defeated = entry[0]
+	assert_eq(defeated, 0, "one arrow on its first tick")
+	var moths: Array = _spawns(log, catalog.enemy(&"old_tusk").release["enemy"])
+	assert_eq(moths.size(), catalog.enemy(&"old_tusk").release["count"])
+	assert_eq(moths[0][0], 1)
