@@ -109,14 +109,40 @@ func _rebuild(preview: Array[Dictionary]) -> void:
 	if expanded:
 		var grid: GridContainer = GridContainer.new()
 		grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		grid.columns = _columns(preview)
-		grid.add_theme_constant_override(&"h_separation", 12)
+		var compact: bool = _is_compact(preview)
+		grid.columns = _compact_columns(preview) if compact else _columns(preview)
+		grid.add_theme_constant_override(&"h_separation", 10 if compact else 12)
 		grid.add_theme_constant_override(&"v_separation", 10)
 		for entry: Dictionary in preview:
-			var row: TapRow = _row(entry)
+			var row: TapRow = _cell(entry) if compact else _row(entry)
 			rows.append(row)
 			grid.add_child(row)
 		column.add_child(grid)
+
+
+## Three or more groups in the wide panel use small upright cells, up to four across, so
+## even the longest wave takes one line of height. A boss row or an opened row needs the
+## width and uses the rows below instead.
+func _is_compact(preview: Array[Dictionary]) -> bool:
+	if not wide or preview.size() < 3 or not open_rows.is_empty():
+		return false
+	for entry: Dictionary in preview:
+		if battle.catalog.enemy(entry["enemy"]).boss:
+			return false
+	return true
+
+
+## As many cells across as the panel holds with every name whole at the small size.
+func _compact_columns(preview: Array[Dictionary]) -> int:
+	var font: Font = UiTheme.font(UiTheme.WEIGHT_BOLD)
+	var widest: float = 0.0
+	for entry: Dictionary in preview:
+		widest = maxf(widest, font.get_string_size(battle.catalog.enemy(entry["enemy"]).name, HORIZONTAL_ALIGNMENT_LEFT, -1, UiTheme.FONT_SMALL).x)
+	var inner: float = 1048.0 - 2.0 * 14.0 - 2.0 * 16.0
+	var columns: int = mini(4, preview.size())
+	while columns > 2 and (inner - 10.0 * float(columns - 1)) / float(columns) - 24.0 < widest:
+		columns -= 1
+	return columns
 
 
 ## Two rows side by side when the panel is wide and every row is short, so a wave with
@@ -150,6 +176,43 @@ func _chip(entry: Dictionary) -> Control:
 	if _unseen.has(entry["enemy"]):
 		chip.add_child(_new_tag())
 	return chip
+
+
+## A small upright cell: the picture (with the New tag beside it), the name, and the
+## count with the entrance letter. About 190 px tall.
+func _cell(entry: Dictionary) -> TapRow:
+	var type: EnemyType = battle.catalog.enemy(entry["enemy"])
+	var cell: TapRow = TapRow.new()
+	cell.set_look(Palette.PANEL_RAISED, Palette.PANEL_EDGE, 3, 12)
+	cell.tapped.connect(toggle_row.bind(type.id))
+	cell.body.alignment = BoxContainer.ALIGNMENT_CENTER
+	cell.body.add_theme_constant_override(&"separation", 0)
+	var top: HBoxContainer = HBoxContainer.new()
+	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top.add_child(GlyphIcon.new(64.0).show_enemy(type.id))
+	var gap: Control = UiKit.spacer()
+	gap.size_flags_vertical = Control.SIZE_FILL
+	top.add_child(gap)
+	if _unseen.has(type.id):
+		top.add_child(_new_tag())
+	cell.body.add_child(top)
+	var name_label: Label = UiKit.heading(type.name)
+	name_label.add_theme_font_size_override(&"font_size", UiTheme.FONT_SMALL)
+	name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	cell.body.add_child(name_label)
+	var amount: HFlowContainer = HFlowContainer.new()
+	amount.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	amount.add_theme_constant_override(&"h_separation", 10)
+	var count: Label = UiKit.heading("x%d" % int(entry["count"]))
+	count.add_theme_font_size_override(&"font_size", UiTheme.FONT_SMALL)
+	count.autowrap_mode = TextServer.AUTOWRAP_OFF
+	amount.add_child(count)
+	var from: Label = UiKit.label("from %s" % BattleText.entrance_letter(int(entry["entrance"])), &"SoftLabel")
+	from.add_theme_font_size_override(&"font_size", UiTheme.FONT_SMALL)
+	from.autowrap_mode = TextServer.AUTOWRAP_OFF
+	amount.add_child(from)
+	cell.body.add_child(amount)
+	return cell
 
 
 func _row(entry: Dictionary) -> TapRow:

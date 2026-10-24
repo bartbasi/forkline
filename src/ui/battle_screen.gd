@@ -71,6 +71,8 @@ var _top_wrap: MarginContainer
 var _top_box: VBoxContainer
 var _dock_wrap: MarginContainer
 var _dock: VBoxContainer
+## Over the map, above the dock: where the hint floats in portrait.
+var _hint_layer: Control
 var _side: ScrollContainer
 var _side_wrap: MarginContainer
 var _side_box: VBoxContainer
@@ -126,6 +128,10 @@ func _init() -> void:
 	_build_panels()
 	_build_containers()
 	_stage.add_child(_dock_wrap)
+	_hint_layer = Control.new()
+	_hint_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_hint_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stage.add_child(_hint_layer)
 	_sheet = VBoxContainer.new()
 	_sheet.alignment = BoxContainer.ALIGNMENT_END
 	_sheet.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -370,8 +376,9 @@ func _relayout() -> void:
 	for panel: BattlePanel in [hud, gate_tray, pause_strip, hint_banner, preview, build_panel, tower_panel, enemy_panel]:
 		panel.set_wide(wide)
 	if not landscape:
-		for panel: BattlePanel in [gate_tray, pause_strip, hint_banner, preview]:
+		for panel: BattlePanel in [pause_strip, hint_banner, preview]:
 			panel.set_tight(true, DOCK_MARGIN)
+	gate_tray.set_chip(not landscape)
 	_side.custom_minimum_size.x = clampf(safe.size.x * 0.4, SIDE_MIN, SIDE_WIDTH)
 	_place_context()
 	_sheet.visible = _context != null and not landscape
@@ -385,25 +392,30 @@ func _arrange() -> void:
 	if mode == _arranged:
 		return
 	_arranged = mode
-	for node: Control in [hud, hud.feedback_box, gate_tray, pause_strip, hint_banner, preview, build_panel, tower_panel, enemy_panel, map_area, _top_wrap, _side]:
+	for node: Control in [hud, hud.feedback_box, gate_tray, gate_tray.feedback_box, pause_strip, hint_banner, preview, build_panel, tower_panel, enemy_panel, map_area, _top_wrap, _side]:
 		var parent: Node = node.get_parent()
 		if parent != null:
 			parent.remove_child(node)
 	_flow.vertical = not landscape
 	if landscape:
+		hud.set_gate_slot(null)
 		_flow.add_child(map_area)
 		_flow.add_child(_side)
 		for node: Control in [hud, gate_tray, pause_strip, hint_banner, preview]:
 			_side_box.add_child(node)
 		hud.column.add_child(hud.feedback_box)
+		gate_tray.column.add_child(gate_tray.feedback_box)
 	else:
 		_flow.add_child(_top_wrap)
 		_flow.add_child(map_area)
 		_top_box.add_child(hud)
-		# The dock, top to bottom. The HUD's messages float here too, so a refusal never
-		# makes the HUD taller.
-		for node: Control in [hud.feedback_box, hint_banner, gate_tray, pause_strip, preview]:
+		# The gate chip sits in the HUD's first row. The dock, top to bottom, holds the
+		# messages (so a refusal never makes the HUD taller), the Paused strip and the
+		# preview. The hint floats over a free row of the map (_place_hint).
+		hud.set_gate_slot(gate_tray)
+		for node: Control in [hud.feedback_box, gate_tray.feedback_box, pause_strip, preview]:
 			_dock.add_child(node)
+		_hint_layer.add_child(hint_banner)
 	_context_parent_changed()
 
 
@@ -464,6 +476,67 @@ func _update_pan() -> void:
 ## The dock hides while the sheet is open, so the two never overlap.
 func _sync_dock() -> void:
 	_dock_wrap.visible = not landscape and _context == null
+	_hint_layer.visible = _dock_wrap.visible
+
+
+## In portrait the hint takes no height. It floats over the rows of the map that hold
+## nothing to see or tap (no build spot, gate socket, entrance, home or highlighted
+## cell), the free band nearest the highlight, or the bottom of the map when there is
+## no highlight. A map with no free band gets it at the top of the dock instead.
+func _place_hint() -> void:
+	if landscape or battle == null or not hint_banner.visible or hint_banner.get_parent() == null:
+		return
+	var top: float = _free_band_top(HintBanner.HEIGHT)
+	if top < 0.0:
+		if hint_banner.get_parent() != _dock:
+			hint_banner.get_parent().remove_child(hint_banner)
+			_dock.add_child(hint_banner)
+			_dock.move_child(hint_banner, 0)
+		return
+	if hint_banner.get_parent() != _hint_layer:
+		hint_banner.get_parent().remove_child(hint_banner)
+		_hint_layer.add_child(hint_banner)
+	hint_banner.position = Vector2(EDGE, top)
+	hint_banner.size = Vector2(maxf(Layout.MIN_TOUCH, _stage.size.x - 2.0 * EDGE), HintBanner.HEIGHT)
+
+
+## The top, in stage coordinates, of a band `height` tall made of whole map rows with
+## nothing in them to see or tap. -1 when there is none.
+func _free_band_top(height: float) -> float:
+	var cell_px: float = _cell_px()
+	if cell_px <= 0.0:
+		return -1.0
+	var rows: int = battle.level.rows
+	var busy: PackedByteArray = PackedByteArray()
+	busy.resize(rows)
+	var cells: Array[Vector2i] = []
+	cells.append_array(battle.level.spots)
+	cells.append_array(battle.level.sockets)
+	cells.append_array(battle.level.entrances)
+	cells.append(battle.level.base)
+	cells.append(battle.level.hint_cell)
+	for cell: Vector2i in cells:
+		if cell.y >= 0 and cell.y < rows:
+			busy[cell.y] = 1
+	var need: int = maxi(1, ceili((height - 0.5) / cell_px))
+	var anchor: float = float(battle.level.hint_cell.y) + 0.5 if battle.level.hint_cell.y >= 0 else float(rows) - 0.5
+	var best: int = -1
+	var best_d: float = INF
+	for first: int in range(0, rows - need + 1):
+		var free: bool = true
+		for r: int in range(first, first + need):
+			if busy[r] == 1:
+				free = false
+		if free:
+			var d: float = absf(float(first) + float(need) * 0.5 - anchor)
+			if d < best_d:
+				best_d = d
+				best = first
+	if best < 0:
+		return -1.0
+	var map_top: float = map_area.get_global_rect().position.y + _map_base.y
+	var middle: float = map_top + (float(best) + float(need) * 0.5) * cell_px
+	return middle - height * 0.5 - _stage.get_global_rect().position.y
 
 
 func _apply_pan() -> void:
@@ -513,6 +586,7 @@ func frame(delta: float) -> void:
 		_context.refresh()
 	_handle(events)
 	_watch_sights()
+	_place_hint()
 	if _drag_active and battle.phase != Battle.Phase.BUILD:
 		cancel_drag()
 	if not _drag_active:
@@ -990,7 +1064,7 @@ func _notification(what: int) -> void:
 		# Parts that are not in the tree when the screen goes (the other layout's, the
 		# closed panels) are freed here so nothing leaks.
 		# One may hold another (the HUD holds its message box), so each is checked as it comes.
-		for part: Variant in [hud, hud.feedback_box, gate_tray, pause_strip, hint_banner, preview, build_panel, tower_panel, enemy_panel, map_area, _top_wrap, _side, ghost, _sheet]:
+		for part: Variant in [hud, hud.feedback_box, gate_tray, gate_tray.feedback_box, pause_strip, hint_banner, preview, build_panel, tower_panel, enemy_panel, map_area, _top_wrap, _side, ghost, _sheet]:
 			if is_instance_valid(part) and (part as Control).get_parent() == null:
 				(part as Control).free()
 		for modal: Modal in _modals + _modals_gone:

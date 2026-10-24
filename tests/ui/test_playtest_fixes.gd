@@ -290,7 +290,7 @@ func test_the_hint_closes_on_a_tap_and_when_the_first_wave_starts() -> void:
 	progress.seen.erase(&"r1_l1")
 	var screen: BattleScreen = _screen(Fx.battle(&"r1_l1"), progress)
 	assert_true(screen.hint_banner.visible)
-	screen.hint_banner.tap_area.tapped.emit()
+	screen.hint_banner.tap()
 	assert_false(screen.hint_banner.visible, "a tap on the banner closes it")
 	assert_true(progress.seen.has(&"r1_l1"))
 	var other: Progress = _seen_all(Fx.battle(&"r1_l1"))
@@ -351,14 +351,18 @@ func test_back_on_a_first_sight_card_closes_it_and_counts_it_as_read() -> void:
 func test_the_dock_holds_the_floating_parts_in_portrait_only() -> void:
 	var screen: BattleScreen = _screen(Fx.battle(&"r1_l2"), _seen_all(Fx.battle(&"r1_l2")))
 	screen.apply_layout(Flow.COVER, Flow.COVER_SAFE)
-	for part: Control in [screen.hint_banner, screen.gate_tray, screen.pause_strip, screen.preview, screen.hud.feedback_box]:
+	for part: Control in [screen.pause_strip, screen.preview, screen.hud.feedback_box, screen.gate_tray.feedback_box]:
 		assert_eq(part.get_parent(), screen._dock, "%s floats over the map in portrait" % part.get_class())
+	assert_eq(screen.hint_banner.get_parent(), screen._hint_layer, "the hint floats over a free row of the map")
 	assert_eq(screen.hud.get_parent(), screen._top_box, "only the HUD takes height")
+	assert_true(screen.hud.is_ancestor_of(screen.gate_tray), "the gate chip sits in the HUD's first row")
+	assert_true(screen.gate_tray.chip)
 	assert_true(screen.preview.expanded, "the preview is open in a build phase, in portrait too")
 	screen.apply_layout(Flow.INNER, Flow.INNER_SAFE)
 	for part: Control in [screen.hint_banner, screen.gate_tray, screen.pause_strip, screen.preview]:
 		assert_eq(part.get_parent(), screen._side_box)
 	assert_eq(screen.hud.feedback_box.get_parent(), screen.hud.column, "the HUD keeps its own message box in the side column")
+	assert_false(screen.gate_tray.chip, "the side column has room for the full strip")
 
 
 func test_info_names_fit_without_shrinking() -> void:

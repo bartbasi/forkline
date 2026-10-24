@@ -32,6 +32,9 @@ var _row_mid: HBoxContainer
 var _row_call: HBoxContainer
 var _wide: bool = true
 var _call_state: String = ""
+## A part that sits in the first row, between the numbers and the pause button: the
+## gate chip in portrait. Null for none.
+var _gate_slot: Control = null
 
 
 func _init() -> void:
@@ -50,7 +53,7 @@ func _init() -> void:
 	column.add_child(feedback_box)
 	_stats = HBoxContainer.new()
 	_stats.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_stats.add_theme_constant_override(&"separation", 22)
+	_stats.add_theme_constant_override(&"separation", 10)
 	lives_label = _stat(&"heart")
 	gold_label = _stat(&"coin")
 	wave_label = _stat(&"moon")
@@ -75,6 +78,13 @@ func set_wide(value: bool) -> void:
 	wide = value
 	if value != _wide:
 		_arrange(value)
+
+
+## Puts a part (the gate chip) in the first row of the portrait arrangement, or takes it
+## out again with null. The caller removes it from its old parent first.
+func set_gate_slot(node: Control) -> void:
+	_gate_slot = node
+	_arrange(_wide)
 
 
 ## Shows the speed the clock runs at.
@@ -104,9 +114,9 @@ func refresh(new_battle: Battle = null) -> void:
 
 func _stat(glyph: StringName) -> Label:
 	var box: HBoxContainer = HBoxContainer.new()
-	box.add_theme_constant_override(&"separation", 8)
+	box.add_theme_constant_override(&"separation", 6)
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.add_child(GlyphIcon.new(72.0).show_glyph(glyph))
+	box.add_child(GlyphIcon.new(56.0).show_glyph(glyph))
 	var l: Label = UiKit.label("0")
 	l.add_theme_font_override(&"font", UiTheme.font(UiTheme.WEIGHT_BOLD))
 	l.add_theme_font_size_override(&"font_size", UiTheme.FONT_BUTTON)
@@ -121,12 +131,16 @@ func _stat(glyph: StringName) -> Label:
 func _arrange(is_wide: bool) -> void:
 	_wide = is_wide
 	var movers: Array[Control] = [_stats, pause_button, call_button]
+	if _gate_slot != null:
+		movers.append(_gate_slot)
 	movers.append_array(speed_buttons)
 	for node: Control in movers:
 		if node.get_parent() != null:
 			node.get_parent().remove_child(node)
 	_row_top.add_child(_stats)
 	if is_wide:
+		if _gate_slot != null:
+			_row_top.add_child(_gate_slot)
 		_row_top.add_child(pause_button)
 		for b: TapButton in speed_buttons:
 			_row_mid.add_child(b)

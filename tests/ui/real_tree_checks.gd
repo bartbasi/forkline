@@ -918,7 +918,7 @@ func _floor_state(screen: BattleScreen, label: String, hint: bool, folded: bool,
 	check(map_rect.end.y <= COVER_SAFE.end.y + 1.0, "the whole map is inside the safe area (%s)" % where)
 	check(map_rect.position.x >= -0.5 and map_rect.end.x <= COVER.x + 0.5, "the map fits the width (%s)" % where)
 	check(screen.hud.get_global_rect().position.y >= COVER_SAFE.position.y - 0.5, "the HUD is inside the safe area (%s)" % where)
-	for part: Control in [screen.hint_banner, screen.gate_tray, screen.pause_strip, screen.preview, screen.hud.feedback_box]:
+	for part: Control in [screen.hint_banner, screen.pause_strip, screen.preview, screen.hud.feedback_box, screen.gate_tray.feedback_box]:
 		if part.is_visible_in_tree():
 			var r: Rect2 = part.get_global_rect()
 			check(r.position.y >= screen.hud.get_global_rect().end.y - 1.0, "the dock never covers the HUD (%s)" % where)
@@ -926,7 +926,112 @@ func _floor_state(screen: BattleScreen, label: String, hint: bool, folded: bool,
 	_inside_and_big(screen, COVER, where)
 
 
+# What stays in sight (region 1, cover portrait, test insets): the home, every build spot,
+# every gate socket and every entrance, and any tower on a spot, in the default build state
+# (gate chip, preview open, no hint, no panel) for every wave's preview, and during a wave with
+# the preview folded. The hint never covers any of them, nor the highlighted cell. The Paused
+# strip and the messages may cover more, but never the highlighted cell.
+
+func _cell_rect(screen: BattleScreen, cell: Vector2i) -> Rect2:
+	var side: float = screen._cell_px()
+	return Rect2(screen.map_view.get_global_transform() * (Vector2(cell) * MapView.CELL), Vector2(side, side)).grow(-3.0)
+
+
+func _must_see(b: Battle) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	cells.append_array(b.level.spots)
+	cells.append_array(b.level.sockets)
+	cells.append_array(b.level.entrances)
+	cells.append(b.level.base)
+	return cells
+
+
+func _dock_rects(screen: BattleScreen) -> Array[Rect2]:
+	var rects: Array[Rect2] = []
+	for part: Control in [screen.hud.feedback_box, screen.gate_tray.feedback_box, screen.pause_strip, screen.preview]:
+		if part.is_visible_in_tree():
+			rects.append(part.get_global_rect())
+	return rects
+
+
+func _first_hit(screen: BattleScreen, cells: Array[Vector2i], rects: Array[Rect2]) -> String:
+	for cell: Vector2i in cells:
+		var area: Rect2 = _cell_rect(screen, cell)
+		for r: Rect2 in rects:
+			if r.intersects(area):
+				return "cell %s (rect %s) is covered by %s" % [cell, area, r]
+		if area.end.y > COVER_SAFE.end.y or area.position.y < screen.hud.get_global_rect().end.y - 4.0:
+			return "cell %s is outside the map slot" % cell
+	return ""
+
+
+func _stays_in_sight() -> void:
+	for n: int in range(1, 7):
+		var id: StringName = StringName("r1_l%d" % n)
+		var b: Battle = BattleFixtures.battle(id)
+		b.gold = 5000
+		for cell: Vector2i in b.level.spots:
+			b.place_tower(cell, b.level.towers[0])
+		var vp: SubViewport = _viewport(COVER)
+		var screen: BattleScreen = BattleScreen.new()
+		screen.setup(b, null, _all_seen())
+		await _hosted(vp, screen, COVER, COVER_SAFE)
+		var must: Array[Vector2i] = _must_see(b)
+		check(screen.gate_tray.visible == (b.level.gates > 0), "%s: the gate chip shows when the level has gates" % id)
+		if screen.gate_tray.visible:
+			var chip: Rect2 = screen.gate_tray.get_global_rect()
+			check(screen.hud.get_global_rect().encloses(chip), "%s: the gate chip is inside the HUD" % id)
+			check(chip.size.x >= 150.0 and chip.size.y >= 150.0, "%s: the gate chip is a 48 dp target (%s)" % [id, chip.size])
+		# 1. The default build state, with every wave's preview open.
+		for wave: int in b.wave_count():
+			b.waves_started = wave
+			screen.preview.refresh()
+			await _frames(3)
+			check(screen.preview.expanded, "%s wave %d: the preview is open" % [id, wave + 1])
+			var hit: String = _first_hit(screen, must, _dock_rects(screen))
+			check(hit.is_empty(), "%s wave %d, default build state: %s" % [id, wave + 1, hit])
+		b.waves_started = 0
+		screen.preview.refresh()
+		# 3. With the hint: it is on a free row of the map, away from everything that matters.
+		screen.hint_banner.show_hint(b.level.hint_text)
+		screen.map_view.show_hint(b.level.hint_cell)
+		await _frames(3)
+		check(screen.hint_banner.get_parent() == screen._hint_layer, "%s: the hint floats over a free row of the map" % id)
+		var important: Array[Vector2i] = must.duplicate()
+		important.append(b.level.hint_cell)
+		var hint_rect: Rect2 = screen.hint_banner.get_global_rect()
+		var rects: Array[Rect2] = _dock_rects(screen)
+		rects.append(hint_rect)
+		var hint_hit: String = _first_hit(screen, important, rects)
+		check(hint_hit.is_empty(), "%s with the hint: %s" % [id, hint_hit])
+		check(hint_rect.size.y >= 150.0, "%s: the hint is a 48 dp target (%s)" % [id, hint_rect.size.y])
+		check(COVER_SAFE.encloses(hint_rect), "%s: the hint is inside the safe area (%s)" % [id, hint_rect])
+		# 4. The Paused strip and the messages may cover more, but never the highlighted cell.
+		screen.freeze()
+		screen.hud.show_feedback("The wave is still arriving.")
+		screen.gate_tray.show_feedback("Gates are locked until the wave is over.")
+		await _frames(3)
+		var soft_rects: Array[Rect2] = _dock_rects(screen)
+		soft_rects.append(hint_rect)
+		var soft: String = _first_hit(screen, [b.level.hint_cell] as Array[Vector2i], soft_rects)
+		check(soft.is_empty(), "%s paused with messages: %s" % [id, soft])
+		screen.resume()
+		screen.hint_banner.dismiss()
+		screen.hud.clear_feedback()
+		screen.gate_tray.clear_feedback()
+		# 2. During a wave, with the preview folded.
+		b.start_next_wave()
+		BattleFixtures.steps(b, 4)
+		await _frames(3)
+		check(not screen.preview.expanded, "%s: the preview is folded during a wave" % id)
+		var wave_hit: String = _first_hit(screen, must, _dock_rects(screen))
+		check(wave_hit.is_empty(), "%s during a wave: %s" % [id, wave_hit])
+		vp.queue_free()
+		await _frames(2)
+
+
 func _cell_floor() -> void:
+	await _stays_in_sight()
 	var level_ids: Array[String] = ["r1_l1", "r1_l2", "r1_l3", "r1_l4", "r1_l5", "r1_l6", "tall"]
 	for level_id: String in level_ids:
 		var b: Battle = _tall_battle() if level_id == "tall" else BattleFixtures.battle(StringName(level_id))
