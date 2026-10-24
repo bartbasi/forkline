@@ -1,6 +1,6 @@
 # Region 1 tuning plan
 
-Owner: game designer. 2026-10-24. Answers the balance report docs/balance/region1-2026-10-23.md (commit a240283). RULES.md holds the rules and numbers; this file says what changed in region 1, why, and exactly what the level designer types in.
+Owner: game designer. 2026-10-24. Answers the balance report docs/balance/region1-2026-10-23.md (commit a240283). RULES.md holds the rules and numbers; this file says what changed in region 1, why, and exactly what the level designer types in. Section 9 records the independent rerun, docs/balance/region1-2026-10-24.md, which confirms this plan.
 
 ## 1. Decision on S2: option (b)
 
@@ -14,7 +14,7 @@ Why the first report found no window, and what fixes each cause:
 | A tier 1 Catapult reached 3.0 tiles, a tier 1 Sling Post 2.5. On 1-1 the Catapult's spots saw 46% more road (38 cells against 26), so it beat the Sling Post even against single walkers. | Tier 1 Catapult range 2.5. Tier 2 brings 3.0 back with a much wider splash. |
 | The star 3 rules (lose no lives, use no gates, call 4 waves early, at most 3 or 4 towers) left room for one tower type to buy its way through. Bigger waves only made it buy more. | Star 3 rules that limit spending, and waves that always hold both jobs (section 3). |
 
-The result: Sling Posts alone can still win every region 1 level, often with two stars, and Catapults alone can win 1-1 to 1-4 (on Normal, Flitters stop them from 1-5 on, as before). The third star needs both towers.
+The result: Sling Posts alone can still win every region 1 level. They often keep two stars on 1-1, 1-2, 1-4 and 1-6, but rarely on 1-3 and 1-5: 9 to 15 and about 100 two-star wins in 2500 to 3000 searched builds. Catapults alone can win 1-1 to 1-4 (on Normal, Flitters stop them from 1-5 on, as before). They keep two stars on 1-2 and 1-4 only, and win 1-1 and 1-3 with one star. The third star needs both towers. These sentences were corrected on 2026-10-24 from the rerun (section 9).
 
 ## 2. Number changes in data/stats/ (done)
 
@@ -294,3 +294,21 @@ All of it was proven on a scratch copy of the project with the new stats, the ne
 - For Bart: random bots win 1-5 and 1-6 on Normal rarely, because those levels need both towers. The plain mixed recipe wins both. If the playtest finds them too hard, the first lever is fewer Pips in their late crowds. On 1-5 the tier 2 rule keeps the check; on 1-6 "Use no gates" needs the hard late waves.
 - For phase 7: at region 2 strengths (130 to 160) a Pip has 27 to 34 health, more than a tier 2 pumpkin's 24. Region 2 Pip waves should set a lower strength of their own.
 - For the balance analyst: run single-tower searches at 2500 builds or more. On some versions the first single-tower three-star win appeared only after 1029 to 2157 builds. Optional: `level_file=`, `towers=` and `enemies=` options in tools/balance/run.gd would let wave what-ifs run on your own tool.
+
+## 9. The independent rerun, 2026-10-24
+
+The balance analyst reran region 1 on these levels at commit 473d768, with new seeds, longer searches and checks this plan did not run: about 520,000 plays (docs/balance/region1-2026-10-24.md). It confirms the plan.
+
+- No single tower type earns three stars on any level: 0 in all 24 one-tower searches (3000 builds each, two new seeds per tower and level), 0 in 8 longer searches of 8000 builds, and 0 in an exhaustive check of 1-3 (162,720 builds per tower).
+- The plain mixed recipe keeps exactly the lives in section 4, and the random rates reproduce within their error.
+- Every tower and all four tier 3 paths are part of some three-star win.
+- Levels take 5.2 to 6.6 minutes at 1x, the largest wave holds 74 creatures, and the same inputs always give the same result.
+
+What it adds, and my answers:
+
+- S1. The thinnest margin is 1-3, Catapult only, under "Have at most 2 towers": best 14 lives, one under star 2. Any change that makes the Catapult stronger, 1-3's Scamps weaker or star 2 lower must rerun `bash tools/balance/run_exhaust.sh <date> <jobs>` before it lands.
+- S2. Answered in docs/design/FUN_REVIEW_R1.md: yes, with the star lines in the Pause menu.
+- S3. 1-5's third star does not bite: 82% of wins meet it. Kept for now. 1-5's job is the flyer lesson, star 2 does the work there, and tier 3 is taught on 1-6. Revisit after the playtest.
+- S4. The 1-3 Twist "No Upgrades" cannot be won on Normal: 0 wins in 29,880 tier 1 builds of up to 4 towers, and 0 of 250 casual plays (a tower on every spot, never upgraded). RULES 13 stays as it is until the phase 7 Twist pass, because the playtest may change 1-3's waves and the replacement is Bart's call. My lean: Tier 2 Cap, which the plain mixed recipe wins with 9 to 17 lives.
+- S5. Section 1 is corrected.
+- S6, S7 and the RULES 12.5 targets: no change before Bart's playtest. FUN_REVIEW_R1.md gives the reasons and the levers.
