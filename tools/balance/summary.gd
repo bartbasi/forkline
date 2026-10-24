@@ -6,9 +6,17 @@ extends SceneTree
 ##
 ##   godot --headless --path . --script res://tools/balance/summary.gd -- dir=res://docs/balance/raw/2026-10-23
 ##
+## With pass=1 it prints the tables of a run_pass.sh run instead (plain, solo, search, spread, Twist,
+## determinism and benchmark files):
+##
+##   godot --headless --path . --script res://tools/balance/summary.gd -- dir=res://docs/balance/raw/2026-10-24-b1 pass=1
+##
 ## It prints markdown to the console. It reads only files this tool wrote.
 
 const LEVELS: Array[String] = ["r1_l1", "r1_l2", "r1_l3", "r1_l4", "r1_l5", "r1_l6"]
+## The levels of the balance pass (pass=1).
+const PASS_LEVELS: Array[String] = ["r1_l1", "r1_l2", "r1_l3", "r1_l4", "r1_l5", "r1_l6", "r2_l1", "r2_l2", "r2_l3", "r2_l4", "r2_l5", "r2_l6"]
+const ATTACKERS: Array[String] = ["sling_post", "pumpkin_catapult", "longbow_loft", "firework_tower"]
 const BUILD_SECONDS: int = 15
 
 var _dir: String = ""
@@ -16,11 +24,18 @@ var _dir: String = ""
 
 func _initialize() -> void:
 	var whatif: bool = false
+	var pass_mode: bool = false
 	for argument: String in OS.get_cmdline_user_args():
 		if argument.begins_with("dir="):
 			_dir = argument.trim_prefix("dir=")
 		if argument == "whatif=1":
 			whatif = true
+		if argument == "pass=1":
+			pass_mode = true
+	if pass_mode:
+		_pass_tables()
+		quit(0)
+		return
 	if whatif:
 		_economy_table()                                    # the old RULES 12.5 guide, kept for the 2026-10-23 report
 	_waves_table()
@@ -707,3 +722,446 @@ func _guided_table() -> void:
 		_row([id, int(t["n"]), _pct(int(t["won"]), int(t["n"])), _pct(int(t["two"]), int(t["n"])),
 			"-" if int(t["won"]) == 0 else "%.1f" % (float(t["lives_sum"]) / int(t["won"])), _pct(int(r["won"]), int(r["n"]))])
 	_dir = saved
+
+
+
+# The tables of a balance pass (run_pass.sh, RULES 12.6).
+
+func _pass_tables() -> void:
+	_pass_waves()
+	_pass_plain_normal()
+	_pass_plain_relaxed()
+	_pass_three_stars()
+	_pass_solo()
+	_pass_random()
+	_pass_length()
+	_pass_size()
+	_pass_twists()
+	_pass_whatif()
+	_pass_coverage()
+	_pass_det()
+	_pass_builds()
+
+
+func _stars_of(bits: int) -> int:
+	return 1 + (1 if (bits & 2) != 0 else 0) + (1 if (bits & 4) != 0 else 0)
+
+
+## "won, 17 lives, 2 stars" or "lost in wave 5 of 11".
+func _cell_of(res: Dictionary, waves: int) -> String:
+	if res.is_empty():
+		return "-"
+	if bool(res["won"]):
+		var stars: int = _stars_of(int(res["stars"]))
+		return "won, %d lives, %d star%s" % [int(res["lives"]), stars, "" if stars == 1 else "s"]
+	return "lost in wave %d of %d" % [int(res["cleared"]) + 1, waves]
+
+
+## The ids of a level: region number and level number.
+func _num(id: String) -> int:
+	return int(id.get_slice("_l", 1))
+
+
+func _region(id: String) -> int:
+	return int(id.get_slice("_", 0).trim_prefix("r"))
+
+
+func _label(id: String) -> String:
+	return "%d-%d" % [_region(id), _num(id)]
+
+
+func _pass_waves() -> void:
+	print("\n### Wave sizes (creatures in each wave, a Puffball counts as itself and its 3 Puffs)\n")
+	_head(["Level", "Waves", "Creatures per wave", "Largest wave"])
+	for id: String in PASS_LEVELS:
+		var d: Dictionary = _read(id + "_plain.json")
+		if d.is_empty():
+			continue
+		var sizes: Array[String] = []
+		for size: Variant in d["wave_sizes"]:
+			sizes.append(str(int(size)))
+		_row([_label(id), d["waves"], ", ".join(sizes), int(d["largest_wave"])])
+
+
+func _pass_plain_normal() -> void:
+	print("\n### Plain mixed recipe on Normal (best placement = most lives, stars break ties; none = no gates)\n")
+	_head(["Level", "Placements tried", "Wins", "Best placement", "Best result", "No gates", "Worst placement", "Worst result", "Bar", "Bar met"])
+	for id: String in PASS_LEVELS:
+		var d: Dictionary = _read(id + "_plain.json")
+		if d.is_empty():
+			continue
+		var n: Dictionary = d["summary"]["normal"]
+		var waves: int = int(d["waves"])
+		var best: Dictionary = n["best"]
+		var need: bool = (_num(id) <= 5) if _region(id) == 1 else (_num(id) <= 2)
+		var bar: String = "15 lives or more" if need else "win"
+		var met: bool = bool(best["won"]) and (int(best["lives"]) >= 15 or not need)
+		_row([_label(id), n["placements"], n["wins"], best["gate"], _cell_of(best, waves), _cell_of(n["none"], waves),
+			n["worst"]["gate"], _cell_of(n["worst"], waves), bar, "yes" if met else "**NO**"])
+
+
+func _pass_plain_relaxed() -> void:
+	print("\n### Plain mixed recipe on Relaxed (bar: wins with no gates and with the best placement)\n")
+	_head(["Level", "Placements tried", "Wins", "No gates", "Best placement", "Best result", "Worst result", "Bar met"])
+	for id: String in PASS_LEVELS:
+		var d: Dictionary = _read(id + "_plain.json")
+		if d.is_empty():
+			continue
+		var r: Dictionary = d["summary"]["relaxed"]
+		var waves: int = int(d["waves"])
+		var met: bool = bool(r["none"]["won"]) and bool(r["best"]["won"])
+		_row([_label(id), r["placements"], r["wins"], _cell_of(r["none"], waves), r["best"]["gate"], _cell_of(r["best"], waves),
+			_cell_of(r["worst"], waves), "yes" if met else "**NO**"])
+
+
+func _pass_three_stars() -> void:
+	print("\n### All three stars: search with every tower the level offers (Normal)\n")
+	_head(["Level", "Seed", "Builds tried", "Wins", "Wins that met the star 3 rule", "Three-star wins", "Tried before the first three-star win", "Most lives left in a three-star win", "Found"])
+	for id: String in PASS_LEVELS:
+		var d: Dictionary = _read(id + "_search_any.json")
+		if d.is_empty():
+			continue
+		var best: int = -1
+		for key: String in d["three_star_lives"]:
+			best = maxi(best, int(key))
+		_row([_label(id), int(d["seed"]), d["evals"], d["wins"], d["rule3_wins"], d["three_star_found"], d["first_three_star_eval"], "-" if best < 0 else best,
+			"yes" if int(d["three_star_found"]) > 0 else "**NO**"])
+
+
+func _pass_solo() -> void:
+	print("\n### No super tower: one attacking tower plus the level's Bells and Bakeries, two seeds (Normal)\n")
+	print("Outcomes are the number of builds that lost, won with 1 star, with 2 stars, with 3 stars. Best is the best result the search found.\n")
+	_head(["Level", "Attacker", "Seed", "Builds tried", "Outcomes (lost / 1 / 2 / 3 stars)", "Wins that met the star 3 rule", "Most lives left in such a win (15 needed)", "Three-star wins", "Best result found"])
+	for id: String in PASS_LEVELS:
+		for only: String in ATTACKERS:
+			for suffix: String in ["a", "b"]:
+				var d: Dictionary = _read("%s_solo_%s_%s.json" % [id, only, suffix])
+				if d.is_empty():
+					continue
+				var o: Dictionary = d["outcomes"]
+				var best: String = "no win"
+				if d.has("top"):
+					best = _cell_of(d["top"]["result"], int(d["top"]["result"]["waves"]))
+				_row([_label(id), only, int(d["seed"]), d["evals"], "%d / %d / %d / %d" % [int(o["lost"]), int(o["1"]), int(o["2"]), int(o["3"])],
+					d["rule3_wins"], "-" if int(d["rule3_best_lives"]) < 0 else d["rule3_best_lives"], d["three_star_found"], best])
+	print("\nVerdict per level (no three-star win in any search is a pass):\n")
+	_head(["Level", "Attackers searched", "Searches", "Three-star wins found", "Verdict"])
+	for id: String in PASS_LEVELS:
+		var attackers: int = 0
+		var threes: int = 0
+		var runs: int = 0
+		for only: String in ATTACKERS:
+			var seen: bool = false
+			for suffix: String in ["a", "b"]:
+				var d: Dictionary = _read("%s_solo_%s_%s.json" % [id, only, suffix])
+				if d.is_empty():
+					continue
+				seen = true
+				runs += 1
+				threes += int(d["three_star_found"])
+			if seen:
+				attackers += 1
+		for extra: Dictionary in _extra_results("extra"):
+			if String(extra["level"]) == id:
+				runs += 1
+				threes += int(extra["three_star_found"])
+		if runs > 0:
+			_row([_label(id), attackers, runs, threes, "pass" if threes == 0 else "**FAIL**"])
+	_pass_extra()
+
+
+func _pass_random() -> void:
+	print("\n### Random play (250 per style, 750 plays per difficulty). Bar: three stars in under 10%\n")
+	_head(["Level", "Seed", "Normal: won", "Normal: keep 15 lives", "Normal: three stars", "Casual / typical / skilled three stars", "Relaxed: won", "Bar met"])
+	for id: String in PASS_LEVELS:
+		var d: Dictionary = _read(id + "_spread.json")
+		if d.is_empty():
+			continue
+		var all: Dictionary = {"n": 0, "won": 0, "two": 0, "three": 0}
+		var relaxed_n: int = 0
+		var relaxed_won: int = 0
+		var by_style: Array[String] = []
+		for style: String in ["casual", "typical", "skilled"]:
+			var t: Dictionary = d["styles"][style]["normal"]
+			for key: String in all:
+				all[key] = int(all[key]) + int(t[key])
+			by_style.append(_pct(int(t["three"]), int(t["n"])))
+			relaxed_n += int(d["styles"][style]["relaxed"]["n"])
+			relaxed_won += int(d["styles"][style]["relaxed"]["won"])
+		var rate: float = 100.0 * int(all["three"]) / maxi(int(all["n"]), 1)
+		_row([_label(id), int(d["seed"]), _pct(int(all["won"]), int(all["n"])), _pct(int(all["two"]), int(all["n"])),
+			"%d of %d (%.1f%%)" % [int(all["three"]), int(all["n"]), rate], " / ".join(by_style), _pct(relaxed_won, relaxed_n), "yes" if rate < 10.0 else "**NO**"])
+
+
+func _pass_length() -> void:
+	print("\n### Length at 1x with no early calls: wave time plus 15 s for each build phase (bar: 5 to 10 minutes)\n")
+	print("Plain: its best placement on Normal (a loss ends early, so only a win gives a length). Search build: the best win of the any-tower search, played again with early calls off.\n")
+	_head(["Level", "Waves", "Plain: wave time", "Plain: total", "Search build, early calls off", "Wave time", "Total", "Plain in 5 to 10 min"])
+	for id: String in PASS_LEVELS:
+		var p: Dictionary = _read(id + "_plain.json")
+		var b: Dictionary = _read(id + "_bench.json")
+		if p.is_empty():
+			continue
+		var waves: int = int(p["waves"])
+		var cells: Array = [_label(id), waves]
+		var plain_total: float = -1.0
+		var best: Dictionary = p["summary"]["normal"]["best"]
+		if bool(best["won"]):
+			var secs: float = float(best["ticks"]) / 20.0
+			plain_total = (secs + BUILD_SECONDS * waves) / 60.0
+			cells.append("%d s" % int(secs))
+			cells.append("%.1f min" % plain_total)
+		else:
+			cells.append_array(["-", "-"])
+		if b.is_empty() or (b["rows"] as Array).is_empty():
+			cells.append_array(["-", "-", "-"])
+		else:
+			var row: Dictionary = b["rows"][0]
+			cells.append(_cell_of({"won": row["calm_won"], "stars": row["calm_stars"], "lives": row["calm_lives"], "cleared": row["calm_waves"]}, waves))
+			var secs2: float = float(row["calm_ticks"]) / 20.0
+			cells.append("%d s" % int(secs2))
+			cells.append("%.1f min" % ((secs2 + BUILD_SECONDS * waves) / 60.0))
+		cells.append("yes" if plain_total >= 5.0 and plain_total <= 10.0 else "**NO**")
+		_row(cells)
+
+
+func _pass_size() -> void:
+	print("\n### Size and speed: largest wave, most creatures on the map at once, microseconds per tick (this PC, headless)\n")
+	_head(["Level", "Largest wave", "Peak: plain best play", "Peak: random plays", "Peak: search plays", "Benchmark build", "Peak", "Mean", "99th pct", "Max", "Mean with 50+ creatures", "99th pct with 50+"])
+	for id: String in PASS_LEVELS:
+		var p: Dictionary = _read(id + "_plain.json")
+		var sp: Dictionary = _read(id + "_spread.json")
+		var se: Dictionary = _read(id + "_search_any.json")
+		var b: Dictionary = _read(id + "_bench.json")
+		if p.is_empty():
+			continue
+		var plain_peak: int = int(p["summary"]["normal"]["best"]["peak"])
+		var rows: Array = b.get("rows", [{}])
+		for row: Variant in rows:
+			var r: Dictionary = row
+			var label: String = "-"
+			if not r.is_empty():
+				label = "search best win" if String(r["label"]).ends_with("search_any") else "most crowded random play"
+			_row([_label(id), int(p["largest_wave"]), plain_peak, sp.get("peak_max", "-"), se.get("peak_max", "-"), label, r.get("peak", "-"), r.get("mean_us", "-"),
+				r.get("p99_us", "-"), r.get("max_us", "-"), "-" if int(r.get("busy_ticks", 0)) == 0 else r["busy_mean_us"], "-" if int(r.get("busy_ticks", 0)) == 0 else r["busy_p99_us"]])
+
+
+func _pass_twists() -> void:
+	print("\n### Twists: some strategy wins on Normal\n")
+	print("Plain: the plain recipe with the Twist, over every placement the Twist leaves. Search: 1500 builds with every tower the Twist leaves.\n")
+	_head(["Level", "Twist", "Plain: placements", "Plain: wins", "Plain: best result", "Plain: no gates", "Search seed", "Search: builds", "Search: wins", "Search: best win", "Normal win found"])
+	var game: GameData = GameData.load_from("res://data")
+	for id: String in PASS_LEVELS:
+		var p: Dictionary = _read(id + "_plain_twist.json")
+		var s: Dictionary = _read(id + "_search_twist.json")
+		if p.is_empty() and s.is_empty():
+			continue
+		var level: LevelData = game.levels[StringName(id)]
+		var n: Dictionary = p.get("summary", {}).get("normal", {})
+		var waves: int = int(p.get("waves", level.waves.size()))
+		var won_plain: bool = not n.is_empty() and int(n["wins"]) > 0
+		var won_search: bool = not s.is_empty() and int(s["wins"]) > 0
+		var best_text: String = "-"
+		if s.has("best_win"):
+			best_text = _cell_of(s["best_win"]["result"], waves)
+		elif s.has("top"):
+			best_text = _cell_of(s["top"]["result"], waves)
+		_row([_label(id), level.twist_name, n.get("placements", "-"), n.get("wins", "-"), _cell_of(n.get("best", {}), waves), _cell_of(n.get("none", {}), waves),
+			int(s.get("seed", 0)), s.get("evals", "-"), s.get("wins", "-"), best_text, "yes" if won_plain or won_search else "**NO**"])
+
+
+func _pass_coverage() -> void:
+	print("\n### Towers and paths in the three-star wins found (any-tower search, Normal): builds using each\n")
+	var keys: Array[String] = ["sling_post", "quickshot", "stone_sling", "pumpkin_catapult", "prize_pumpkin", "jam_pot", "longbow_loft", "giant_bow", "triple_bow",
+		"lullaby_bell", "hush_bell", "night_bell"]
+	var head: Array = ["Level", "Three-star wins"]
+	head.append_array(keys)
+	_head(head)
+	var totals: Dictionary = {}
+	var total_wins: int = 0
+	for id: String in PASS_LEVELS:
+		var use: Dictionary = {}
+		var wins: int = 0
+		var files: Array[String] = [id + "_search_any.json"]
+		for file_name: String in files:
+			var d: Dictionary = _read(file_name)
+			if d.is_empty():
+				continue
+			wins += int(d["three_star_found"])
+			var u: Dictionary = d["three_star_builds_using"]
+			for key: String in u:
+				use[key] = int(use.get(key, 0)) + int(u[key])
+		var cells: Array = [_label(id), wins]
+		for key: String in keys:
+			cells.append(int(use.get(key, 0)))
+			totals[key] = int(totals.get(key, 0)) + int(use.get(key, 0))
+		total_wins += wins
+		_row(cells)
+	var last: Array = ["**all**", total_wins]
+	for key: String in keys:
+		last.append(int(totals.get(key, 0)))
+	_row(last)
+	print("\nTower types that no level in this table offers yet: Firework Tower and Bakery (regions 3 and 4).\n")
+
+
+func _pass_det() -> void:
+	print("\n### Determinism: same inputs, same result\n")
+	print("Each job plays 24 strategies twice and once from saved strategy data, replays them with a save and load mid-wave at 3 points, and repeats a 60 build search. The last column is the same job run again in a new process.\n")
+	_head(["Level", "Seed", "Plays repeated", "Identical", "Save and load mid-wave", "Identical", "Search repeated identical", "Chain hash", "New process: same chain hash"])
+	for id: String in PASS_LEVELS:
+		for variant: String in ["det", "det_twist"]:
+			var d: Dictionary = _read("%s_%s.json" % [id, variant])
+			if d.is_empty():
+				continue
+			var again: Dictionary = _read("%s_det_again.json" % id) if variant == "det" else {}
+			var same: String = "-"
+			if variant == "det" and not again.is_empty():
+				same = "yes" if int(again["chain_hash"]) == int(d["chain_hash"]) else "**NO**"
+			_row([_label(id) + (" Twist" if variant == "det_twist" else ""), int(d["seed"]), d["plays_checked"], d["plays_identical"], d["restores_checked"], d["restores_identical"],
+				d["search_repeat_identical"], int(d["chain_hash"]), same])
+
+
+## The plain recipe of each level written out, and the simplest three-star build the any-tower search found.
+func _pass_builds() -> void:
+	print("\n### Plain recipe, written out\n")
+	for id: String in PASS_LEVELS:
+		var p: Dictionary = _read(id + "_plain.json")
+		if p.is_empty():
+			continue
+		print("**%s**, as played at its best placement (%s):\n" % [_label(id), p["summary"]["normal"]["best"]["gate"]])
+		print("```\n" + String(p["recipe_text"]) + "```\n")
+	print("\n### Three-star builds, written out (simplest found by the any-tower search)\n")
+	for id: String in PASS_LEVELS:
+		var d: Dictionary = _read(id + "_search_any.json")
+		if d.is_empty():
+			continue
+		var best: Dictionary = {}
+		var best_key: int = 1000000
+		for item: Dictionary in d.get("three_star_best", []):
+			var key: int = (item["strategy"]["seq"] as Array).size() * 100 + int(item["result"]["early"]) * 10 + (20 - int(item["result"]["lives"]))
+			if key < best_key:
+				best_key = key
+				best = item
+		if best.is_empty():
+			print("**%s: no three-star build found.**\n" % _label(id))
+			continue
+		var r: Dictionary = best["result"]
+		print("**%s:** %d lives left, %d early calls, seed %d, search of %d builds.\n" % [_label(id), int(r["lives"]), int(r["early"]), int(d["seed"]), int(d["evals"])])
+		print("```\n" + String(best["text"]) + "```\n")
+
+
+## The star 3 what-ifs of run_whatif_b1.sh (files in whatif/).
+func _pass_whatif() -> void:
+	var saved: String = _dir
+	_dir = saved.path_join("whatif")
+	if not FileAccess.file_exists(_dir.path_join("jobs.txt")):
+		_dir = saved
+		return
+	var rules: Dictionary = {}
+	for line: String in FileAccess.get_file_as_string(_dir.path_join("jobs.txt")).split("
+", false):
+		var level: String = ""
+		var tweak: String = ""
+		var out: String = ""
+		for word: String in line.split(" ", false):
+			if word.begins_with("level="):
+				level = word.trim_prefix("level=")
+			if word.begins_with("tweak=star3:"):
+				tweak = word.trim_prefix("tweak=star3:")
+			if word.begins_with("out="):
+				out = word.get_file().get_basename()
+		if tweak != "" and not out.begins_with("check_"):
+			rules[out.get_slice("_solo_", 0).get_slice("_any", 0)] = [level, tweak]
+	print("
+### What-if: other star 3 rules on the levels where one attacker earned three stars (Normal, one seed per search)
+")
+	print("A rule works when the any-tower search still finds three-star wins and no one-attacker search does. A pass here rests on one 2500 build search per tower; the table of longer checks below can overrule it.
+")
+	_head(["Level", "Star 3 rule tried", "Search", "Seed", "Builds tried", "Wins", "Wins that met the rule", "Most lives left in such a win", "Three-star wins", "Verdict"])
+	var keys: Array = rules.keys()
+	keys.sort()
+	for key: String in keys:
+		var level2: String = rules[key][0]
+		var tweak2: String = rules[key][1]
+		var any: Dictionary = _read(key + "_any.json")
+		var any_threes: int = int(any.get("three_star_found", -1))
+		var solo_threes: int = 0
+		var solos_seen: int = 0
+		var rows: Array = []
+		if not any.is_empty():
+			rows.append(["any tower", any])
+		for only: String in ATTACKERS:
+			var d: Dictionary = _read("%s_solo_%s.json" % [key, only])
+			if d.is_empty():
+				continue
+			solos_seen += 1
+			solo_threes += int(d["three_star_found"])
+			rows.append([only + " + support", d])
+		var verdict: String = "pass" if any_threes > 0 and solo_threes == 0 else ("**FAIL: a single attacker wins**" if solo_threes > 0 else "**FAIL: no three-star win at all**")
+		for i: int in rows.size():
+			var d2: Dictionary = rows[i][1]
+			_row([_label(level2), tweak2.replace(";", " "), rows[i][0], int(d2["seed"]), d2["evals"], d2["wins"], d2["rule3_wins"],
+				"-" if int(d2["rule3_best_lives"]) < 0 else d2["rule3_best_lives"], d2["three_star_found"], verdict if i == 0 else ""])
+	# Level 2-3 with Flitters added (a level file, not a rule): its own rule, No tower above tier 2.
+	var variants: Array = [["r2_l3_flitters", "4, 5 and 6"], ["r2_l3_flitters_b", "2, 3 and 4"]]
+	for variant: Array in variants:
+		var flit_any: Dictionary = _read(variant[0] + "_any.json")
+		if flit_any.is_empty():
+			continue
+		print("
+### What-if: level 2-3 with Flitters added to waves 4, 6 and 8 (%s of them), star 3 rule unchanged (No tower above tier 2)
+" % variant[1])
+		_head(["Search", "Seed", "Builds tried", "Wins", "Wins that met the rule", "Most lives left in such a win", "Three-star wins", "Verdict"])
+		var flit_rows: Array = [["any tower", flit_any]]
+		var flit_threes: int = 0
+		for only2: String in ATTACKERS:
+			var d3: Dictionary = _read("%s_solo_%s.json" % [variant[0], only2])
+			if not d3.is_empty():
+				flit_rows.append([only2 + " + support", d3])
+				flit_threes += int(d3["three_star_found"])
+		var flit_verdict: String = "pass" if int(flit_any["three_star_found"]) > 0 and flit_threes == 0 else "**FAIL**"
+		for j: int in flit_rows.size():
+			var d4: Dictionary = flit_rows[j][1]
+			_row([flit_rows[j][0], int(d4["seed"]), d4["evals"], d4["wins"], d4["rule3_wins"], "-" if int(d4["rule3_best_lives"]) < 0 else d4["rule3_best_lives"],
+				d4["three_star_found"], flit_verdict if j == 0 else ""])
+	var checks: Array = _extra_results(".", "check_")
+	if not checks.is_empty():
+		print("
+### Longer checks of the recommended changes (6000 builds for a lone attacker, 2500 for an any-tower search; Normal)
+")
+		print("The file name says the level, the change (tier2 = No tower above tier 2, towers4 = at most 4 towers, nobell = Build no Lullaby Bells, flitters_b = 2-3 with 2, 3 and 4 Flitters) and the tower.
+")
+		_head(["Check", "Seed", "Builds tried", "Wins", "Wins that met the rule", "Most lives left in such a win (15 needed)", "Three-star wins"])
+		for d2: Dictionary in checks:
+			_row([String(d2["file"]).trim_prefix("check_").trim_suffix(".json"), int(d2["seed"]), d2["evals"], d2["wins"], d2["rule3_wins"],
+				"-" if int(d2["rule3_best_lives"]) < 0 else d2["rule3_best_lives"], d2["three_star_found"]])
+	_dir = saved
+
+
+## Every result file in a sub folder of the raw folder (sorted by name), for the longer searches of the report.
+func _extra_results(sub: String, prefix: String = "") -> Array:
+	var out: Array = []
+	var names: PackedStringArray = DirAccess.get_files_at(_dir.path_join(sub))
+	names.sort()
+	for file_name: String in names:
+		if file_name.ends_with(".json") and file_name != "jobs.json" and file_name.begins_with(prefix):
+			var d: Dictionary = _read(sub + "/" + file_name)
+			if d.has("level") and d.has("evals"):
+				d["file"] = file_name
+				out.append(d)
+	return out
+
+
+## Longer lone-attacker searches (extra/): a 2500 build search can miss (2-2).
+func _pass_extra() -> void:
+	var rows: Array = _extra_results("extra")
+	if rows.is_empty():
+		return
+	print("
+Longer lone-attacker searches (6000 builds), added after the pass because a 2500 build search can miss:
+")
+	_head(["Level", "Attacker", "Seed", "Builds tried", "Outcomes (lost / 1 / 2 / 3 stars)", "Wins that met the star 3 rule", "Most lives left in such a win (15 needed)", "Three-star wins"])
+	for d: Dictionary in rows:
+		var o: Dictionary = d["outcomes"]
+		_row([_label(String(d["level"])), String(d["only"]).trim_prefix("solo:"), int(d["seed"]), d["evals"], "%d / %d / %d / %d" % [int(o["lost"]), int(o["1"]), int(o["2"]), int(o["3"])],
+			d["rule3_wins"], "-" if int(d["rule3_best_lives"]) < 0 else d["rule3_best_lives"], d["three_star_found"]])

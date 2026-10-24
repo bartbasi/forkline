@@ -67,8 +67,13 @@ Two more tools: `benchmark.gd` times each tick, and `run.gd mode=det` plays the 
 - `tools/balance/benchmark.gd`: time per tick and peak creatures (`twist=1` for a Twist).
 - `tools/balance/compare_raw.gd`: compares two raw folders file by file (see "Checking the bots"
   below).
-- `tools/balance/summary.gd`: turns the raw JSON into the report's markdown tables.
+- `tools/balance/summary.gd`: turns the raw JSON into the report's markdown tables. `pass=1` prints the tables of
+  a `run_pass.sh` run (plain, solo, search, spread, Twist, determinism and benchmark files, and the what-if
+  files of `run_whatif_b1.sh`). Without it, the old region 1 tables.
 - `tools/balance/run_region1.sh`, `run_whatif.sh`, `run_stats.sh`: the exact job lists and seeds.
+- `tools/balance/run_pass.sh` and `run_whatif_b1.sh`: the job lists of the B1 pass (2026-10-24, raw folder
+  `raw/2026-10-24-b1/`) and its star 3 what-ifs (other rules tried with `tweak=star3:...`, and a level file with
+  Flitters added to 2-3).
 - `tools/balance/run_rerun.sh` and `run_exhaust.sh`: the job lists and seeds of the 2026-10-24 report
   (fresh seeds, two single tower searches per tower, the exhaustive 1-3 check, longer searches).
 - `run.gd` also takes `level_file=PATH`, `towers=PATH` and `enemies=PATH`, which play other
@@ -101,5 +106,13 @@ old recipe. It must list none.
 
 `run_pass.sh DATE JOBS [levels]` writes the job list of a whole pass (all levels of campaign.json by
 default, Twists included) and runs it, at most JOBS at once. `DRY=1` only writes `jobs.txt`. The seeds
-it uses are in the script's header. `EVALS` sets the builds per search (default 3000). `summary.gd`
-does not yet turn the `plain`, `solo` and Twist files into tables; B1 adds that.
+it uses are in the script's header. `EVALS` sets the builds per search (default 3000; the B1 pass used 2500).
+Then `summary.gd dir=... pass=1` prints the tables. Run it from a clean checkout of the commit being measured:
+other agents edit the working tree, and a half-written data file stops a job with exit code 2 and no output file.
+
+**What-ifs on star 3 rules.** `tweak=star3:KIND;N` replaces the level's star 3 rule in memory (`tier_at_most;2`,
+`towers_at_most;5`, `gates_at_most;1`, `early_calls_at_least;6`, `kinds_at_most;3`, `tower_ban;ID`, `no_lives_lost`).
+`run_whatif_b1.sh` plays an any-tower search and one lone-attacker search per attacking tower for each rule.
+
+**Plain mode rows** hold `lives_at` (lives when each wave starts), so a report can say in which wave lives were lost.
+When `compare_raw.gd` compares a plain file made before B1, add `lives_at` to its `ignore` list.

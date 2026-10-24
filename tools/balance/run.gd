@@ -162,6 +162,7 @@ func _read_json(path: String) -> Variant:
 ##   strength:N      every wave's strength
 ##   add_spot:C;R    scenery cell (column C, row R) becomes a build spot; drop_spot:C;R turns a spot into scenery
 ##   last_strength:N the final wave's strength
+##   star3:KIND;N    the level's star 3 rule (star3:tier_at_most;2, star3:towers_at_most;5, star3:no_lives_lost, star3:tower_ban;pumpkin_catapult)
 ## The level is rebuilt through LevelData.from_data, so the usual checks still apply.
 func _apply_tweak(game: GameData, level_id: StringName, tweak: String) -> bool:
 	var data: Dictionary = game.levels[level_id].to_data()
@@ -183,6 +184,15 @@ func _apply_tweak(game: GameData, level_id: StringName, tweak: String) -> bool:
 					wave["strength"] = value
 			"last_strength":
 				data["waves"][data["waves"].size() - 1]["strength"] = value
+			"star3":
+				# star3:KIND;VALUE, for example star3:tier_at_most;2 or star3:no_lives_lost (a kind with no number).
+				var parts: PackedStringArray = kv[1].split(";")
+				var star: Dictionary = {"kind": parts[0]}
+				if parts.size() > 1 and parts[0] == "tower_ban":
+					star["tower"] = parts[1]
+				elif parts.size() > 1:
+					star["value"] = int(parts[1])
+				data["star3"] = star
 			"count_pct":
 				for wave: Dictionary in data["waves"]:
 					for group: Dictionary in wave["groups"]:
@@ -573,7 +583,7 @@ func _plain(ctx: Dictionary) -> Dictionary:
 			var rank: int = _plain_rank(res)
 			var row: Dictionary = {"mode": mode, "gate": Bot.gates_label(gates), "won": res["won"], "stars": res["stars"],
 				"lives": res["lives"], "cleared": res["cleared"], "ticks": res["ticks"], "peak": res["peak"],
-				"wave_ticks": res["wave_ticks"], "boss_hp": res["boss_hp"], "built": res["built"], "digest": res["digest"]}
+				"wave_ticks": res["wave_ticks"], "lives_at": res["lives_at"], "boss_hp": res["boss_hp"], "built": res["built"], "digest": res["digest"]}
 			rows.append(row)
 			if bool(res["won"]):
 				wins += 1
