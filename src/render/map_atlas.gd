@@ -26,8 +26,9 @@ const DROWSY_ANCHOR: Vector2 = Vector2(0.1, 0.95)
 const BOOST_TILE: float = 1.1
 
 const GATE_TILE: float = 1.3
+const HEART_TILE: float = 1.0
 
-enum Kind { TOWER, ENEMY, DROWSY, BUBBLE, BOOST, GATE }
+enum Kind { TOWER, ENEMY, DROWSY, BUBBLE, BOOST, GATE, HEART }
 
 
 ## One picture on the sheet.
@@ -140,7 +141,8 @@ func add_enemy(type: StringName) -> void:
 	enemy_rects[type] = [Rect2(), Rect2(), Rect2(), Rect2()]
 
 
-## The status marks: the drowsy "z z" (four frames), the bubble ring and the boost chevrons.
+## The status marks: the drowsy "z z" (four frames), the bubble ring, the boost chevrons and
+## the heart that floats up from the home when a creature gets through.
 func add_marks() -> void:
 	if _index.has("m:bubble"):
 		return
@@ -167,6 +169,13 @@ func add_marks() -> void:
 	x.center = x.tile * 0.5
 	x.anchor = x.center
 	_add(x)
+	var h: Entry = Entry.new()
+	h.key = "m:heart"
+	h.kind = Kind.HEART
+	h.tile = Vector2(HEART_TILE, HEART_TILE) * CELL
+	h.center = h.tile * 0.5
+	h.anchor = h.center
+	_add(h)
 
 
 ## Every look of a gate on a road that runs across or up and down the screen.
@@ -232,6 +241,8 @@ func paint(canvas: CanvasItem) -> void:
 				Silhouettes.draw_bubble(canvas, at, CELL * texel_scale)
 			Kind.BOOST:
 				Silhouettes.draw_boost(canvas, at, CELL * texel_scale)
+			Kind.HEART:
+				Silhouettes.draw_glyph(canvas, &"heart", at, CELL * texel_scale * 0.92)
 			Kind.GATE:
 				MapArt.draw_gate_at(canvas, at, CELL * texel_scale, e.frame == 1, e.tier as MapArt.Gate)
 

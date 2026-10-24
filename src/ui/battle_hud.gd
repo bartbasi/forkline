@@ -26,7 +26,20 @@ var call_button: TapButton
 var speed: int = 1
 var paused: bool = false
 
+## How long the lives pulse lasts, how far the heart and number grow at the peak, and
+## the tint the pair takes on at the peak.
+const PULSE_TIME: float = 0.3
+const PULSE_GROW: float = 0.3
+const PULSE_TINT: Color = Color(1.0, 0.7, 0.55)
+
 var _stats: HBoxContainer
+var _lives_box: Control
+## The lives the HUD last showed, or -1 before the first read. A drop from this value
+## starts the pulse, so a restored game (its first read) never pulses.
+var _shown_lives: int = -1
+## Seconds into the pulse. Negative: no pulse. Driven by advance_pulse, which the screen
+## calls only while the clock runs, so a pause or a card never leaves a pulse mid-way.
+var _pulse_at: float = -1.0
 var _row_top: HBoxContainer
 var _row_mid: HBoxContainer
 var _row_call: HBoxContainer
@@ -104,16 +117,59 @@ func set_paused(value: bool) -> void:
 func refresh(new_battle: Battle = null) -> void:
 	if new_battle != null:
 		battle = new_battle
+		_shown_lives = -1
+		stop_pulse()
 	if battle == null:
 		return
+	if _shown_lives >= 0 and battle.lives < _shown_lives:
+		# Restarts the pulse from the start, never stacks.
+		_pulse_at = 0.0
+		_show_pulse()
+	_shown_lives = maxi(battle.lives, 0)
 	lives_label.text = str(maxi(battle.lives, 0))
 	gold_label.text = str(battle.gold)
 	wave_label.text = "Wave %d/%d" % [BattleText.wave_number(battle), battle.wave_count()]
 	_refresh_call()
 
 
+## True while the lives pulse is playing.
+func pulsing() -> bool:
+	return _pulse_at >= 0.0
+
+
+## Moves the lives pulse on by `delta` seconds of running game time.
+func advance_pulse(delta: float) -> void:
+	if _pulse_at < 0.0:
+		return
+	_pulse_at += delta
+	if _pulse_at >= PULSE_TIME:
+		stop_pulse()
+	else:
+		_show_pulse()
+
+
+## Ends the pulse and puts the heart and number back at rest.
+func stop_pulse() -> void:
+	_pulse_at = -1.0
+	if _lives_box != null:
+		_lives_box.scale = Vector2.ONE
+		_lives_box.modulate = Color.WHITE
+
+
+## Scale and tint follow one half sine, so the pair grows, then settles back. The scale
+## is the signal; the tint only warms it. The size and the layout never change: the
+## scale turns around the center of the pair.
+func _show_pulse() -> void:
+	var k: float = sin(PI * clampf(_pulse_at / PULSE_TIME, 0.0, 1.0))
+	_lives_box.pivot_offset = _lives_box.size * 0.5
+	_lives_box.scale = Vector2.ONE * (1.0 + PULSE_GROW * k)
+	_lives_box.modulate = Color.WHITE.lerp(PULSE_TINT, k)
+
+
 func _stat(glyph: StringName) -> Label:
 	var box: HBoxContainer = HBoxContainer.new()
+	if glyph == &"heart":
+		_lives_box = box
 	box.add_theme_constant_override(&"separation", 6)
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(GlyphIcon.new(56.0).show_glyph(glyph))

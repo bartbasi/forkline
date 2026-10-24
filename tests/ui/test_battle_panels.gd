@@ -198,6 +198,62 @@ func test_hud_shows_too_many_waves_and_the_last_wave() -> void:
 	assert_eq(last_hud.feedback_text(), "That was the last wave.")
 
 
+func test_a_lives_drop_starts_the_hud_pulse_and_it_scales_around_the_center() -> void:
+	var b: Battle = Fx.battle()
+	var hud: BattleHud = _hud(b)
+	assert_false(hud.pulsing(), "nothing at rest")
+	var box: Control = hud.lives_label.get_parent() as Control
+	box.size = Vector2(80.0, 56.0)
+	var before_size: Vector2 = box.size
+	b.lives -= 1
+	hud.refresh()
+	assert_true(hud.pulsing())
+	assert_eq(hud.lives_label.text, str(b.lives))
+	hud.advance_pulse(BattleHud.PULSE_TIME * 0.5)
+	assert_true(box.scale.x > 1.2, "grown at the peak")
+	assert_eq(box.scale.x, box.scale.y)
+	assert_eq(box.pivot_offset, before_size * 0.5, "turns around the center")
+	assert_eq(box.size, before_size, "the layout size never changes")
+	assert_ne(box.modulate, Color.WHITE, "warm tint at the peak")
+	hud.advance_pulse(BattleHud.PULSE_TIME)
+	assert_false(hud.pulsing())
+	assert_eq(box.scale, Vector2.ONE)
+	assert_eq(box.modulate, Color.WHITE)
+
+
+func test_leaks_in_quick_succession_restart_the_pulse_and_do_not_stack() -> void:
+	var b: Battle = Fx.battle()
+	var hud: BattleHud = _hud(b)
+	var box: Control = hud.lives_label.get_parent() as Control
+	b.lives -= 1
+	hud.refresh()
+	hud.advance_pulse(0.2)
+	b.lives -= 1
+	hud.refresh()
+	hud.advance_pulse(BattleHud.PULSE_TIME * 0.5)
+	assert_true(hud.pulsing(), "restarted, so still going past the first one's end")
+	assert_true(box.scale.x <= 1.0 + BattleHud.PULSE_GROW + 0.001, "never grows past one pulse")
+	hud.refresh()
+	assert_true(hud.pulsing(), "no drop, no restart, no end")
+	hud.stop_pulse()
+	assert_eq(box.scale, Vector2.ONE)
+
+
+func test_a_restored_game_does_not_pulse() -> void:
+	var b: Battle = Fx.battle()
+	b.lives -= 3
+	var restored: Battle = Battle.from_data(b.to_data(), Fx.game().catalog)
+	assert_not_null(restored)
+	var hud: BattleHud = _hud(restored)
+	assert_false(hud.pulsing(), "the first read is the baseline")
+	assert_eq(hud.lives_label.text, str(restored.lives))
+	hud.refresh()
+	assert_false(hud.pulsing())
+	# A new battle handed to the same HUD is a fresh baseline too.
+	hud.refresh(Fx.battle())
+	assert_false(hud.pulsing())
+
+
 func test_hud_arrangement_follows_the_width() -> void:
 	var hud: BattleHud = _hud(Fx.battle())
 	hud.set_wide(true)

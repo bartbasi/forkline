@@ -12,23 +12,30 @@ const EMITTERS: int = 24
 const PER_BURST: int = 16
 const TEXTURE_SIZE: int = 32
 
-enum Kind { DEFEAT, BUBBLE, BUILD, DUST }
+## LEAK is the dull puff at the home when a creature gets through: round, gray and slow,
+## so it never reads like the bright star pop of a defeat.
+enum Kind { DEFEAT, BUBBLE, BUILD, DUST, LEAK }
 
 var bursts: int = 0
+## The emitter the last burst used, for tests.
+var last_emitter: CPUParticles2D
 
 var _pool: Array[CPUParticles2D] = []
 var _next: int = 0
 var _texture: ImageTexture
+var _puff_texture: ImageTexture
 var _ramps: Array[Gradient] = []
 
 
 func _init() -> void:
 	_texture = _make_texture()
+	_puff_texture = _make_puff_texture()
 	_ramps = [
 		_ramp(Palette.SPARKLE, Palette.SPARKLE_LILAC),
 		_ramp(Palette.BUBBLE, Palette.SPARKLE),
 		_ramp(Palette.LANTERN, Palette.LANTERN_CORE),
 		_ramp(Palette.SMOKE, Palette.PLASTER),
+		_ramp(Palette.STONE, Palette.STONE_DARK),
 	]
 	var fade: Gradient = Gradient.new()
 	fade.offsets = PackedFloat32Array([0.0, 0.55, 1.0])
@@ -77,10 +84,14 @@ func active_count() -> int:
 func burst(at: Vector2, kind: Kind, strength: float = 1.0) -> void:
 	var p: CPUParticles2D = _pool[_next]
 	_next = (_next + 1) % EMITTERS
+	last_emitter = p
 	bursts += 1
 	var s: float = clampf(strength, 0.3, 1.5)
 	p.position = at
 	p.color_initial_ramp = _ramps[kind]
+	p.texture = _puff_texture if kind == Kind.LEAK else _texture
+	p.damping_min = 0.0
+	p.damping_max = 0.0
 	match kind:
 		Kind.DEFEAT:
 			p.lifetime = 0.75
@@ -103,6 +114,15 @@ func burst(at: Vector2, kind: Kind, strength: float = 1.0) -> void:
 			p.gravity = Vector2(0.0, -60.0)
 			p.scale_amount_min = 0.3
 			p.scale_amount_max = 0.6
+		Kind.LEAK:
+			p.lifetime = 0.6
+			p.initial_velocity_min = 25.0 * s
+			p.initial_velocity_max = 70.0 * s
+			p.damping_min = 60.0
+			p.damping_max = 90.0
+			p.gravity = Vector2(0.0, 25.0)
+			p.scale_amount_min = 1.0
+			p.scale_amount_max = 1.7
 		_:
 			p.lifetime = 0.5
 			p.initial_velocity_min = 30.0 * s
@@ -133,4 +153,15 @@ static func _make_texture() -> ImageTexture:
 			var a: float = clampf((1.0 - star) * 3.0, 0.0, 1.0)
 			var glow: float = clampf(1.0 - sqrt(dx * dx + dy * dy) * 1.6, 0.0, 1.0)
 			img.set_pixel(x, y, Color(1, 1, 1, maxf(a, glow * 0.7)))
+	return ImageTexture.create_from_image(img)
+
+
+## A soft round blob, 32 by 32, with no points. It is the dull puff's picture.
+static func _make_puff_texture() -> ImageTexture:
+	var img: Image = Image.create(TEXTURE_SIZE, TEXTURE_SIZE, false, Image.FORMAT_RGBA8)
+	var half: float = float(TEXTURE_SIZE) * 0.5
+	for y: int in TEXTURE_SIZE:
+		for x: int in TEXTURE_SIZE:
+			var d: float = Vector2((float(x) + 0.5 - half) / half, (float(y) + 0.5 - half) / half).length()
+			img.set_pixel(x, y, Color(1, 1, 1, clampf((1.0 - d) * 2.2, 0.0, 1.0)))
 	return ImageTexture.create_from_image(img)

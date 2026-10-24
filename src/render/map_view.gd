@@ -27,6 +27,7 @@ const Z_FLYER: int = 1
 const Z_SHOTS: int = 2
 const Z_STATUS: int = 3
 const Z_SPARKLES: int = 4
+const Z_LEAKS: int = 5
 
 
 class TowerView:
@@ -75,6 +76,7 @@ var _entities: Node2D
 var _shots: MapShots
 var _status: MapStatus
 var _sparkles: MapSparkles
+var _leaks: MapLeaks
 var _premult: CanvasItemMaterial
 
 var _towers: Dictionary[Vector2i, TowerView] = {}
@@ -144,6 +146,11 @@ func setup(new_battle: Battle) -> void:
 	_sparkles = MapSparkles.new()
 	_sparkles.z_index = Z_SPARKLES
 	add_child(_sparkles)
+	_leaks = MapLeaks.new()
+	_leaks.z_index = Z_LEAKS
+	_leaks.atlas = _atlas
+	_leaks.material = _premult
+	add_child(_leaks)
 	_has_boost = false
 	for id: StringName in level.towers:
 		_atlas.add_tower_looks(id)
@@ -242,6 +249,8 @@ func play_events(events: Array[Dictionary]) -> void:
 				_on_popped(int(e["id"]))
 			&"defeated":
 				_on_defeated(int(e["id"]), Vector2(e["pos"] as Vector2i))
+			&"leaked":
+				_on_leaked(e)
 			&"built", &"upgraded":
 				_sparkles.burst(_ground_px(e["cell"] as Vector2i), MapSparkles.Kind.BUILD, 0.8)
 			&"sold":
@@ -328,6 +337,11 @@ func sparkles() -> MapSparkles:
 	return _sparkles
 
 
+## The hearts that float up from the home when creatures get through.
+func leaks() -> MapLeaks:
+	return _leaks
+
+
 ## Entity sprites ever made, in use or pooled. It stops growing at the peak.
 func sprite_count() -> int:
 	return _entities.get_child_count() if _entities != null else 0
@@ -338,7 +352,7 @@ func bake_scale() -> float:
 
 
 func is_effect_busy() -> bool:
-	return ghost_count() > 0 or (_shots != null and _shots.is_busy())
+	return ghost_count() > 0 or (_shots != null and _shots.is_busy()) or (_leaks != null and _leaks.is_busy())
 
 
 ## Moves the effect clock on without a frame.
@@ -348,6 +362,8 @@ func advance_effects(seconds: float) -> void:
 	_release_unclaimed()
 	if _shots != null:
 		_shots.advance(_fx_time)
+	if _leaks != null:
+		_leaks.advance(_fx_time)
 
 
 # Clock.
@@ -623,6 +639,16 @@ func _on_popped(id: int) -> void:
 	_sparkles.burst(v.center, MapSparkles.Kind.BUBBLE, 0.7)
 
 
+## A creature got through: a dull puff at the home and a heart that floats up (the sprite
+## itself is freed by _release_unclaimed, as the sim already removed it).
+func _on_leaked(e: Dictionary) -> void:
+	var home: Vector2 = _center_px(level.base)
+	var lives: int = maxi(int(e["lives"]), 1)
+	var boss: bool = Silhouettes.BOSSES.has(e["enemy"])
+	_sparkles.burst(home, MapSparkles.Kind.LEAK, 1.4 if boss else (1.0 if lives > 1 else 0.8))
+	_leaks.spawn(home, lives, boss, _fx_time)
+
+
 func _on_defeated(id: int, pos_sub: Vector2) -> void:
 	var v: CreatureView = _find_view(id)
 	var at: Vector2 = pos_sub * PX_PER_SUB
@@ -690,6 +716,7 @@ func _sync_gates() -> void:
 
 func _sync_layers() -> void:
 	_shots.advance(_fx_time)
+	_leaks.advance(_fx_time)
 	if _shots.is_busy():
 		_track_shots()
 	_routes.advance(_real_dt)
@@ -789,6 +816,7 @@ func _clear() -> void:
 	_shots = null
 	_status = null
 	_sparkles = null
+	_leaks = null
 
 
 func _center_px(cell: Vector2i) -> Vector2:

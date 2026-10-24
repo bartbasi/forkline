@@ -250,3 +250,112 @@ func test_route_lines_show_for_every_entrance() -> void:
 	assert_true(layer.lines[0].walk.size() > 4)
 	v.show_routes([])
 	assert_false(layer.is_showing())
+
+
+func _leak(id: int, enemy: StringName, lives: int) -> Dictionary:
+	return {"kind": &"leaked", "id": id, "enemy": enemy, "lives": lives}
+
+
+func test_a_leak_makes_a_dull_puff_and_a_heart() -> void:
+	var b: Battle = Fx.battle("r1_l1")
+	var v: MapView = _view(b)
+	v.sync(0.0)
+	var s: MapSparkles = v.sparkles()
+	var l: MapLeaks = v.leaks()
+	assert_eq(l.active_count(), 0)
+	var bursts: int = s.bursts
+	var leaked: Array[Dictionary] = [_leak(7, &"scamp", 1)]
+	v.play_events(leaked)
+	assert_eq(l.active_count(), 1, "one heart")
+	assert_eq(l.lives_in(0), 1)
+	assert_false(l.shows_count(0), "one life shows no number")
+	assert_eq(s.bursts, bursts + 1, "one puff")
+	var puff: CPUParticles2D = s.last_emitter
+	assert_true(puff.emitting)
+	v.play_events([{"kind": &"defeated", "id": 99, "enemy": &"scamp", "pos": Vector2i(30000, 30000), "gold": 5}])
+	assert_ne(puff.texture, s.last_emitter.texture, "the leak puff is a different picture than the defeat sparkle")
+	assert_ne(puff.color_initial_ramp, s.last_emitter.color_initial_ramp, "and a different color ramp")
+	assert_true(v.is_effect_busy(), "the view stays busy while the heart floats")
+	v.advance_effects(0.5)
+	assert_eq(l.active_count(), 1, "still floating at half a second")
+	v.advance_effects(0.4)
+	assert_eq(l.active_count(), 0, "gone after 0.8 s")
+	assert_false(v.is_effect_busy())
+
+
+func test_hearts_show_the_lives_and_a_boss_is_bigger() -> void:
+	var b: Battle = Fx.battle("r1_l1")
+	var v: MapView = _view(b)
+	var l: MapLeaks = v.leaks()
+	v.play_events([_leak(1, &"scamp", 3)])
+	assert_eq(l.lives_in(0), 3)
+	assert_true(l.shows_count(0), "a creature worth 3 lives shows its count")
+	v.advance_effects(0.3)
+	v.play_events([_leak(2, &"grumblesack", 20)])
+	assert_eq(l.lives_in(1), 20)
+	assert_true(MapLeaks.size_cells(20, true) > MapLeaks.size_cells(3, false))
+	assert_true(MapLeaks.size_cells(3, false) > MapLeaks.size_cells(1, false))
+
+
+func test_leaks_in_one_moment_merge_and_the_pool_is_capped() -> void:
+	var b: Battle = Fx.battle("r1_l1")
+	var v: MapView = _view(b)
+	var l: MapLeaks = v.leaks()
+	var burst: Array[Dictionary] = []
+	for i: int in 5:
+		burst.append(_leak(i, &"scamp", 1))
+	v.play_events(burst)
+	assert_eq(l.active_count(), 1, "five at the same moment share one heart")
+	assert_eq(l.lives_in(0), 5)
+	assert_true(l.shows_count(0))
+	for i: int in 40:
+		v.advance_effects(0.2)
+		v.play_events([_leak(100 + i, &"scamp", 1)])
+		assert_true(l.active_count() <= MapLeaks.SLOTS)
+	v.advance_effects(1.0)
+	assert_eq(l.active_count(), 0)
+
+
+func test_a_real_wave_of_leaks_returns_every_node_to_the_pool() -> void:
+	# No defense: the creatures walk home. Every one that gets through gives a leaked event.
+	# Relaxed gives enough lives that the first waves are not lost, so no creature stays alive.
+	var stats: Catalog = Fx.catalog()
+	var b: Battle = Battle.create(Fx.level("r1_l1", stats), stats, true, [])
+	var v: MapView = _view(b)
+	var leaked_events: int = 0
+	var lives_lost: int = 0
+	var start_lives: int = b.lives
+	var guard: int = 0
+	while b.phase != Battle.Phase.LOST and b.waves_started < 3 and guard < 40000:
+		b.start_next_wave()
+		while b.phase == Battle.Phase.WAVE and guard < 40000:
+			var events: Array[Dictionary] = Fx.tick(b)
+			v.sync(1.0)
+			v.play_events(events)
+			for e: Dictionary in events:
+				if e.get("kind") == &"leaked":
+					leaked_events += 1
+					lives_lost += int(e["lives"])
+			assert_true(v.leaks().active_count() <= MapLeaks.SLOTS)
+			guard += 1
+		if b.phase == Battle.Phase.LOST:
+			break
+	assert_eq(b.phase, Battle.Phase.BUILD, "the test battle was not lost")
+	assert_true(leaked_events > 0, "creatures got through")
+	assert_eq(start_lives - lives_lost, b.lives, "the events add up to the lives lost")
+	assert_true(v.leaks().started > 0 and v.leaks().started <= leaked_events)
+	assert_true(v.is_effect_busy() or v.leaks().active_count() == 0)
+	v.advance_effects(2.0)
+	v.sync(0.0)
+	assert_eq(v.leaks().active_count(), 0, "every heart ended")
+	assert_eq(v.creature_count(), 0)
+	assert_eq(v.ghost_count(), 0)
+	var pool: Array = v.get("_pool")
+	assert_eq(pool.size(), v.sprite_count() - v.tower_count(), "every creature sprite is back in the pool")
+	var pooled: Dictionary = {}
+	for sp: Variant in pool:
+		pooled[sp] = true
+	assert_eq(pooled.size(), pool.size(), "no sprite is pooled twice")
+	for sp: Variant in pool:
+		assert_false((sp as Sprite2D).visible, "a pooled sprite is hidden")
+	assert_eq(v.sparkles().emitter_count(), MapSparkles.EMITTERS, "no emitter was added")

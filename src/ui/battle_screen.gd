@@ -588,6 +588,12 @@ func frame(delta: float) -> void:
 	if audio != null:
 		audio.play_events(events)
 	hud.refresh()
+	# The lives pulse moves only while the game runs: a pause, the Pause menu or a card
+	# (all of which freeze the clock) put it back at rest.
+	if clock.paused:
+		hud.stop_pulse()
+	else:
+		hud.advance_pulse(delta)
 	gate_tray.refresh()
 	preview.refresh()
 	if _context != null:

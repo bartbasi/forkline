@@ -142,6 +142,28 @@ func test_the_clock_gives_ticks_only_when_a_wave_runs_and_not_paused() -> void:
 	assert_eq(screen.battle.tick, 17)
 
 
+func test_the_lives_pulse_runs_only_while_the_clock_runs() -> void:
+	var screen: BattleScreen = _screen(Fx.battle())
+	var box: Control = screen.hud.lives_label.get_parent() as Control
+	screen.battle.start_next_wave()
+	screen.battle.lives -= 1
+	screen.frame(0.1)
+	assert_true(screen.hud.pulsing(), "a drop while running pulses")
+	screen.frame(0.1)
+	assert_true(box.scale.x > 1.0)
+	screen.freeze()
+	screen.frame(0.05)
+	assert_false(screen.hud.pulsing(), "paused: at rest")
+	assert_eq(box.scale, Vector2.ONE)
+	screen.resume()
+	# Behind a card the clock is frozen the same way.
+	screen.battle.lives -= 1
+	screen.clock.paused = true
+	screen.frame(0.1)
+	assert_false(screen.hud.pulsing(), "behind a card: at rest")
+	assert_eq(box.scale, Vector2.ONE)
+
+
 func test_events_are_drained_each_frame() -> void:
 	var screen: BattleScreen = _screen(Fx.battle())
 	screen.battle.start_next_wave()

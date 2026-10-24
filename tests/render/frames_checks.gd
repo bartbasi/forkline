@@ -91,6 +91,24 @@ func _play(id: String, size: Vector2i) -> void:
 	check(seen_sparks > 0, "%s %s: creatures puffed into sparkles" % [id, size])
 	check(view.ground_bakes() == bakes, "%s %s: the map was not drawn again while playing" % [id, size])
 	check(view.ground_draws() >= 1 and view.ground_draws() <= bakes, "%s %s: ground draw count %d" % [id, size, view.ground_draws()])
+	# The home effect: a heart with no number, a heart with a count and a boss heart, drawn for real.
+	view.play_events([
+		{"kind": &"leaked", "id": 9001, "enemy": &"scamp", "lives": 1},
+	])
+	view.advance_effects(0.3)
+	view.play_events([
+		{"kind": &"leaked", "id": 9002, "enemy": &"grumblesack", "lives": 20},
+	])
+	view.advance_effects(0.3)
+	view.play_events([
+		{"kind": &"leaked", "id": 9003, "enemy": &"scamp", "lives": 3},
+	])
+	for i: int in 3:
+		await process_frame
+	check(view.leaks().active_count() == 3, "%s %s: three hearts float" % [id, size])
+	view.advance_effects(1.0)
+	await process_frame
+	check(view.leaks().active_count() == 0, "%s %s: the hearts end" % [id, size])
 	view.fit(Rect2(0, 0, 500, 900))
 	await process_frame
 	host.queue_free()
