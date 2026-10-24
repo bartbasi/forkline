@@ -8,7 +8,9 @@ const Files: GDScript = preload("res://tests/levels/fixtures/level_files.gd")
 
 ## RULES 12.3 and 12.4, one row per level in play order:
 ## gates, sockets, waves, strength, Normal starting gold, star 3 kind and value,
-## and the kind of cell the hint highlights.
+## and the kind of cell the hint highlights ("none" for a level with no hint).
+## 3-2's star 3 is "Have at most 6 towers", not RULES 12.4's starting target of 7: at 7 the
+## level designer's bot searches found Sling Posts alone earning all three stars (2026-10-24).
 const PLAN: Dictionary = {
 	"r1_l1": {"gates": 0, "sockets": 0, "waves": 8, "strength": 100, "gold": 200, "star3": ["tier_at_most", 1], "highlight": "spot"},
 	"r1_l2": {"gates": 1, "sockets": 2, "waves": 8, "strength": 100, "gold": 250, "star3": ["tier_at_most", 1], "highlight": "socket"},
@@ -22,6 +24,12 @@ const PLAN: Dictionary = {
 	"r2_l4": {"gates": 2, "sockets": 4, "waves": 11, "strength": 145, "gold": 450, "star3": ["gates_at_most", 1], "highlight": "socket"},
 	"r2_l5": {"gates": 2, "sockets": 4, "waves": 11, "strength": 150, "gold": 450, "star3": ["tower_ban", "longbow_loft"], "highlight": "spot"},
 	"r2_l6": {"gates": 2, "sockets": 5, "waves": 12, "strength": 160, "gold": 500, "star3": ["kinds_at_most", 3], "highlight": "spot"},
+	"r3_l1": {"gates": 2, "sockets": 4, "waves": 11, "strength": 170, "gold": 500, "star3": ["no_lives_lost", 0], "highlight": "spot"},
+	"r3_l2": {"gates": 2, "sockets": 4, "waves": 11, "strength": 175, "gold": 550, "star3": ["towers_at_most", 6], "highlight": "spot"},
+	"r3_l3": {"gates": 3, "sockets": 5, "waves": 12, "strength": 180, "gold": 550, "star3": ["gates_at_most", 2], "highlight": "socket"},
+	"r3_l4": {"gates": 2, "sockets": 5, "waves": 12, "strength": 185, "gold": 600, "star3": ["tower_ban", "sling_post"], "highlight": "spot"},
+	"r3_l5": {"gates": 3, "sockets": 6, "waves": 12, "strength": 190, "gold": 600, "star3": ["tier_at_most", 2], "highlight": "none"},
+	"r3_l6": {"gates": 3, "sockets": 6, "waves": 12, "strength": 200, "gold": 650, "star3": ["no_lives_lost", 0], "highlight": "spot"},
 }
 
 ## docs/ARCHITECTURE.md 2.8 and RULES 13: each level's Twist as effects. The level designer picks
@@ -40,6 +48,12 @@ const TWISTS: Dictionary = {
 	"r2_l4": [{"type": "set_gates", "count": 0}],
 	"r2_l5": [{"type": "all_bubbles"}],
 	"r2_l6": [{"type": "fixed_gates", "cells": [[1, 3], [5, 8]]}],
+	"r3_l1": [{"type": "ban_tower", "tower": "firework_tower"}],
+	"r3_l2": [{"type": "ban_tower", "tower": "pumpkin_catapult"}],
+	"r3_l3": [{"type": "set_gates", "count": 1}],
+	"r3_l4": [{"type": "count_pct", "pct": 200, "flyers": true, "last_wave": false}],
+	"r3_l5": [{"type": "tier_cap", "tier": 2}],
+	"r3_l6": [{"type": "count_pct", "pct": 200, "flyers": false, "last_wave": true}],
 }
 
 ## RULES 12.2: the towers each level brings.
@@ -47,6 +61,7 @@ const NEW_TOWERS: Dictionary = {
 	"r1_l1": ["sling_post", "pumpkin_catapult"],
 	"r2_l2": ["lullaby_bell"],
 	"r2_l3": ["longbow_loft"],
+	"r3_l1": ["firework_tower"],
 }
 
 ## RULES 12.2 and 12.3: the creature each level brings and its first wave, 1 based.
@@ -59,12 +74,15 @@ const NEW_CREATURES: Dictionary = {
 	"r2_l3": ["shellback", 3],
 	"r2_l5": ["bubbler", 2],
 	"r2_l6": ["ironshell", 12],
+	"r3_l2": ["puffball", 2],
+	"r3_l4": ["dusk_moth", 3],
+	"r3_l6": ["moon_moth", 12],
 }
 
 ## RULES 3.1 and 3.4: map rows and build spots per region, and entrances per region (12.3).
 const REGION_ROWS: Dictionary = {"lantern_hill": [8, 11], "millbrook": [10, 13], "willow_fen": [10, 13], "moonspire_keep": [10, 13]}
 const REGION_SPOTS: Dictionary = {"lantern_hill": [5, 7], "millbrook": [7, 9], "willow_fen": [8, 10], "moonspire_keep": [9, 11]}
-const REGION_ENTRANCES: Dictionary = {"lantern_hill": [1, 1], "millbrook": [1, 2]}
+const REGION_ENTRANCES: Dictionary = {"lantern_hill": [1, 1], "millbrook": [1, 2], "willow_fen": [1, 2]}
 
 ## RULES 12.5: a new creature's first wave holds 3 to 5 of it. A boss comes alone.
 const FIRST_WAVE_COUNT: Array[int] = [3, 5]
@@ -383,6 +401,12 @@ func test_hint_highlights_the_planned_kind_of_cell() -> void:
 		var level: LevelData = _level(id)
 		if level == null or not PLAN.has(id):
 			continue
+		if PLAN[id]["highlight"] == "none":
+			# RULES 12.4: a level that brings nothing new, such as 3-5, has no hint and no highlight.
+			assert_true(level.hint_text.is_empty(), "%s has no hint" % id)
+			assert_eq(level.hint_cell, Vector2i(-1, -1), "%s highlights no cell" % id)
+			assert_eq(level.hint_button, &"", "%s highlights no button" % id)
+			continue
 		assert_false(level.hint_text.is_empty(), "%s has a hint (RULES 9.6)" % id)
 		if PLAN[id]["highlight"] == "call":
 			# RULES 12.4 and contract 7.4: level 2-1 highlights the call button, not a cell.
@@ -493,3 +517,81 @@ func test_spawn_bound_holds_with_the_twist() -> void:
 					count = ceili(count * int(effect["pct"]) / 100.0)
 				total += count * (1 + enemy.split_count)
 			assert_true(total <= SPAWN_BOUND, "%s wave %d spawns %d with its Twist, the bound is %d" % [id, i + 1, total, SPAWN_BOUND])
+
+
+## Contract 7.4: on the Fold5 cover the first hint sits over a band of whole map rows that hold
+## nothing to see or tap, when the dock has no room for it under the map. On maps of 12 and 13
+## rows it never has room (289 px and 134 px under the map, against a 206 px strip and a 152 px
+## hint), so those maps keep at least one such row above the bottom row: no build spot, gate
+## socket, entrance, home, highlighted cell, fork or join (a road cell with three or four road
+## neighbors). Shorter maps can put the hint in the dock. tests/ui/ checks the real layout.
+const FREE_ROW_FROM_ROWS: int = 12
+
+
+func test_tall_maps_keep_a_free_row_for_the_hint() -> void:
+	var tall: int = 0
+	for id: String in order:
+		var level: LevelData = _level(id)
+		if level == null or level.rows < FREE_ROW_FROM_ROWS:
+			continue
+		tall += 1
+		var free: Array[int] = []
+		for row: int in level.rows - 1:
+			if _row_is_free(level, row):
+				free.append(row)
+		assert_false(free.is_empty(), "%s keeps a row free for the hint" % id)
+	assert_true(tall >= 1, "some level has 12 or more rows, so the rule is exercised")
+
+
+func _row_is_free(level: LevelData, row: int) -> bool:
+	if level.hint_cell.y == row:
+		return false
+	for column: int in Sim.MAP_COLUMNS:
+		var cell: Vector2i = Vector2i(column, row)
+		var kind: LevelData.Kind = level.kind_at(cell)
+		if kind == LevelData.Kind.SPOT or kind == LevelData.Kind.SOCKET or kind == LevelData.Kind.ENTRANCE or kind == LevelData.Kind.BASE:
+			return false
+		if level.is_road(cell):
+			var near: int = 0
+			for step: Vector2i in [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]:
+				if level.is_road(cell + step):
+					near += 1
+			if near >= 3:
+				return false
+	return true
+
+
+## The first map with a second entrance brings it in gently (brief: never two new things in one
+## wave): wave 1 comes only from entrance A, and the first wave from entrance B comes from B
+## alone and brings no creature the player has not met.
+func test_a_second_entrance_comes_in_gently() -> void:
+	var seen: Array[StringName] = []
+	for id: String in order:
+		var level: LevelData = _level(id)
+		if level == null:
+			continue
+		if level.entrances.size() < 2:
+			for wave: WaveData in level.waves:
+				for group: WaveGroup in wave.groups:
+					if not seen.has(group.enemy):
+						seen.append(group.enemy)
+			continue
+		for group: WaveGroup in level.waves[0].groups:
+			assert_eq(group.entrance, 0, "%s wave 1 comes only from entrance A" % id)
+		for i: int in level.waves.size():
+			var wave: WaveData = level.waves[i]
+			var from_b: bool = false
+			for group: WaveGroup in wave.groups:
+				if group.entrance == 1:
+					from_b = true
+			if not from_b:
+				for group: WaveGroup in wave.groups:
+					if not seen.has(group.enemy):
+						seen.append(group.enemy)
+				continue
+			for group: WaveGroup in wave.groups:
+				assert_eq(group.entrance, 1, "%s wave %d, the first from entrance B, comes from B alone" % [id, i + 1])
+				assert_true(seen.has(group.enemy), "%s wave %d, the first from entrance B, brings nothing new (%s)" % [id, i + 1, group.enemy])
+			return
+		fail("%s has two entrances but no wave uses entrance B" % id)
+		return

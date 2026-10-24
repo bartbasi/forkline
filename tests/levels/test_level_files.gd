@@ -8,10 +8,11 @@ const Files: GDScript = preload("res://tests/levels/fixtures/level_files.gd")
 
 const LEVEL_CAP_BYTES: int = 64 * 1024
 const CAMPAIGN_CAP_BYTES: int = 16 * 1024
-## Regions 1 and 2 in play order (RULES 12.2, 12.3). Later regions are added as they are built.
+## Regions 1 to 3 in play order (RULES 12.2, 12.3). Later regions are added as they are built.
 const PLAY_ORDER: Array = [
 	["lantern_hill", ["r1_l1", "r1_l2", "r1_l3", "r1_l4", "r1_l5", "r1_l6"]],
 	["millbrook", ["r2_l1", "r2_l2", "r2_l3", "r2_l4", "r2_l5", "r2_l6"]],
+	["willow_fen", ["r3_l1", "r3_l2", "r3_l3", "r3_l4", "r3_l5", "r3_l6"]],
 ]
 
 var catalog: Catalog = null
@@ -28,7 +29,7 @@ func test_stats_load_with_no_problems() -> void:
 
 
 func test_there_are_level_files() -> void:
-	assert_eq(Files.level_file_ids().size(), 12, "level files in data/levels/")
+	assert_eq(Files.level_file_ids().size(), 18, "level files in data/levels/")
 
 
 func test_game_data_loads_every_file_with_no_problems() -> void:

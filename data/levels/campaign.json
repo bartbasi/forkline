@@ -1,4 +1,5 @@
 {"format": 1, "regions": [
   {"id": "lantern_hill", "name": "Lantern Hill", "levels": ["r1_l1", "r1_l2", "r1_l3", "r1_l4", "r1_l5", "r1_l6"]},
-  {"id": "millbrook", "name": "Millbrook", "levels": ["r2_l1", "r2_l2", "r2_l3", "r2_l4", "r2_l5", "r2_l6"]}
+  {"id": "millbrook", "name": "Millbrook", "levels": ["r2_l1", "r2_l2", "r2_l3", "r2_l4", "r2_l5", "r2_l6"]},
+  {"id": "willow_fen", "name": "Willow Fen", "levels": ["r3_l1", "r3_l2", "r3_l3", "r3_l4", "r3_l5", "r3_l6"]}
 ]}
