@@ -1,8 +1,8 @@
 # Forkline. Copyright 2026 Play, Inc.
 # Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.
 extends "res://tests/base_test.gd"
-## GameData: every bundled file through JsonFile, Catalog and LevelData, and the
-## campaign list (docs/ARCHITECTURE.md 2.5, 2.12).
+## GameData: every bundled file through JsonFile, Catalog, LevelData and RunData, and the
+## campaign list (docs/ARCHITECTURE.md 2.5, 2.12). Each test works on a copy of the real data.
 
 const Fx: GDScript = preload("res://tests/save/fixtures/save_fixtures.gd")
 
@@ -11,7 +11,7 @@ var root: String = Fx.path("data")
 
 func before_each() -> void:
 	Fx.fresh()
-	for sub: String in ["stats", "levels"]:
+	for sub: String in ["stats", "levels", "runs", "cards", "segments"]:
 		DirAccess.make_dir_recursive_absolute(root.path_join(sub))
 		for file_name: String in DirAccess.get_files_at(Fx.DATA.path_join(sub)):
 			if file_name.get_extension() == "json":
@@ -45,6 +45,7 @@ func test_real_data_loads_with_no_problems() -> void:
 	var game: GameData = GameData.load_from()
 	assert_eq(game.problems, PackedStringArray())
 	assert_not_null(game.catalog)
+	assert_not_null(game.run)
 	# Regions are added phase by phase, so only region 1 is pinned here.
 	assert_true(game.campaign.size() >= 1)
 	assert_eq(game.campaign[0]["id"], &"lantern_hill")
@@ -70,6 +71,7 @@ func test_copy_in_user_folder_loads_the_same() -> void:
 	assert_eq(game.problems, PackedStringArray())
 	assert_eq(game.levels.size(), GameData.load_from().levels.size())
 	assert_eq(game.levels.size(), _listed(game))
+	assert_not_null(game.run)
 
 
 func test_level_id_must_equal_its_file_name() -> void:
@@ -144,65 +146,72 @@ func test_missing_root_is_a_problem_not_a_crash() -> void:
 
 # phase 7: the run files (2.9 to 2.12)
 
-const RunFx: GDScript = preload("res://tests/run/fixtures/run_fixtures.gd")
-
-
-## The real run plan and cards, with the fixture segments and packs of tests/run/ until
-## the real ones exist.
-func _add_run_files() -> void:
-	for relative: String in ["runs/run.json", "cards/cards.json"]:
-		DirAccess.make_dir_recursive_absolute(root.path_join(relative.get_base_dir()))
-		_put(relative, FileAccess.get_file_as_string(Fx.DATA.path_join(relative)))
-	DirAccess.make_dir_recursive_absolute(root.path_join("segments"))
-	var files: Dictionary = RunFx.files()
-	for key: String in files:
-		if key.begins_with("segments/"):
-			_put(key, JSON.stringify(files[key]))
+## The segment ids the copied index.json lists, in order.
+func _index_ids() -> Array[String]:
+	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(root.path_join("segments/index.json")))
+	var out: Array[String] = []
+	for id: Variant in (data as Dictionary)["segments"]:
+		out.append(String(id))
+	return out
 
 
 func test_the_run_files_load() -> void:
-	_add_run_files()
 	var game: GameData = GameData.load_from(root)
 	assert_eq(game.problems, PackedStringArray())
 	assert_not_null(game.run)
 	if game.run == null:
 		return
-	assert_eq(game.run.card_ids().size(), 34, "the real cards")
+	var real: GameData = GameData.load_from()
+	assert_eq(game.run.card_ids(), real.run.card_ids(), "every card")
+	assert_true(game.run.card_ids().size() >= 1)
 	var order: Array[StringName] = []
-	for id: String in RunFx.INDEX_ORDER:
+	for id: String in _index_ids():
 		order.append(StringName(id))
 	assert_eq(game.run.segment_ids, order, "the index order")
-	assert_eq(game.run.packs.size(), 26)
+	var packs: Variant = JSON.parse_string(FileAccess.get_file_as_string(root.path_join("segments/packs.json")))
+	assert_eq(game.run.packs.size(), ((packs as Dictionary)["packs"] as Array).size())
 	# A run builds from what was loaded.
 	assert_not_null(RunSession.start(7, "", false, game.run.pool({}), game.run, game.catalog))
 
 
-func test_no_segments_folder_means_no_run_yet() -> void:
-	# Stopgap until data/segments/ lands (task L4): no folder, no run and no problem.
+func test_a_missing_segments_folder_is_a_problem() -> void:
+	var folder: String = root.path_join("segments")
+	for file_name: String in DirAccess.get_files_at(folder):
+		DirAccess.remove_absolute(folder.path_join(file_name))
+	DirAccess.remove_absolute(folder)
+	assert_false(DirAccess.dir_exists_absolute(folder))
 	var game: GameData = GameData.load_from(root)
-	assert_eq(game.problems, PackedStringArray())
+	assert_true(_has_problem(game, "index.json: is missing"), str(game.problems))
+	assert_true(_has_problem(game, "packs.json: is missing"), str(game.problems))
 	assert_null(game.run)
-	_add_run_files()
-	assert_not_null(GameData.load_from(root).run, "with the folder, runs load")
+	assert_not_null(game.catalog, "the rest still loads")
+	assert_eq(game.levels.size(), _listed(game))
 
 
 func test_run_file_problems_are_reported_and_give_no_run() -> void:
+	var ids: Array[String] = _index_ids()
+	assert_true(ids.size() >= 4, "the index lists enough segments for these cases")
+	if ids.size() < 4:
+		return
+	var first: String = ids[0]
+	var second: String = ids[1]
+	var last: String = ids[ids.size() - 1]
+	var before_last: String = ids[ids.size() - 2]
 	var cases: Dictionary = {
-		"a listed segment missing": [func() -> void: DirAccess.remove_absolute(root.path_join("segments/mid_bend.json")), "mid_bend.json: is missing"],
+		"a listed segment missing": [func() -> void: DirAccess.remove_absolute(root.path_join("segments/%s.json" % second)), "%s.json: is missing" % second],
 		"packs not JSON": [func() -> void: _put("segments/packs.json", "{\"format\": 1, \"packs\": ["), "packs.json: is over"],
 		"run plan missing": [func() -> void: DirAccess.remove_absolute(root.path_join("runs/run.json")), "run.json: is missing"],
 		"cards missing": [func() -> void: DirAccess.remove_absolute(root.path_join("cards/cards.json")), "cards.json: is missing"],
 		"index missing": [func() -> void: DirAccess.remove_absolute(root.path_join("segments/index.json")), "index.json: is missing"],
 		"run plan over its cap": [func() -> void: _put("runs/run.json", "{\"pad\": \"" + "a".repeat(GameData.RUN_CAP) + "\"}"), "run.json: is over"],
-		"segment over its cap": [func() -> void: _put("segments/top_one.json", "{\"pad\": \"" + "a".repeat(GameData.SEGMENT_CAP) + "\"}"), "top_one.json: is over"],
-		"segment of high bytes": [func() -> void: _put("segments/bot_home.json", "{\"id\": \"café\"}"), "bot_home.json"],
-		"segment id not its file name": [func() -> void: _edit_json("segments/bot_edge.json", func(d: Dictionary) -> void: d["id"] = "bot_home"), "bot_edge"],
+		"segment over its cap": [func() -> void: _put("segments/%s.json" % first, "{\"pad\": \"" + "a".repeat(GameData.SEGMENT_CAP) + "\"}"), "%s.json: is over" % first],
+		"segment of high bytes": [func() -> void: _put("segments/%s.json" % last, "{\"id\": \"café\"}"), "%s.json" % last],
+		"segment id not its file name": [func() -> void: _edit_json("segments/%s.json" % before_last, func(d: Dictionary) -> void: d["id"] = last), before_last],
 		"index naming a path": [func() -> void: _edit_json("segments/index.json", func(d: Dictionary) -> void: (d["segments"] as Array).append("../stats/rules")), "index.json"],
 		"cards broken": [func() -> void: _edit_json("cards/cards.json", func(d: Dictionary) -> void: d["cards"][0]["once"] = "yes"), "cards.json"],
 	}
 	for name: String in cases:
 		before_each()
-		_add_run_files()
 		var item: Array = cases[name]
 		(item[0] as Callable).call()
 		var game: GameData = GameData.load_from(root)
@@ -212,13 +221,14 @@ func test_run_file_problems_are_reported_and_give_no_run() -> void:
 
 
 func test_only_listed_segments_are_read() -> void:
-	_add_run_files()
 	# A file the index does not list is never read, so even a broken one changes nothing.
 	# tests/levels/ checks that every file in the folder is listed (2.9).
 	_put("segments/stray.json", "{\"format\": 1, \"id\": ")
 	var game: GameData = GameData.load_from(root)
 	assert_eq(game.problems, PackedStringArray())
 	assert_not_null(game.run)
+	if game.run == null:
+		return
 	assert_false(game.run.segment_ids.has(&"stray"))
 	# An index over 256 entries is a problem, and none of its files are read.
 	_edit_json("segments/index.json", _grow_index)

@@ -84,10 +84,6 @@ func _load(root: String) -> void:
 ## is left out, and RunData reports it. A file that cannot be read is left out too, with
 ## its own problem line here.
 func _load_run(root: String) -> void:
-	# Stopgap until the level designer adds data/segments/ (task L4): with no segments
-	# folder at all, runs are not built yet, so there is no run and no problem.
-	if not DirAccess.dir_exists_absolute(root.path_join(SEGMENT_DIR)):
-		return
 	var files: Dictionary = {}
 	_read_run_file(root, RUN_FILE, RUN_CAP, files)
 	_read_run_file(root, CARDS_FILE, CARDS_CAP, files)

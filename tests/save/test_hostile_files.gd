@@ -11,7 +11,7 @@ var game: GameData = null
 
 func before_each() -> void:
 	Fx.fresh()
-	game = Fx.run_game()
+	game = Fx.game()
 
 
 func after_each() -> void:

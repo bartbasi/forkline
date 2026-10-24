@@ -12,7 +12,7 @@ var store: SaveStore = null
 
 func before_each() -> void:
 	Fx.fresh()
-	game = Fx.run_game()
+	game = Fx.game()
 	store = SaveStore.new(Fx.WORK)
 
 

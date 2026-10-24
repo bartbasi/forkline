@@ -15,7 +15,7 @@ func after_each() -> void:
 
 
 func test_store_game_data_and_loaded_saves_are_freed() -> void:
-	var game: GameData = Fx.run_game()
+	var game: GameData = Fx.game()
 	var store: SaveStore = SaveStore.new(Fx.WORK)
 	assert_true(store.save_game(Fx.saved(SavedGame.LEVEL, Fx.battle_mid_wave(game, &"r1_l1", false, 120))), "the game saves")
 	assert_true(store.save_game(Fx.saved_run(Fx.daily(game, "2026-10-23"))), "the daily saves")

@@ -5,10 +5,9 @@ extends RefCounted
 ## user://tests/save/ that each test removes in before_each() and after_each(). WORK is
 ## named after the process, so two test runs at once never wipe each other's files.
 
-## The run fixtures of tests/run/: small segments and packs until the real ones exist,
-## and a seeded player. Their pools hold gold_purse, an economy card that is not once, so
-## a draft is never empty.
-const RunFx: GDScript = preload("res://tests/run/fixtures/run_fixtures.gd")
+## The seeded player of tests/run/. Runs and dailies here use the real data in data/.
+## Its base pool holds gold_purse, an economy card that is not once, so a draft is never
+## empty.
 const Player: GDScript = preload("res://tests/run/fixtures/run_player.gd")
 
 const TEST_ROOT: String = "user://tests/save"
@@ -70,6 +69,7 @@ static func exists(file_name: String) -> bool:
 	return FileAccess.file_exists(path(file_name))
 
 
+## The real data, run files included, so runs and dailies can be started and loaded.
 static func game() -> GameData:
 	return GameData.load_from(DATA)
 
@@ -93,14 +93,7 @@ static func saved(mode: StringName, battle: Battle) -> SavedGame:
 	return game_save
 
 
-## The real data with the fixture run data, so runs and dailies can be started and loaded.
-static func run_game() -> GameData:
-	var game_data: GameData = game()
-	game_data.run = RunFx.run_data()
-	return game_data
-
-
-## A new run (day "") or daily on the fixture run data. The pool is the base cards, or
+## A new run (day "") or daily on the real run data. The pool is the base cards, or
 ## every card for a daily, as the App passes them (3.4).
 static func session(game_data: GameData, run_seed: int, day: String = "", relaxed: bool = false) -> RunSession:
 	var pool: Array[StringName] = game_data.run.card_ids() if day != "" else game_data.run.pool({})
@@ -122,7 +115,7 @@ static func play_until(session_now: RunSession, player: RefCounted, check: Calla
 	return false
 
 
-## A seeded player with plenty of gold and lives, so fixture runs go on for long.
+## A seeded player with plenty of gold and lives, so runs go on for long.
 static func player(seed_value: int) -> RefCounted:
 	var p: RefCounted = Player.new(seed_value)
 	p.rich = true

@@ -3,7 +3,7 @@
 extends "res://tests/base_test.gd"
 ## Saved runs and dailies: the run around the saved battle, checked all or nothing, and a
 ## restored run that plays on like one never saved (docs/ARCHITECTURE.md 3.4, 3.5, 5.5,
-## 5.6, 6; RULES 14, 15). The run data is the tests/run/ fixture set, with the real stats.
+## 5.6, 6; RULES 14, 15). The run data is the real data in data/.
 
 const Fx: GDScript = preload("res://tests/save/fixtures/save_fixtures.gd")
 
@@ -16,7 +16,7 @@ var store: SaveStore = null
 
 func before_each() -> void:
 	Fx.fresh()
-	game = Fx.run_game()
+	game = Fx.game()
 	store = SaveStore.new(Fx.WORK)
 
 
@@ -127,7 +127,7 @@ func test_a_restored_run_plays_on_equal_to_an_unbroken_run() -> void:
 			assert_eq(session.pick(session.offers()[0]), Battle.DONE)
 			assert_eq(session.battle.phase, Battle.Phase.BUILD)
 		assert_true(store.save_game(Fx.saved_run(session)), name)
-		var loaded: Array[SavedGame] = SaveStore.new(Fx.WORK).load_games(Fx.run_game())
+		var loaded: Array[SavedGame] = SaveStore.new(Fx.WORK).load_games(Fx.game())
 		assert_eq(loaded.size(), 1, name)
 		if loaded.is_empty():
 			continue
