@@ -335,9 +335,18 @@ func test_first_sights_open_once_each_and_are_recorded() -> void:
 	var screen: BattleScreen = _screen(Fx.battle(&"r1_l1"), progress)
 	assert_true(screen.card_open(), "the first level opens its cards by itself")
 	for id: StringName in [&"sling_post", &"pumpkin_catapult", &"scamp", &"r1_l1"]:
-		assert_true(progress.seen.has(id), "%s is recorded" % id)
+		assert_false(progress.seen.has(id), "%s is not recorded before the card is closed" % id)
 	assert_true(screen.hint_banner.visible, "and the level's hint shows")
 	assert_eq(screen.hint_banner.text_label.text, screen.battle.level.hint_text)
+	var left_open: BattleScreen = _screen(Fx.battle(&"r1_l1"), progress)
+	assert_true(left_open.card_open(), "a card that was never closed opens again")
+	screen._card.request_close()
+	assert_false(screen.card_open())
+	for id: StringName in [&"sling_post", &"pumpkin_catapult", &"scamp"]:
+		assert_true(progress.seen.has(id), "%s is recorded once the card is closed" % id)
+	assert_false(progress.seen.has(&"r1_l1"), "the hint is recorded when it is closed, not when it shows")
+	screen.hint_banner.dismiss()
+	assert_true(progress.seen.has(&"r1_l1"))
 	var again: BattleScreen = _screen(Fx.battle(&"r1_l1"), progress)
 	assert_false(again.card_open(), "never a second time")
 	assert_false(again.hint_banner.visible)
@@ -365,6 +374,8 @@ func test_a_creature_card_opens_in_the_build_phase_before_its_first_wave() -> vo
 	assert_true(screen.card_open(), "the card opens in the build phase before the wave")
 	assert_eq(screen._card.items.size(), 1, "only the new creature")
 	assert_eq(screen._card.items[0]["id"], &"pip")
+	assert_false(progress.seen.has(&"pip"), "counted only when the card is closed")
+	screen._card.advance()
 	assert_true(progress.seen.has(&"pip"))
 	assert_false(screen.hint_banner.visible, "the hint is for the first start of a level only")
 

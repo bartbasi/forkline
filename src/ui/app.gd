@@ -29,6 +29,11 @@ signal daily_requested()
 
 ## Stars the roguelite and the daily need until the rules file says otherwise.
 const RUN_STARS_DEFAULT: int = 12
+## Roguelite and Daily are not built yet. They show as coming later, whatever the stars.
+## Set this to true when the run mode exists; the 12 star rule then takes over.
+const RUNS_BUILT: bool = false
+## Two back presses closer than this are one press.
+const BACK_GUARD_MS: int = 150
 
 ## Tests set these before build(); a real launch leaves them and the App makes its own.
 ## The App frees only the AudioService it made itself.
@@ -72,6 +77,7 @@ var _battle_screen: BattleScreen = null
 var _end: Dictionary = {}
 var _end_wait: float = 0.0
 var _save_failed: bool = false
+var _last_back_ms: int = -1000
 
 
 func _ready() -> void:
@@ -148,6 +154,7 @@ func _fill_info() -> void:
 		"relaxed_gold_pct": r.relaxed_gold_pct, "refund_pct": r.refund_pct,
 		"early_bonus_pct": r.early_bonus_pct, "star2_lives": r.star2_lives,
 		"max_waves_running": r.max_waves_running, "max_gates": r.max_gates, "run_stars": r.run_stars,
+		"runs_built": RUNS_BUILT,
 	}
 	names = {}
 	for id: StringName in game.catalog.tower_ids():
@@ -276,7 +283,7 @@ func open_mode() -> void:
 
 ## The Continue card and the run locks, from the saved games and the progress.
 func _fill_mode(screen: ModeScreen) -> void:
-	screen.set_runs(runs_open, stars, int(rules.get("run_stars", RUN_STARS_DEFAULT)))
+	screen.set_runs(runs_open, stars, int(rules.get("run_stars", RUN_STARS_DEFAULT)), RUNS_BUILT)
 	if saved_games.is_empty():
 		screen.set_continue("", "")
 		return
@@ -290,7 +297,7 @@ func _saved_text(saved: SavedGame) -> String:
 	if saved.battle.waves_started == 0:
 		text += ". Ready to start."
 	else:
-		text += ". Wave %d of %d." % [saved.battle.waves_started, level.waves.size()]
+		text += ". Wave %d of %d." % [BattleText.wave_number(saved.battle), level.waves.size()]
 	if saved.battle.relaxed:
 		text += " Relaxed."
 	return text
@@ -376,7 +383,9 @@ func handle_back() -> StringName:
 		_show_end()
 		return &"modal"
 	if _battle_screen != null and current_screen() == _battle_screen:
-		_battle_screen.pause()
+		# One press, one step: an open panel closes first, then the next press opens Pause.
+		if not _battle_screen.close_panel_for_back():
+			_battle_screen.pause()
 		return &"modal"
 	if _stack.size() > 1:
 		pop_screen()
@@ -384,7 +393,14 @@ func handle_back() -> StringName:
 	return &"quit"
 
 
+## The one entry for a back press from the phone (the go-back notification) or from a
+## keyboard (ui_cancel). If both ever arrive for one press, the second is ignored, so a
+## press does exactly one step.
 func _back_pressed() -> void:
+	var now: int = Time.get_ticks_msec()
+	if now - _last_back_ms < BACK_GUARD_MS:
+		return
+	_last_back_ms = now
 	if handle_back() == &"quit":
 		_quit()
 
@@ -525,7 +541,8 @@ func open_level_card(id: StringName) -> void:
 	if damaged or not game.levels.has(id) or not progress.level_open(game, id):
 		return
 	var saved: SavedGame = saved_game(SavedGame.LEVEL)
-	var card: LevelCard = LevelCard.new(game, progress, id, saved != null and saved.level_id == id)
+	var is_saved: bool = saved != null and saved.level_id == id
+	var card: LevelCard = LevelCard.new(game, progress, id, is_saved, is_saved and saved.battle.relaxed)
 	card.play_requested.connect(request_start.bind(id))
 	card.resume_requested.connect(func() -> void: resume_game(saved_game(SavedGame.LEVEL)))
 	push_screen(card)

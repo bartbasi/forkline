@@ -110,3 +110,11 @@ static func _spend(screen: BattleScreen) -> void:
 					screen.tower_panel.pick_path(0)
 					screen.tower_panel.confirm_path()
 	screen.close_context()
+
+
+## Frees the shared service. The runner has no teardown hook, so the last test file of
+## the folder (test_zz_free_shared.gd) calls this, and nothing is left alive at exit.
+static func free_audio() -> void:
+	if _audio != null:
+		_audio.free()
+		_audio = null

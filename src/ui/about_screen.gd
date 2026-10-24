@@ -76,7 +76,7 @@ func _supporting() -> void:
 
 func _licenses() -> void:
 	var box: VBoxContainer = _text_section("Licenses", LICENSES)
-	_license_row(box, LicenseText.FORKLINE, "Forkline", "GNU GPL version 3, added terms")
+	_license_row(box, LicenseText.FORKLINE, "Forkline", "GNU GPL version 3, with additional terms")
 	_license_row(box, LicenseText.GODOT, "Godot Engine", "MIT license and its parts")
 	_license_row(box, LicenseText.FONT, "Outfit font", "SIL Open Font License 1.1")
 

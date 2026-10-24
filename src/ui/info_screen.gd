@@ -65,6 +65,7 @@ func _sections(rules: Dictionary) -> Array[Dictionary]:
 	var star2: String = _star2_sentence(rules)
 	var waves_at_once: String = _waves_sentence(rules)
 	var run_stars: String = _count(rules, "run_stars", "enough")
+	var runs_built: bool = bool(rules.get("runs_built", true))
 	return [
 		{"title": "The goal", "art": &"walk", "text": [
 			"Night creatures walk down the roads toward your village. Every creature that gets through costs lives.",
@@ -104,8 +105,15 @@ func _sections(rules: Dictionary) -> Array[Dictionary]:
 			"A Relaxed win earns one star, which is enough to keep going. The other stars need Normal. Normal is always the default."]},
 		{"title": "More ways to play", "text": [
 			"Roguelite is one run of many waves. After each wave you pick a card. Daily is one run a day, the same for everyone, and always Normal.",
-			"Both open when you have earned %s stars. Everything in Forkline is earned by playing." % run_stars]},
+			_runs_sentence(runs_built, run_stars)]},
 	]
+
+
+## While the run mode is not built, Info says so. Once it is, it names the stars it needs.
+func _runs_sentence(runs_built: bool, run_stars: String) -> String:
+	if not runs_built:
+		return "Both are coming in a later update. Everything in Forkline is earned by playing."
+	return "Both open when you have earned %s stars. Everything in Forkline is earned by playing." % run_stars
 
 
 func _count(rules: Dictionary, key: String, fallback: String) -> String:

@@ -19,6 +19,9 @@ const NO_CELL: Vector2i = Vector2i(-1, -1)
 var cell: Vector2i = NO_CELL
 var selected: StringName = &""
 var card_buttons: Dictionary[StringName, TapButton] = {}
+## The "Need N" line of each card that costs more than the gold in hand. It is updated in
+## place as gold changes, so a card is never rebuilt under a finger.
+var need_labels: Dictionary[StringName, Label] = {}
 var name_label: Label = null
 var info_label: Label = null
 var build_button: TapButton = null
@@ -98,15 +101,28 @@ func refresh() -> void:
 	if not ids.has(selected):
 		selected = ids[0]
 	var signature: Array = [cell, selected, wide, options]
-	if signature == _signature:
-		return
-	_signature = signature
-	_rebuild(options)
+	if signature != _signature:
+		_signature = signature
+		_rebuild(options)
+	_update_needs(options)
+
+
+## "Need N" is the gold still missing now.
+func _update_needs(options: Array[Dictionary]) -> void:
+	for option: Dictionary in options:
+		var label: Label = need_labels.get(option["tower"])
+		if label != null and not bool(option["affordable"]):
+			label.text = _need_text(option)
+
+
+func _need_text(option: Dictionary) -> String:
+	return "Need %d" % maxi(0, int(option["cost"]) - battle.gold)
 
 
 func _rebuild(options: Array[Dictionary]) -> void:
 	clear_column()
 	card_buttons.clear()
+	need_labels.clear()
 	var header: HBoxContainer = HBoxContainer.new()
 	var title: Label = UiKit.heading("Build a tower")
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -170,10 +186,11 @@ func _card(option: Dictionary) -> TapButton:
 	cost.add_theme_font_size_override(&"font_size", UiTheme.FONT_BUTTON)
 	cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	inner.add_child(cost)
-	var need_text: String = "" if affordable else "Need %d" % (int(option["cost"]) - battle.gold)
-	var need: Label = UiKit.label(need_text, &"CardMutedLabel")
+	var need: Label = UiKit.label("" if affordable else _need_text(option), &"CardMutedLabel")
 	need.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	inner.add_child(need)
+	if not affordable:
+		need_labels[type] = need
 	button.add_child(inner)
 	button.tapped.connect(select_tower.bind(type))
 	return button

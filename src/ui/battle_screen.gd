@@ -5,10 +5,15 @@ extends ScreenFrame
 ## The battle: the map, the HUD, the panels and the touch input (docs/ARCHITECTURE.md
 ## 3.2, 3.6, 7.5). This is the only place that steps the sim and drains its events.
 ##
-## Portrait: the HUD above the map, the wave preview below it, and the tower, build
-## and creature panels as a bottom sheet over the lower map. The sheet never covers
-## the HUD, and the map slides up so the tapped cell stays in sight. Landscape: the map
-## on the left and one side column with the HUD, the open panel and the preview.
+## Portrait: the HUD above the map and the map under it, top aligned, as big as the
+## width allows. Nothing else takes height from the map, so cells stay 48 dp on the
+## Fold5 cover whatever is showing. The hint, the gate strip, the Paused strip and the
+## wave preview form a dock that floats over the lower edge of the map, in the free
+## room under it, and covers the lowest rows only on a tall map. Each part of the dock
+## can be put away with one tap. The tower, build and creature panels are a bottom
+## sheet over the lower map. The sheet never covers the HUD, and the map slides up so
+## the tapped cell stays in sight. Landscape: the map on the left and one side column
+## with the HUD, the open panel and the preview.
 ##
 ## Taps on a spot open the build or tower panel, a tap on a creature opens its
 ## numbers, and a tap on a gate socket places or takes back a gate. A gate can also be
@@ -36,6 +41,8 @@ const SNAP_CELLS: float = 0.6
 ## The carried gate floats this far above the finger, in cells.
 const GHOST_LIFT: float = 0.8
 const PAN_RATE: float = 14.0
+## Inner margin of the dock panels in portrait.
+const DOCK_MARGIN: int = 14
 
 var battle: Battle = null
 var audio: AudioService = null
@@ -62,8 +69,8 @@ var _stage: Control
 var _flow: BoxContainer
 var _top_wrap: MarginContainer
 var _top_box: VBoxContainer
-var _bottom_wrap: MarginContainer
-var _bottom_box: VBoxContainer
+var _dock_wrap: MarginContainer
+var _dock: VBoxContainer
 var _side: ScrollContainer
 var _side_wrap: MarginContainer
 var _side_box: VBoxContainer
@@ -81,6 +88,14 @@ var _modals: Array[Modal] = []
 var _modals_gone: Array[Modal] = []
 var _routes_sig: Array = []
 var _finished: bool = false
+## Creatures whose card the player closed in this build phase. They keep their "New"
+## tag until the wave that brings them starts.
+var _fresh: Array[StringName] = []
+var _fresh_wave: int = -1
+var _new_sig: Array = []
+## True while a card paused a running wave, so closing it lets the wave go on.
+var _card_froze: bool = false
+var _card_resized: bool = false
 
 var _pressing: bool = false
 var _press_at: Vector2 = Vector2.ZERO
@@ -110,6 +125,7 @@ func _init() -> void:
 	_build_map()
 	_build_panels()
 	_build_containers()
+	_stage.add_child(_dock_wrap)
 	_sheet = VBoxContainer.new()
 	_sheet.alignment = BoxContainer.ALIGNMENT_END
 	_sheet.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -161,10 +177,13 @@ func _build_panels() -> void:
 func _build_containers() -> void:
 	_top_box = VBoxContainer.new()
 	_top_box.add_theme_constant_override(&"separation", GAP)
-	_top_wrap = _wrap(_top_box, GAP, GAP)
-	_bottom_box = VBoxContainer.new()
-	_bottom_box.add_theme_constant_override(&"separation", GAP)
-	_bottom_wrap = _wrap(_bottom_box, GAP, GAP)
+	_top_wrap = _wrap(_top_box, 6.0, 6.0)
+	_dock = VBoxContainer.new()
+	_dock.alignment = BoxContainer.ALIGNMENT_END
+	_dock.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_dock.add_theme_constant_override(&"separation", GAP)
+	_dock_wrap = _wrap(_dock, 0.0, GAP)
+	_dock_wrap.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_side_box = VBoxContainer.new()
 	_side_box.add_theme_constant_override(&"separation", GAP)
 	_side_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -216,7 +235,7 @@ func setup(new_battle: Battle, new_audio: AudioService, new_progress: Progress) 
 	hud.set_speed(clock.speed)
 	for panel: BattlePanel in [gate_tray, preview, build_panel, tower_panel, enemy_panel]:
 		panel.setup(battle)
-	_show_unseen()
+	_refresh_new_tags()
 	if probe != null:
 		probe.watch(battle, map_view)
 	_fit_map()
@@ -336,6 +355,9 @@ func _own_modal_closed(modal: Modal) -> void:
 ## From ScreenFrame. A size change during a wave pauses first (docs/ARCHITECTURE.md 7.5).
 func apply_layout(new_window_size: Vector2, new_safe: Rect2) -> void:
 	var resized: bool = window_size != Vector2.ZERO and not window_size.is_equal_approx(new_window_size)
+	if resized and _card_froze:
+		# A first sight card froze the wave. The wave pauses on the menu when the card closes.
+		_card_resized = true
 	if resized and battle != null and battle.phase == Battle.Phase.WAVE and not clock.paused:
 		pause()
 	cancel_drag()
@@ -345,12 +367,15 @@ func apply_layout(new_window_size: Vector2, new_safe: Rect2) -> void:
 func _relayout() -> void:
 	_arrange()
 	var wide: bool = not landscape
-	preview.set_auto_expand(landscape)
 	for panel: BattlePanel in [hud, gate_tray, pause_strip, hint_banner, preview, build_panel, tower_panel, enemy_panel]:
 		panel.set_wide(wide)
+	if not landscape:
+		for panel: BattlePanel in [gate_tray, pause_strip, hint_banner, preview]:
+			panel.set_tight(true, DOCK_MARGIN)
 	_side.custom_minimum_size.x = clampf(safe.size.x * 0.4, SIDE_MIN, SIDE_WIDTH)
 	_place_context()
 	_sheet.visible = _context != null and not landscape
+	_sync_dock()
 	_fit_map.call_deferred()
 
 
@@ -360,7 +385,7 @@ func _arrange() -> void:
 	if mode == _arranged:
 		return
 	_arranged = mode
-	for node: Control in [hud, gate_tray, pause_strip, hint_banner, preview, build_panel, tower_panel, enemy_panel, map_area, _top_wrap, _bottom_wrap, _side]:
+	for node: Control in [hud, hud.feedback_box, gate_tray, pause_strip, hint_banner, preview, build_panel, tower_panel, enemy_panel, map_area, _top_wrap, _side]:
 		var parent: Node = node.get_parent()
 		if parent != null:
 			parent.remove_child(node)
@@ -370,14 +395,15 @@ func _arrange() -> void:
 		_flow.add_child(_side)
 		for node: Control in [hud, gate_tray, pause_strip, hint_banner, preview]:
 			_side_box.add_child(node)
+		hud.column.add_child(hud.feedback_box)
 	else:
 		_flow.add_child(_top_wrap)
 		_flow.add_child(map_area)
-		_flow.add_child(_bottom_wrap)
-		for node: Control in [hud, gate_tray, pause_strip]:
-			_top_box.add_child(node)
-		for node: Control in [hint_banner, preview]:
-			_bottom_box.add_child(node)
+		_top_box.add_child(hud)
+		# The dock, top to bottom. The HUD's messages float here too, so a refusal never
+		# makes the HUD taller.
+		for node: Control in [hud.feedback_box, hint_banner, gate_tray, pause_strip, preview]:
+			_dock.add_child(node)
 	_context_parent_changed()
 
 
@@ -407,10 +433,19 @@ func _context_parent_changed() -> void:
 
 
 ## Fits the map into its slot, then slides it if the sheet would hide the selection.
+## The slot is everything under the HUD, so the map is as big as the width allows. In
+## portrait it sits at the top of the slot, so it never moves when the dock changes.
 func _fit_map() -> void:
 	if battle == null:
 		return
-	map_view.fit(Rect2(Vector2.ZERO, map_area.size))
+	var area: Vector2 = map_area.size
+	var grid: Vector2 = Vector2(float(Sim.MAP_COLUMNS), float(battle.level.rows)) * MapView.CELL
+	var k: float = minf(area.x / grid.x, area.y / grid.y)
+	if k <= 0.0:
+		return
+	var fitted: Vector2 = grid * k
+	var top: float = (area.y - fitted.y) * 0.5 if landscape else 0.0
+	map_view.fit(Rect2(Vector2((area.x - fitted.x) * 0.5, top), fitted))
 	_map_base = map_view.position
 	_apply_pan()
 
@@ -426,12 +461,18 @@ func _update_pan() -> void:
 		_pan_target = clampf(need, 0.0, maxf(0.0, cell_top - cell_px * 0.2))
 
 
+## The dock hides while the sheet is open, so the two never overlap.
+func _sync_dock() -> void:
+	_dock_wrap.visible = not landscape and _context == null
+
+
 func _apply_pan() -> void:
 	map_view.position = Vector2(_map_base.x, _map_base.y - _pan)
 
 
 func _update_sheet() -> void:
 	_sheet.visible = _context != null and not landscape
+	_sync_dock()
 	if not _sheet.visible:
 		return
 	var wanted: float = _context.get_combined_minimum_size().y
@@ -471,6 +512,7 @@ func frame(delta: float) -> void:
 	if _context != null:
 		_context.refresh()
 	_handle(events)
+	_watch_sights()
 	if _drag_active and battle.phase != Battle.Phase.BUILD:
 		cancel_drag()
 	if not _drag_active:
@@ -512,6 +554,9 @@ func _sync_routes() -> void:
 
 # First sights (RULES 9.2, 9.6).
 
+## A tower or creature counts as seen only when the player closes its card, and the hint
+## when the player closes it or the first wave starts. A card or hint that was open when
+## the game was left opens again.
 func _check_sights() -> void:
 	if battle == null or progress == null or battle.phase != Battle.Phase.BUILD:
 		return
@@ -526,21 +571,41 @@ func _check_sights() -> void:
 		var id: StringName = entry["enemy"]
 		if not progress.seen.has(id) and not _has_item(items, id):
 			items.append({"kind": &"enemy", "id": id, "wave": next})
-	var changed: bool = false
-	for item: Dictionary in items:
-		progress.mark_seen(item["id"])
-		changed = true
-	if fresh and not battle.level.hint_text.is_empty() and not progress.seen.has(battle.level.id):
-		progress.mark_seen(battle.level.id)
-		changed = true
+	if fresh and not battle.level.hint_text.is_empty() and not progress.seen.has(battle.level.id) and not hint_banner.visible:
 		hint_banner.show_hint(battle.level.hint_text)
 		_hint_cell = battle.level.hint_cell
 		map_view.show_hint(_hint_cell)
-	if changed:
-		progress_changed.emit()
-		_show_unseen()
+	_refresh_new_tags()
 	if not items.is_empty():
 		_show_card(items)
+
+
+## Each frame: a creature of a kind the player has not seen is on the map (its wave was
+## called early, or it was released from another): its card opens and the wave waits.
+## The hint goes when the first wave starts.
+func _watch_sights() -> void:
+	if hint_banner.visible and battle.phase != Battle.Phase.BUILD:
+		hint_banner.dismiss()
+	if _fresh_wave != battle.waves_started and not _fresh.is_empty():
+		_fresh.clear()
+	_refresh_new_tags()
+	if _card != null or progress == null or clock.paused or battle.phase != Battle.Phase.WAVE:
+		return
+	var items: Array[Dictionary] = []
+	for enemy: EnemyState in battle.enemies:
+		if not progress.seen.has(enemy.type) and not _has_item(items, enemy.type):
+			items.append({"kind": &"enemy", "id": enemy.type, "wave": _wave_of(enemy.type)})
+	if not items.is_empty():
+		_show_card(items)
+
+
+## The wave a creature on the map belongs to, newest first, for the strength of its numbers.
+func _wave_of(id: StringName) -> int:
+	for i: int in range(battle.running.size() - 1, -1, -1):
+		for entry: Dictionary in battle.wave_preview(battle.running[i]):
+			if entry["enemy"] == id:
+				return battle.running[i]
+	return maxi(0, battle.waves_started - 1)
 
 
 func _has_item(items: Array[Dictionary], id: StringName) -> bool:
@@ -553,28 +618,62 @@ func _has_item(items: Array[Dictionary], id: StringName) -> bool:
 func _show_card(items: Array[Dictionary]) -> void:
 	if _card != null:
 		return
+	if battle.phase == Battle.Phase.WAVE and not clock.paused:
+		# A running wave waits for the card.
+		clock.paused = true
+		_card_froze = true
 	_card = InfoCard.new(battle, items)
+	_card.finished.connect(_on_card_finished.bind(items))
 	_card.closed.connect(_on_card_closed)
 	_open_modal(_card)
 
 
+## The player closed the card: everything on it counts as seen now.
+func _on_card_finished(items: Array[Dictionary]) -> void:
+	var changed: bool = false
+	for item: Dictionary in items:
+		var id: StringName = item["id"]
+		if progress != null and not progress.seen.has(id):
+			progress.mark_seen(id)
+			changed = true
+		if item["kind"] == &"enemy" and not _fresh.has(id):
+			_fresh.append(id)
+			_fresh_wave = battle.waves_started
+	if changed:
+		progress_changed.emit()
+	_refresh_new_tags()
+
+
 func _on_card_closed() -> void:
 	_card = null
+	if _card_froze:
+		_card_froze = false
+		clock.paused = false
+		if _card_resized:
+			_card_resized = false
+			pause()
+	_check_sights()
 
 
-## The preview tags the creatures this player has not met yet.
-func _show_unseen() -> void:
+## The preview tags the creatures that are new to the player: not seen yet, or seen on a
+## card in this build phase and not met on the map yet.
+func _refresh_new_tags() -> void:
 	var ids: Array[StringName] = []
 	if progress != null:
 		for id: StringName in battle.catalog.enemy_ids():
-			if not progress.seen.has(id):
+			if not progress.seen.has(id) or _fresh.has(id):
 				ids.append(id)
-	preview.set_unseen(ids)
+	if ids != _new_sig:
+		_new_sig = ids
+		preview.set_unseen(ids)
 
 
 func _on_hint_closed() -> void:
 	_hint_cell = NO_CELL
 	map_view.show_hint(NO_CELL)
+	if battle != null and progress != null and not progress.seen.has(battle.level.id):
+		progress.mark_seen(battle.level.id)
+		progress_changed.emit()
 
 
 # Panel signals.
@@ -638,6 +737,15 @@ func _close_panel(panel: BattlePanel) -> void:
 func close_context() -> void:
 	if _context != null:
 		_close_panel(_context)
+
+
+## The back button: closes the open build, tower or creature panel and says so, so the
+## next press can open Pause. False when no panel is open.
+func close_panel_for_back() -> bool:
+	if _context == null:
+		return false
+	_close_panel(_context)
+	return true
 
 
 # Taps.
@@ -881,9 +989,10 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_PREDELETE:
 		# Parts that are not in the tree when the screen goes (the other layout's, the
 		# closed panels) are freed here so nothing leaks.
-		for node: Control in [hud, gate_tray, pause_strip, hint_banner, preview, build_panel, tower_panel, enemy_panel, map_area, _top_wrap, _bottom_wrap, _side, ghost, _sheet]:
-			if is_instance_valid(node) and node.get_parent() == null:
-				node.free()
+		# One may hold another (the HUD holds its message box), so each is checked as it comes.
+		for part: Variant in [hud, hud.feedback_box, gate_tray, pause_strip, hint_banner, preview, build_panel, tower_panel, enemy_panel, map_area, _top_wrap, _side, ghost, _sheet]:
+			if is_instance_valid(part) and (part as Control).get_parent() == null:
+				(part as Control).free()
 		for modal: Modal in _modals + _modals_gone:
 			if is_instance_valid(modal) and modal.get_parent() == null:
 				modal.free()

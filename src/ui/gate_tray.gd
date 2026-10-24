@@ -28,7 +28,7 @@ func _init() -> void:
 	var row: HBoxContainer = HBoxContainer.new()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_theme_constant_override(&"separation", 18)
-	icon = GlyphIcon.new(84.0).show_glyph(&"gate")
+	icon = GlyphIcon.new(72.0).show_glyph(&"gate")
 	row.add_child(icon)
 	var text: VBoxContainer = VBoxContainer.new()
 	text.mouse_filter = Control.MOUSE_FILTER_IGNORE

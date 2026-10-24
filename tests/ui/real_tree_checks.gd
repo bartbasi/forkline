@@ -15,7 +15,9 @@ const COVER: Vector2 = Vector2(1080.0, 2767.0)
 const INNER: Vector2 = Vector2(1998.0, 2400.0)
 const COVER_SAFE: Rect2 = Rect2(0.0, 96.0, 1080.0, 2500.0)
 const INNER_SAFE: Rect2 = Rect2(0.0, 0.0, 1998.0, 2250.0)
-const WATCHDOG_SECONDS: float = 150.0
+const WATCHDOG_SECONDS: float = 400.0
+## The Fold5 cover: 1080 logical px across 344 dp (docs/ARCHITECTURE.md 7.4).
+const COVER_PX_PER_DP: float = 3.14
 const BattleFixtures: GDScript = preload("res://tests/ui/battle_fixtures.gd")
 
 
@@ -77,6 +79,7 @@ func _run() -> void:
 	await _battle_panels()
 	await _app()
 	await _battle_screens()
+	await _cell_floor()
 	Links.opener = Callable()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
@@ -385,9 +388,14 @@ func _battle_panels() -> void:
 				var label: String = "%s: button '%s'" % [where, str((button as Button).text)]
 				check(rect.size.x >= Layout.MIN_TOUCH - 0.5 and rect.size.y >= Layout.MIN_TOUCH - 0.5, "%s is under 48 dp (%s)" % [label, rect.size])
 				check(rect.position.x >= column_rect.position.x - 0.5 and rect.end.x <= column_rect.end.x + 0.5, "%s sticks out of the panel column %s" % [label, rect])
-			# Nothing may lie outside the screen: every visible control, at any depth.
+			# Nothing may lie outside the screen: every visible control, at any depth. The one
+			# exception is the two tall tier 3 states in the narrow side panel, which stacks
+			# the path cards and scrolls (the side column is a scroll area).
+			var scrolls: bool = not wide and (state == "paths" or state == "path picked")
 			var screen: Rect2 = Rect2(Vector2.ZERO, size)
 			for node: Node in column.find_children("*", "Control", true, false):
+				if scrolls:
+					break
 				var control: Control = node as Control
 				if not control.is_visible_in_tree() or control.size.x <= 0.0 or control.size.y <= 0.0:
 					continue
@@ -396,7 +404,7 @@ func _battle_panels() -> void:
 			for part: Control in [hud, panel]:
 				if part != null:
 					check(part.size.x <= width + 0.5, "%s: a panel is wider than its column (%s)" % [where, part.size.x])
-					check(part.get_global_rect().end.y <= size.y, "%s: a panel runs off the screen bottom (%s)" % [where, part.get_global_rect().end.y])
+					check(scrolls or part.get_global_rect().end.y <= size.y, "%s: a panel runs off the screen bottom (%s)" % [where, part.get_global_rect().end.y])
 			vp.queue_free()
 	# A real tap on the Build button builds, and a real tap on Sell twice sells.
 	var host: Array = _panel_host(COVER, true)
@@ -421,7 +429,10 @@ func _battle_panels() -> void:
 	check(live.tower_at(spot) != null, "the first real tap on Sell only asks")
 	await _frames()
 	_touch(tap_vp, tower_panel.sell_button.get_global_rect().get_center())
-	check(live.tower_at(spot) == null, "the second real tap on Sell sells")
+	check(live.tower_at(spot) != null, "a quick second tap on Sell does not sell")
+	await create_timer(float(TowerPanel.SELL_DELAY_MS) / 1000.0 + 0.2).timeout
+	_touch(tap_vp, tower_panel.sell_button.get_global_rect().get_center())
+	check(live.tower_at(spot) == null, "a second real tap on Sell after the short wait sells")
 	tap_vp.queue_free()
 
 
@@ -553,7 +564,7 @@ func _battle_build_phase(size: Vector2, safe: Rect2, label: String) -> void:
 		check(screen.hud.get_global_rect().position.y >= safe.position.y - 0.5, "%s: the HUD is inside the safe area" % where)
 		check(screen.preview.get_global_rect().end.y <= safe.end.y + 0.5, "%s: the preview is inside the safe area" % where)
 		check(screen.hud.call_button.get_global_rect().get_center().y < size.y * 0.5, "%s: the HUD is on top" % where)
-		check(not screen.preview.expanded, "%s: the preview is a strip in portrait" % where)
+		check(screen.preview.expanded, "%s: the preview is open in portrait too" % where)
 	else:
 		check(screen.hud.get_global_rect().position.x >= rect.end.x - 1.0, "%s: the HUD is in the side column" % where)
 		check(screen.preview.get_global_rect().position.x >= rect.end.x - 1.0, "%s: the preview is in the side column" % where)
@@ -828,3 +839,123 @@ func _battle_end_delay() -> void:
 	_inside_and_big(made.top_modal(), COVER, "end panel over a battle")
 	vp.queue_free()
 	await _frames(2)
+
+
+# The map cell floor (hard rule): on the Fold5 cover in portrait, map cells stay at least
+# 48 dp in every state, on every region 1 map and on a 13 row map.
+
+const TALL_GRID: PackedStringArray = [
+	"...1...", "...#...", ".o.#.o.", ".#####.", ".G...G.", ".#.o.#.", ".#####.",
+	"..o#o..", "...#...", ".o.#.o.", "...#...", "...#...", "..oB...",
+]
+
+
+## A real level with its map swapped for 13 rows.
+func _tall_battle() -> Battle:
+	var data: Dictionary = BattleFixtures.game().levels[&"r1_l5"].to_data()
+	data["grid"] = Array(TALL_GRID)
+	data["hint"] = {"text": "Tap a glowing spot to build a tower by the road.", "cell": [3, 5]}
+	var level: LevelData = LevelData.from_data(data, BattleFixtures.game().catalog)
+	check(level != null, "the 13 row test map is a valid level")
+	if level == null:
+		return null
+	return Battle.create(level, BattleFixtures.game().catalog, false, [] as Array[Dictionary])
+
+
+func _all_seen() -> Progress:
+	var progress: Progress = Progress.new()
+	for id: StringName in BattleFixtures.game().catalog.tower_ids():
+		progress.mark_seen(id)
+	for id: StringName in BattleFixtures.game().catalog.enemy_ids():
+		progress.mark_seen(id)
+	for id: StringName in BattleFixtures.game().levels:
+		progress.mark_seen(id)
+	return progress
+
+
+func _cell_dp(screen: BattleScreen) -> float:
+	return screen.map_view.get_global_transform().get_scale().x * MapView.CELL / COVER_PX_PER_DP
+
+
+## Puts the screen in one state of the mix and checks the cell floor and the layout.
+func _floor_state(screen: BattleScreen, label: String, hint: bool, folded: bool, paused: bool, panel: int, notes: bool, wave: bool) -> void:
+	var b: Battle = screen.battle
+	if wave and b.phase == Battle.Phase.BUILD:
+		b.start_next_wave()
+		BattleFixtures.steps(b, 4)
+	screen.clock.speed = 1
+	if paused:
+		screen.freeze()
+	else:
+		screen.resume()
+	if hint:
+		screen.hint_banner.show_hint(b.level.hint_text)
+		screen.map_view.show_hint(b.level.hint_cell)
+	else:
+		screen.hint_banner.dismiss()
+	if screen.preview.expanded == folded:
+		screen.preview.toggle()
+	screen.close_context()
+	if panel == 1:
+		for cell: Vector2i in b.level.spots:
+			if b.tower_at(cell) == null:
+				screen.show_build(cell)
+	elif panel == 2:
+		screen.show_tower(b.towers[0].cell)
+	if notes:
+		screen.hud.show_feedback("The wave is still arriving.")
+		screen.gate_tray.show_feedback("Gates are locked until the wave is over.")
+	else:
+		screen.hud.clear_feedback()
+		screen.gate_tray.clear_feedback()
+	await _frames(3)
+	var where: String = "%s: hint %s, preview %s, paused %s, panel %d, notes %s, wave %s" % [label, hint, "folded" if folded else "open", paused, panel, notes, wave]
+	check(_cell_dp(screen) >= 48.0, "cells are %.1f dp (%s)" % [_cell_dp(screen), where])
+	# The map as laid out, before the sheet slides it up to show a selected cell.
+	var origin: Vector2 = screen.map_area.get_global_rect().position + screen._map_base
+	var map_rect: Rect2 = Rect2(origin, Vector2(float(Sim.MAP_COLUMNS), float(b.level.rows)) * MapView.CELL * screen.map_view.get_global_transform().get_scale().x)
+	check(map_rect.position.y >= screen.hud.get_global_rect().end.y - 1.0, "the map starts under the HUD (%s)" % where)
+	check(map_rect.end.y <= COVER_SAFE.end.y + 1.0, "the whole map is inside the safe area (%s)" % where)
+	check(map_rect.position.x >= -0.5 and map_rect.end.x <= COVER.x + 0.5, "the map fits the width (%s)" % where)
+	check(screen.hud.get_global_rect().position.y >= COVER_SAFE.position.y - 0.5, "the HUD is inside the safe area (%s)" % where)
+	for part: Control in [screen.hint_banner, screen.gate_tray, screen.pause_strip, screen.preview, screen.hud.feedback_box]:
+		if part.is_visible_in_tree():
+			var r: Rect2 = part.get_global_rect()
+			check(r.position.y >= screen.hud.get_global_rect().end.y - 1.0, "the dock never covers the HUD (%s)" % where)
+			check(r.end.y <= COVER_SAFE.end.y + 1.0, "the dock is inside the safe area (%s)" % where)
+	_inside_and_big(screen, COVER, where)
+
+
+func _cell_floor() -> void:
+	var level_ids: Array[String] = ["r1_l1", "r1_l2", "r1_l3", "r1_l4", "r1_l5", "r1_l6", "tall"]
+	for level_id: String in level_ids:
+		var b: Battle = _tall_battle() if level_id == "tall" else BattleFixtures.battle(StringName(level_id))
+		if b == null:
+			continue
+		b.gold = 5000
+		for i: int in mini(2, b.level.spots.size()):
+			b.place_tower(b.level.spots[i], &"sling_post")
+		var vp: SubViewport = _viewport(COVER)
+		var screen: BattleScreen = BattleScreen.new()
+		screen.setup(b, null, _all_seen())
+		await _hosted(vp, screen, COVER, COVER_SAFE)
+		check(not screen.landscape, "%s: the cover is portrait" % level_id)
+		var full: bool = level_id == "tall" or level_id == "r1_l5"
+		if full:
+			for hint: bool in [true, false]:
+				for folded: bool in [false, true]:
+					for paused: bool in [false, true]:
+						for panel: int in [0, 1, 2]:
+							for notes: bool in [false, true]:
+								await _floor_state(screen, level_id, hint, folded, paused, panel, notes, false)
+			# A running wave too: the strip, the panels and the messages.
+			for folded: bool in [true, false]:
+				for paused: bool in [false, true]:
+					for panel: int in [0, 2]:
+						await _floor_state(screen, level_id, false, folded, paused, panel, true, true)
+		else:
+			await _floor_state(screen, level_id, true, false, false, 0, false, false)
+			await _floor_state(screen, level_id, true, false, true, 1, true, false)
+			await _floor_state(screen, level_id, false, true, true, 0, true, true)
+		vp.queue_free()
+		await _frames(2)

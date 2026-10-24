@@ -98,10 +98,11 @@ func set_wide(value: bool) -> void:
 	set_tight(not value)
 
 
-## A narrower inner margin for the side panel of the landscape layout.
-func set_tight(tight: bool) -> void:
+## A narrower inner margin for the side panel of the landscape layout, and for the dock
+## that floats over the map in portrait, where every pixel of height counts.
+func set_tight(tight: bool, margin: int = 18) -> void:
 	if tight:
-		add_theme_stylebox_override(&"panel", UiKit.box(Palette.PANEL, Palette.PANEL_EDGE, 3, 34, 18))
+		add_theme_stylebox_override(&"panel", UiKit.box(Palette.PANEL, Palette.PANEL_EDGE, 3, 34, margin))
 	else:
 		remove_theme_stylebox_override(&"panel")
 

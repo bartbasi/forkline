@@ -8,7 +8,8 @@ extends BattlePanel
 ##
 ## Choosing a tier 3 path is permanent, so a tap on a path only chooses it. The
 ## panel then says so and a second button confirms: the player is asked once.
-## Selling asks the same way, with a second tap on the same button.
+## Selling asks the same way, with a second tap on the same button. That second tap only
+## counts after a short wait (SELL_DELAY_MS), so a quick double tap never sells.
 ## Everything works while paused: the panel only sends commands to the Battle.
 
 ## The map should draw this tower's range ring (see BuildPanel.range_changed).
@@ -17,11 +18,18 @@ signal range_changed(cell: Vector2i, reach: int, boost: bool)
 signal sold(cell: Vector2i)
 
 const NO_CELL: Vector2i = Vector2i(-1, -1)
+## A second tap on Sell that comes sooner than this after the first is ignored.
+const SELL_DELAY_MS: int = 600
+const STAR_WARNING: String = "Loses the third star."
 
 var cell: Vector2i = NO_CELL
 ## The tier 3 path chosen but not yet confirmed, -1 for none.
 var picked_spec: int = -1
 var sell_armed: bool = false
+## When Sell was armed, in Time.get_ticks_msec(). Tests move it back to skip the wait.
+var armed_at_msec: int = 0
+## The cost line of each tier 3 path card, updated in place as gold changes.
+var cost_labels: Dictionary[int, Label] = {}
 
 var name_label: Label = null
 var tier_label: Label = null
@@ -31,6 +39,7 @@ var confirm_button: TapButton = null
 var path_cards: Array[TapRow] = []
 var sell_button: TapButton = null
 var refund_label: Label = null
+var star_warning_label: Label = null
 var permanent_label: Label = null
 
 var _signature: Array = []
@@ -120,9 +129,12 @@ func sell() -> void:
 		return
 	if not sell_armed:
 		sell_armed = true
+		armed_at_msec = Time.get_ticks_msec()
 		_signature = []
 		clear_feedback()
 		refresh()
+		return
+	if Time.get_ticks_msec() - armed_at_msec < SELL_DELAY_MS:
 		return
 	var refund: int = battle.sell_value(cell)
 	var sold_cell: Vector2i = cell
@@ -153,17 +165,34 @@ func refresh() -> void:
 	if tower.tier != 2 and picked_spec >= 0:
 		picked_spec = -1
 	var signature: Array = [cell, wide, numbers, options, picked_spec, sell_armed, tower.spent_now, tower.spent_before]
-	if signature == _signature:
-		return
-	_signature = signature
-	_rebuild(tower, numbers, options)
-	_announce_range(numbers)
+	if signature != _signature:
+		_signature = signature
+		_rebuild(tower, numbers, options)
+		_announce_range(numbers)
+	_update_costs(options)
+
+
+## "need N more" on a path card is the gold still missing now.
+func _update_costs(options: Array[Dictionary]) -> void:
+	for option: Dictionary in options:
+		var label: Label = cost_labels.get(int(option["spec"]))
+		if label != null:
+			label.text = _cost_text(option)
+
+
+func _cost_text(option: Dictionary) -> String:
+	var text: String = "Cost %d" % int(option["cost"])
+	if option["refusal"] == &"too_poor":
+		text += ", need %d more" % maxi(0, int(option["cost"]) - battle.gold)
+	return text
 
 
 func _rebuild(tower: TowerState, numbers: Dictionary, options: Array[Dictionary]) -> void:
 	clear_column()
 	aim_buttons.clear()
 	path_cards.clear()
+	cost_labels.clear()
+	star_warning_label = null
 	upgrade_button = null
 	confirm_button = null
 	permanent_label = null
@@ -244,6 +273,7 @@ func _upgrade_section(tower: TowerState, type: TowerType, numbers: Dictionary, o
 		box.add_child(UiKit.label("Upgrade to tier 2", &"SoftLabel"))
 		for change: Dictionary in BattleText.change_rows(option["before"], option["after"], type.kind, got_pct):
 			box.add_child(StatRow.change(change["label"], change["before"], change["after"]))
+		_add_star_warning(box, 2)
 		upgrade_button = UiKit.wrapped(UiKit.button("Upgrade for %d" % int(option["cost"]), &"PrimaryButton" if option["refusal"] == &"" else &"Button"))
 		_lock_if_refused(upgrade_button, option["refusal"])
 		upgrade_button.tapped.connect(upgrade)
@@ -251,7 +281,10 @@ func _upgrade_section(tower: TowerState, type: TowerType, numbers: Dictionary, o
 		return box
 	if picked_spec < 0:
 		box.add_child(UiKit.label("Pick a path for tier 3. The choice is permanent.", &"SoftLabel"))
-	var cards: HBoxContainer = HBoxContainer.new()
+		_add_star_warning(box, 3)
+	# Side by side in the roomy portrait sheet. In the narrow side panel they stack, so the
+	# numbers (with their units) are never squeezed.
+	var cards: BoxContainer = HBoxContainer.new() if wide else VBoxContainer.new()
 	cards.add_theme_constant_override(&"separation", 14)
 	for option: Dictionary in options:
 		var card: TapRow = _path_card(type, option, got_pct)
@@ -276,11 +309,43 @@ func _upgrade_section(tower: TowerState, type: TowerType, numbers: Dictionary, o
 		note.add_child(permanent_label)
 		box.add_child(note)
 		var ready: bool = chosen["refusal"] == &""
+		_add_star_warning(box, 3)
 		confirm_button = UiKit.wrapped(UiKit.button("Choose %s for %d" % [type.spec_name(picked_spec), int(chosen["cost"])], &"PrimaryButton" if ready else &"Button"))
 		_lock_if_refused(confirm_button, chosen["refusal"])
 		confirm_button.tapped.connect(confirm_path)
 		box.add_child(confirm_button)
 	return box
+
+
+## On a level whose third star is "No tower above tier N", the upgrade that would pass N
+## says so before it is tapped. The rule is read from the level, on every such level.
+func _add_star_warning(box: VBoxContainer, new_tier: int) -> void:
+	if not breaks_star3(new_tier):
+		return
+	var note: HBoxContainer = HBoxContainer.new()
+	note.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	note.add_theme_constant_override(&"separation", 12)
+	var star: StarIcon = StarIcon.new(48.0, false)
+	star.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	note.add_child(star)
+	star_warning_label = UiKit.label(STAR_WARNING, &"Label")
+	star_warning_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	note.add_child(star_warning_label)
+	box.add_child(note)
+
+
+## True when a tower at `new_tier` would end a "No tower above tier N" third star that
+## is still possible: no tower on the map is above N already.
+func breaks_star3(new_tier: int) -> bool:
+	if battle == null or battle.level.star3.get("kind", &"") != &"tier_at_most":
+		return false
+	var limit: int = int(battle.level.star3.get("value", 0))
+	if new_tier <= limit:
+		return false
+	for tower: TowerState in battle.towers:
+		if tower.tier > limit:
+			return false
+	return true
 
 
 func _path_card(type: TowerType, option: Dictionary, got_pct: int) -> TapRow:
@@ -302,10 +367,9 @@ func _path_card(type: TowerType, option: Dictionary, got_pct: int) -> TapRow:
 	card.body.add_child(UiKit.label(type.spec_info(spec), &"CardMutedLabel"))
 	for change: Dictionary in BattleText.change_rows(option["before"], option["after"], type.kind, got_pct):
 		card.body.add_child(StatRow.change(change["label"], change["before"], change["after"], &"CardMutedLabel", &"CardLabel", Palette.TEXT_DARK, 36))
-	var cost_text: String = "Cost %d" % int(option["cost"])
-	if not affordable and option["refusal"] == &"too_poor":
-		cost_text += ", need %d more" % (int(option["cost"]) - battle.gold)
-	card.body.add_child(UiKit.label(cost_text, &"CardLabel"))
+	var cost_line: Label = UiKit.label(_cost_text(option), &"CardLabel")
+	cost_labels[spec] = cost_line
+	card.body.add_child(cost_line)
 	card.tapped.connect(pick_path.bind(spec))
 	return card
 

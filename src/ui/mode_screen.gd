@@ -3,7 +3,8 @@
 class_name ModeScreen
 extends PageFrame
 ## "Play" opens this: Campaign, Roguelite and Daily, with a Continue card on top
-## when a game is saved. Roguelite and Daily show as locked, with the number of
+## when a game is saved. Roguelite and Daily show as "Coming in a later update" while
+## the run mode is not built. Once it is, they show as locked, with the number of
 ## stars they need, until the App says they are open. The App fills in the
 ## numbers; this screen names no level, region or tower.
 
@@ -19,6 +20,7 @@ var daily_button: TapButton
 
 var _slot: VBoxContainer
 var _runs_open: bool = false
+var _runs_built: bool = true
 var _stars_needed: int = 12
 var _stars: int = 0
 
@@ -47,9 +49,11 @@ func set_continue(title: String, detail: String) -> void:
 	_slot.add_child(continue_button)
 
 
-## Roguelite and Daily: open, or locked until `stars_needed` stars are earned.
-func set_runs(runs_open: bool, stars: int, stars_needed: int) -> void:
-	_runs_open = runs_open
+## Roguelite and Daily: not built yet, or open, or locked until `stars_needed` stars
+## are earned. `built` false wins over everything else.
+func set_runs(runs_open: bool, stars: int, stars_needed: int, built: bool = true) -> void:
+	_runs_open = runs_open and built
+	_runs_built = built
 	_stars = stars
 	_stars_needed = stars_needed
 	if roguelite_button != null:
@@ -74,6 +78,8 @@ func _run_card(title: String, detail: String) -> TapButton:
 	if _runs_open:
 		return UiKit.two_line_button(title, detail, &"CardButton", &"CardLabel", &"CardMutedLabel")
 	var locked_text: String = "Locked. Needs %d stars, you have %d." % [_stars_needed, _stars]
+	if not _runs_built:
+		locked_text = "Coming in a later update."
 	var b: TapButton = UiKit.two_line_button(title, locked_text, &"Button", &"Label", &"SoftLabel")
 	b.disabled = true
 	var margin: MarginContainer = b.get_child(0) as MarginContainer

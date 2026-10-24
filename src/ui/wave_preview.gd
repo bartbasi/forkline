@@ -3,20 +3,18 @@
 class_name WavePreview
 extends BattlePanel
 ## The wave preview (RULES 9.1): which creatures the next wave brings, how many,
-## and from which entrance letter. It is open in build phases and folds into a
-## strip while a wave runs. A tap on the header folds or opens it. A tap on a row
-## shows that creature's numbers for this wave. A creature the player has never
-## seen has a "New" tag, and a boss row always shows its one line.
-## Names, lines and numbers come from the Catalog and the Battle.
+## and from which entrance letter. It is open in build phases, in portrait too, and
+## folds into a strip while a wave runs. A tap on the header folds or opens it. A tap
+## on a row shows that creature's numbers for this wave. A creature that is new to
+## the player has a "New" tag in the open rows and in the folded strip, and a boss
+## row always shows its one line. Names, lines and numbers come from the Catalog and
+## the Battle.
 
 ## The wave the preview shows is the next one to start.
 var index: int = -1
 var expanded: bool = true
 var header: TapRow = null
 var header_label: Label = null
-## False keeps the preview folded into its strip in a build phase too, for a layout with
-## no spare height. A tap on the header still opens it.
-var auto_expand: bool = true
 var rows: Array[TapRow] = []
 var open_rows: Array[StringName] = []
 
@@ -25,19 +23,13 @@ var _signature: Array = []
 var _last_phase: int = -1
 
 
-## The creature ids the player has not seen yet; their rows get a "New" tag.
+## The creature ids that are new to the player; their rows and chips get a "New" tag.
 func set_unseen(ids: Array[StringName]) -> void:
+	if ids == _unseen:
+		return
 	_unseen = ids.duplicate()
 	_signature = []
 	refresh()
-
-
-## Changes whether a build phase opens the preview by itself (see auto_expand).
-func set_auto_expand(value: bool) -> void:
-	if value != auto_expand:
-		auto_expand = value
-		_last_phase = -1
-		refresh()
 
 
 ## Folds or opens the preview, as a tap on its header does.
@@ -63,7 +55,7 @@ func refresh() -> void:
 	if int(battle.phase) != _last_phase:
 		# Open in a build phase, folded into a strip during a wave.
 		_last_phase = int(battle.phase)
-		expanded = auto_expand and battle.phase == Battle.Phase.BUILD
+		expanded = battle.phase == Battle.Phase.BUILD
 		_signature = []
 	var wave: int = battle.waves_started
 	if wave != index:
@@ -82,6 +74,8 @@ func _rebuild(preview: Array[Dictionary]) -> void:
 	clear_column()
 	rows.clear()
 	header = TapRow.new()
+	header.set_look(Palette.PANEL_RAISED, Palette.PANEL_EDGE, 3, 16)
+	header.body.alignment = BoxContainer.ALIGNMENT_CENTER
 	header.tapped.connect(toggle)
 	var top: HBoxContainer = HBoxContainer.new()
 	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -113,10 +107,27 @@ func _rebuild(preview: Array[Dictionary]) -> void:
 		header.body.add_child(strip)
 	column.add_child(header)
 	if expanded:
+		var grid: GridContainer = GridContainer.new()
+		grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		grid.columns = _columns(preview)
+		grid.add_theme_constant_override(&"h_separation", 12)
+		grid.add_theme_constant_override(&"v_separation", 10)
 		for entry: Dictionary in preview:
 			var row: TapRow = _row(entry)
 			rows.append(row)
-			column.add_child(row)
+			grid.add_child(row)
+		column.add_child(grid)
+
+
+## Two rows side by side when the panel is wide and every row is short, so a wave with
+## a few groups takes one line of height. A boss row or an opened row needs the width.
+func _columns(preview: Array[Dictionary]) -> int:
+	if not wide or preview.size() < 2 or not open_rows.is_empty():
+		return 1
+	for entry: Dictionary in preview:
+		if battle.catalog.enemy(entry["enemy"]).boss:
+			return 1
+	return 2
 
 
 func _title(preview: Array[Dictionary]) -> String:
@@ -136,34 +147,33 @@ func _chip(entry: Dictionary) -> Control:
 	text.autowrap_mode = TextServer.AUTOWRAP_OFF
 	text.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	chip.add_child(text)
+	if _unseen.has(entry["enemy"]):
+		chip.add_child(_new_tag())
 	return chip
 
 
 func _row(entry: Dictionary) -> TapRow:
 	var type: EnemyType = battle.catalog.enemy(entry["enemy"])
 	var row: TapRow = TapRow.new()
+	row.set_look(Palette.PANEL_RAISED, Palette.PANEL_EDGE, 3, 16)
 	row.tapped.connect(toggle_row.bind(type.id))
 	var line: HBoxContainer = HBoxContainer.new()
 	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	line.add_theme_constant_override(&"separation", 14)
-	line.add_child(GlyphIcon.new(104.0).show_enemy(type.id))
+	line.add_child(GlyphIcon.new(88.0).show_enemy(type.id))
 	var names: VBoxContainer = VBoxContainer.new()
 	names.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	names.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	names.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	names.add_theme_constant_override(&"separation", 2)
-	var title: HBoxContainer = HBoxContainer.new()
-	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	title.add_theme_constant_override(&"separation", 12)
 	var name_label: Label = UiKit.heading(type.name)
 	name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	title.add_child(name_label)
-	if _unseen.has(type.id):
-		title.add_child(_new_tag())
-	names.add_child(title)
-	var amount: HBoxContainer = HBoxContainer.new()
+	names.add_child(name_label)
+	# The second line wraps, so the New tag drops to a third line instead of widening a row.
+	var amount: HFlowContainer = HFlowContainer.new()
 	amount.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	amount.add_theme_constant_override(&"separation", 16)
+	amount.add_theme_constant_override(&"h_separation", 16)
+	amount.add_theme_constant_override(&"v_separation", 4)
 	var count: Label = UiKit.heading("x%d" % int(entry["count"]))
 	count.autowrap_mode = TextServer.AUTOWRAP_OFF
 	amount.add_child(count)
@@ -171,6 +181,8 @@ func _row(entry: Dictionary) -> TapRow:
 	from.autowrap_mode = TextServer.AUTOWRAP_OFF
 	from.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	amount.add_child(from)
+	if _unseen.has(type.id):
+		amount.add_child(_new_tag())
 	names.add_child(amount)
 	line.add_child(names)
 	row.body.add_child(line)

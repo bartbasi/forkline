@@ -485,6 +485,10 @@ func test_selling_in_the_build_phase_refunds_in_full() -> void:
 	assert_not_null(b.tower_at(cell), "the first tap only asks")
 	assert_eq(panel.sell_button.text, "Tap again to sell for %d" % price)
 	panel.sell_button.tapped.emit()
+	assert_not_null(b.tower_at(cell), "a quick second tap does not sell")
+	assert_eq(b.gold, gold)
+	panel.armed_at_msec -= TowerPanel.SELL_DELAY_MS
+	panel.sell_button.tapped.emit()
 	assert_null(b.tower_at(cell))
 	assert_eq(b.gold, gold + price)
 	assert_eq(sold, [cell] as Array[Vector2i])
@@ -509,6 +513,7 @@ func test_selling_after_the_build_phase_refunds_the_rules_percent() -> void:
 	assert_eq(panel.sell_button.text, "Sell for %d" % expected)
 	var gold: int = b.gold
 	panel.sell_button.tapped.emit()
+	panel.armed_at_msec -= TowerPanel.SELL_DELAY_MS
 	panel.sell_button.tapped.emit()
 	assert_null(b.tower_at(cell))
 	assert_eq(b.gold, gold + expected)
@@ -593,6 +598,7 @@ func test_commands_work_mid_wave_without_a_single_tick() -> void:
 	assert_eq(b.tower_at(cell).tier, 3)
 	assert_eq(b.tower_at(cell).aim, TowerState.Aim.LAST)
 	panel.sell_button.tapped.emit()
+	panel.armed_at_msec -= TowerPanel.SELL_DELAY_MS
 	panel.sell_button.tapped.emit()
 	assert_null(b.tower_at(cell))
 	assert_eq(b.tick, tick, "no tick ran")

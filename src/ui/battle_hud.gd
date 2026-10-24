@@ -36,13 +36,14 @@ var _call_state: String = ""
 
 func _init() -> void:
 	super()
-	add_theme_stylebox_override(&"panel", UiKit.box(Palette.PANEL, Palette.PANEL_EDGE, 3, 34, 18))
+	# Snug: the HUD is the one part that takes height from the map.
+	add_theme_stylebox_override(&"panel", UiKit.box(Palette.PANEL, Palette.PANEL_EDGE, 3, 34, 10))
 	_row_top = HBoxContainer.new()
 	_row_top.add_theme_constant_override(&"separation", 12)
 	_row_mid = HBoxContainer.new()
 	_row_mid.add_theme_constant_override(&"separation", 12)
 	_row_call = HBoxContainer.new()
-	column.add_theme_constant_override(&"separation", 12)
+	column.add_theme_constant_override(&"separation", 8)
 	column.add_child(_row_top)
 	column.add_child(_row_mid)
 	column.add_child(_row_call)
@@ -97,11 +98,7 @@ func refresh(new_battle: Battle = null) -> void:
 		return
 	lives_label.text = str(maxi(battle.lives, 0))
 	gold_label.text = str(battle.gold)
-	var total: int = battle.wave_count()
-	var now: int = battle.waves_started
-	if battle.phase == Battle.Phase.BUILD:
-		now += 1
-	wave_label.text = "Wave %d/%d" % [clampi(now, 0, total), total]
+	wave_label.text = "Wave %d/%d" % [BattleText.wave_number(battle), battle.wave_count()]
 	_refresh_call()
 
 

@@ -52,8 +52,10 @@ func advance() -> void:
 	closed.emit()
 
 
+## The back button closes the whole card. Closing it counts as having read it.
 func request_close() -> void:
-	advance()
+	finished.emit()
+	closed.emit()
 
 
 func _show(at: int) -> void:

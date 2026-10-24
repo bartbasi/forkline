@@ -28,6 +28,20 @@ static func tiles(hundredths: int) -> String:
 	return "%d.%02d" % [whole, frac]
 
 
+## Reach, range or splash the one way everywhere: "3 tiles", "2.5 tiles", "0.75 tiles".
+static func tiles_text(hundredths: int) -> String:
+	return "%s tiles" % tiles(hundredths)
+
+
+## The wave number the HUD and the Continue card both show: the wave being played,
+## or the next one in a build phase.
+static func wave_number(battle: Battle) -> int:
+	var now: int = battle.waves_started
+	if battle.phase == Battle.Phase.BUILD:
+		now += 1
+	return clampi(now, 0, battle.wave_count())
+
+
 ## Milliseconds as seconds with one decimal: 1000 is "1.0".
 static func seconds(ms: int) -> String:
 	@warning_ignore("integer_division")
@@ -158,13 +172,13 @@ static func tower_rows(numbers: Dictionary, kind: StringName) -> Array[PackedStr
 	if kind == &"boost":
 		rows.append(PackedStringArray(["Rate boost", "+%d%%" % int(numbers.get("boost_pct", 0))]))
 		rows.append(PackedStringArray(["Damage bonus", "+%d" % int(numbers.get("boost_damage", 0))]))
-		rows.append(PackedStringArray(["Reach", "%s tiles" % tiles(reach)]))
+		rows.append(PackedStringArray(["Reach", tiles_text(reach)]))
 		if numbers.has("boosting"):
 			rows.append(PackedStringArray(["Boosting now", str(int(numbers["boosting"]))]))
 		return rows
 	if kind == &"slow":
 		rows.append(PackedStringArray(["Slow", "%d%%" % int(numbers.get("slow_pct", 0))]))
-		rows.append(PackedStringArray(["Range", "%s tiles" % tiles(reach)]))
+		rows.append(PackedStringArray(["Range", tiles_text(reach)]))
 		rows.append(PackedStringArray(["Linger", "%s s" % seconds(int(numbers.get("slow_ms", 0)))]))
 		rows.append(PackedStringArray(["Affects", hits_text(numbers)]))
 		return rows
@@ -173,10 +187,10 @@ static func tower_rows(numbers: Dictionary, kind: StringName) -> Array[PackedStr
 		damage += " +%d" % got_damage
 	rows.append(PackedStringArray(["Damage", damage]))
 	rows.append(PackedStringArray(["Rate", "%s/s" % rate(int(numbers.get("reload_ms", 0)), got_pct)]))
-	rows.append(PackedStringArray(["Range", "%s tiles" % tiles(reach)]))
+	rows.append(PackedStringArray(["Range", tiles_text(reach)]))
 	rows.append(PackedStringArray(["Hits", hits_text(numbers)]))
 	if int(numbers.get("splash", 0)) > 0:
-		rows.append(PackedStringArray(["Splash", "%s tiles" % tiles(int(numbers["splash"]))]))
+		rows.append(PackedStringArray(["Splash", tiles_text(int(numbers["splash"]))]))
 	if bool(numbers.get("pierce", false)):
 		rows.append(PackedStringArray(["Armor", "Ignored"]))
 	if int(numbers.get("targets", 1)) > 1:
@@ -200,7 +214,7 @@ static func change_rows(before: Dictionary, after: Dictionary, kind: StringName,
 	if kind == &"boost":
 		_change(out, "Rate boost", "+%d%%" % int(before.get("boost_pct", 0)), "+%d%%" % int(after.get("boost_pct", 0)))
 		_change(out, "Damage bonus", "+%d" % int(before.get("boost_damage", 0)), "+%d" % int(after.get("boost_damage", 0)))
-	_change(out, "Range" if kind != &"boost" else "Reach", tiles(int(before.get("reach", 0))), tiles(int(after.get("reach", 0))))
+	_change(out, "Range" if kind != &"boost" else "Reach", tiles_text(int(before.get("reach", 0))), tiles_text(int(after.get("reach", 0))))
 	_change(out, "Splash", _tiles_or_none(int(before.get("splash", 0))), _tiles_or_none(int(after.get("splash", 0))))
 	_change(out, "Slow", _percent_or_none(int(before.get("slow_pct", 0))), _percent_or_none(int(after.get("slow_pct", 0))))
 	_change(out, "Linger", _seconds_or_none(int(before.get("slow_ms", 0))), _seconds_or_none(int(after.get("slow_ms", 0))))
@@ -210,7 +224,7 @@ static func change_rows(before: Dictionary, after: Dictionary, kind: StringName,
 
 
 static func _tiles_or_none(hundredths: int) -> String:
-	return tiles(hundredths)
+	return tiles_text(hundredths)
 
 
 static func _percent_or_none(pct: int) -> String:

@@ -6,13 +6,20 @@ extends Control
 ## src/theme/ code the game uses, so what the guide shows is what the player
 ## will see. Kinds: walk, hud, spots, tiers, towers, creatures, gates, signals,
 ## stars. Captions (names under towers and creatures) are optional: the guide
-## passes them only when the data has names, and draws shapes alone otherwise.
+## passes them only when the data has names, and draws shapes alone otherwise. A name
+## wraps onto two lines when it must, and the pictures go three to a row when the names
+## need the room, so a name is never cut off and never shrinks below CAPTION_SIZE.
 
 ## Height of each kind as a share of its width.
 const RATIOS: Dictionary[StringName, float] = {
 	&"walk": 0.4286, &"hud": 0.30, &"spots": 0.36, &"tiers": 0.30, &"towers": 0.34,
 	&"creatures": 0.50, &"gates": 0.7143, &"signals": 0.62, &"stars": 0.20,
 }
+## Caption text, in logical px. It never gets smaller than this.
+const CAPTION_SIZE: int = 38
+const CAPTION_LINE: float = 46.0
+const MAX_PER_ROW: int = 6
+const MIN_PER_ROW: int = 2
 const WALK_GRID: PackedStringArray = ["..o....", "1#####B", "....o.."]
 const GATES_GRID: PackedStringArray = ["...1...", "...#...", ".#####.", ".G.o.G.", ".##B##."]
 const GATES_ROUTE: Array[Vector2i] = [
@@ -33,6 +40,9 @@ func _init(art_kind: StringName, art_captions: PackedStringArray = PackedStringA
 
 ## The example is as tall as its kind needs for this width.
 func fit_width(width: float) -> void:
+	if kind == &"towers" or kind == &"creatures":
+		custom_minimum_size = Vector2(width, float(_grid(width)["height"]))
+		return
 	custom_minimum_size = Vector2(width, width * float(RATIOS.get(kind, 0.4)))
 
 
@@ -123,33 +133,24 @@ func _tiers() -> void:
 
 
 func _towers() -> void:
-	var w: float = size.x
-	var h: float = size.y
 	_card_background()
-	var count: int = Silhouettes.TOWERS.size()
-	var cell: float = w / float(count) * 0.95
-	for i: int in count:
-		var x: float = w * (float(i) + 0.5) / float(count)
-		Silhouettes.draw_tower(self, Silhouettes.TOWERS[i], 1, -1, Vector2(x, h * 0.58), cell)
-		_caption(i, Vector2(x, h * 0.92), w / float(count))
+	var g: Dictionary = _grid(size.x)
+	var slot: float = g["slot"]
+	for i: int in Silhouettes.TOWERS.size():
+		var at: Vector2 = _slot_center(g, i)
+		Silhouettes.draw_tower(self, Silhouettes.TOWERS[i], 1, -1, at, float(g["picture"]))
+		_caption(i, at + Vector2(0.0, float(g["picture"]) * 0.62), slot, g)
 
 
 func _creatures() -> void:
-	var w: float = size.x
-	var h: float = size.y
 	_card_background()
+	var g: Dictionary = _grid(size.x)
+	var slot: float = g["slot"]
 	var ids: Array[StringName] = Silhouettes.CREATURES
-	var per_row: int = 6
 	for i: int in ids.size():
-		@warning_ignore("integer_division")
-		var row: int = i / per_row
-		var count: int = mini(per_row, ids.size() - row * per_row)
-		var column: int = i - row * per_row
-		var cell: float = w / float(per_row)
-		var x: float = w * 0.5 + (float(column) - float(count - 1) * 0.5) * cell
-		var y: float = h * (0.28 + 0.46 * float(row))
-		Silhouettes.draw_enemy(self, ids[i], Vector2(x, y), Silhouettes.enemy_size(ids[i], cell * 1.0), 1)
-		_caption(i, Vector2(x, y + cell * 0.34), cell)
+		var at: Vector2 = _slot_center(g, i)
+		Silhouettes.draw_enemy(self, ids[i], at, Silhouettes.enemy_size(ids[i], float(g["picture"])), 1)
+		_caption(i, at + Vector2(0.0, float(g["picture"]) * 0.62), slot, g)
 
 
 func _gates() -> void:
@@ -224,15 +225,91 @@ func _arrow(from: Vector2, to: Vector2, color: Color = Palette.ROUTE) -> void:
 	draw_colored_polygon(PackedVector2Array([to, to - Vector2(26.0, 16.0), to - Vector2(26.0, -16.0)]), color)
 
 
-func _caption(index: int, at: Vector2, width: float) -> void:
-	if index >= captions.size() or captions[index].is_empty():
+## The ids of the pictures this kind shows.
+func _ids() -> Array[StringName]:
+	return Silhouettes.TOWERS if kind == &"towers" else Silhouettes.CREATURES
+
+
+## How the pictures sit in `width`: pictures per row, the slot each gets, the picture
+## size, each caption split into lines, the row height and the whole height. With names,
+## the most pictures per row (6 down to 2) whose names fit their slot.
+func _grid(width: float) -> Dictionary:
+	var count: int = _ids().size()
+	var per_row: int = MAX_PER_ROW
+	if not captions.is_empty():
+		while per_row > MIN_PER_ROW and not _fit(_caption_lines(width / float(per_row) * 0.94), width / float(per_row) * 0.94):
+			per_row -= 1
+	# Rows of the same length: 6 pictures at 5 a row become 3 and 3, not 5 and 1.
+	@warning_ignore("integer_division")
+	var rows: int = (count + per_row - 1) / per_row
+	@warning_ignore("integer_division")
+	per_row = (count + rows - 1) / rows
+	var slot: float = width / float(per_row)
+	var lines: Array[PackedStringArray] = []
+	if not captions.is_empty():
+		lines = _caption_lines(slot * 0.94)
+	var picture: float = minf(slot * 0.62, 190.0)
+	var most: int = 0
+	for l: PackedStringArray in lines:
+		most = maxi(most, l.size())
+	var row_height: float = picture * 1.3 + float(most) * CAPTION_LINE + 28.0
+	return {
+		"per_row": per_row, "slot": slot, "picture": picture, "lines": lines, "row_height": row_height,
+		"rows": rows, "height": row_height * float(rows) + 20.0,
+	}
+
+
+## Where picture `index` is centered. A short last row is centered.
+func _slot_center(g: Dictionary, index: int) -> Vector2:
+	var per_row: int = g["per_row"]
+	@warning_ignore("integer_division")
+	var row: int = index / per_row
+	var in_row: int = mini(per_row, _ids().size() - row * per_row)
+	var column: int = index - row * per_row
+	var x: float = size.x * 0.5 + (float(column) - float(in_row - 1) * 0.5) * float(g["slot"])
+	var y: float = 10.0 + float(g["row_height"]) * float(row) + float(g["picture"]) * 0.62
+	return Vector2(x, y)
+
+
+## Each caption split on spaces into lines that fit `max_width` where they can.
+func _caption_lines(max_width: float) -> Array[PackedStringArray]:
+	var font: Font = UiTheme.font(UiTheme.WEIGHT_BOLD)
+	var out: Array[PackedStringArray] = []
+	for text: String in captions:
+		var lines: PackedStringArray = PackedStringArray()
+		var line: String = ""
+		for word: String in text.split(" ", false):
+			var tried: String = word if line.is_empty() else "%s %s" % [line, word]
+			if line.is_empty() or font.get_string_size(tried, HORIZONTAL_ALIGNMENT_LEFT, -1, CAPTION_SIZE).x <= max_width:
+				line = tried
+			else:
+				lines.append(line)
+				line = word
+		if not line.is_empty():
+			lines.append(line)
+		out.append(lines)
+	return out
+
+
+func _fit(lines: Array[PackedStringArray], max_width: float) -> bool:
+	var font: Font = UiTheme.font(UiTheme.WEIGHT_BOLD)
+	for caption: PackedStringArray in lines:
+		for line: String in caption:
+			if font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, CAPTION_SIZE).x > max_width:
+				return false
+	return true
+
+
+## A caption, centered under its picture, one line per entry.
+func _caption(index: int, at: Vector2, width: float, g: Dictionary) -> void:
+	var all: Array = g["lines"]
+	if index >= all.size():
 		return
 	var font: Font = UiTheme.font(UiTheme.WEIGHT_BOLD)
-	var size_px: int = 30
-	var text_w: float = font.get_string_size(captions[index], HORIZONTAL_ALIGNMENT_LEFT, -1, size_px).x
-	if text_w > width * 1.05:
-		size_px = int(float(size_px) * width * 1.05 / text_w)
-	draw_string(font, at + Vector2(-width * 0.5, 0.0), captions[index], HORIZONTAL_ALIGNMENT_CENTER, width, size_px, Palette.TEXT_DARK)
+	var lines: PackedStringArray = all[index]
+	for i: int in lines.size():
+		var y: float = at.y + CAPTION_LINE * (float(i) + 0.5) + font.get_ascent(CAPTION_SIZE) * 0.3
+		draw_string(font, Vector2(at.x - width * 0.5, y), lines[i], HORIZONTAL_ALIGNMENT_CENTER, width, CAPTION_SIZE, Palette.TEXT_DARK)
 
 
 ## Draws text with its vertical middle (or its center, when `centered`) at `at`.

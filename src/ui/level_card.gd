@@ -5,7 +5,8 @@ extends PageFrame
 ## The level card (RULES 10.5, 12.4): the name, the waves, the gates, the three star
 ## lines with the stars earned, the hint, and the choice of Normal or Relaxed. Normal
 ## is always chosen when the card opens; the card never remembers Relaxed (Bart, hard
-## stop A). A level with a saved game offers Resume first.
+## stop A). A level with a saved game offers Resume first and says which difficulty
+## that game is on; the choice below it is for starting over.
 
 ## Start the level. `relaxed` is the choice on the card.
 signal play_requested(relaxed: bool)
@@ -16,6 +17,7 @@ var level_id: StringName
 var relaxed: bool = false
 var play_button: TapButton
 var resume_button: TapButton
+var saved_label: Label
 var normal_button: TapButton
 var relaxed_button: TapButton
 var difficulty_label: Label
@@ -30,8 +32,8 @@ var _normal_text: String = ""
 var _relaxed_text: String = ""
 
 
-## `saved` is true when this level has a saved game.
-func _init(game: GameData, progress: Progress, id: StringName, saved: bool) -> void:
+## `saved` is true when this level has a saved game, and `saved_relaxed` is that game's difficulty.
+func _init(game: GameData, progress: Progress, id: StringName, saved: bool, saved_relaxed: bool = false) -> void:
 	var level: LevelData = game.levels[id]
 	super("Level %s" % CampaignText.number(game, id))
 	level_id = id
@@ -41,8 +43,10 @@ func _init(game: GameData, progress: Progress, id: StringName, saved: bool) -> v
 	column.add_child(_stars(game, progress, level))
 	if not level.hint_text.is_empty():
 		column.add_child(_hint(level))
-	column.add_child(_difficulty(game, level))
+	column.add_child(_difficulty(game, level, saved))
 	if saved:
+		saved_label = UiKit.label("Your saved game is on %s." % ("Relaxed" if saved_relaxed else "Normal"), &"Label")
+		column.add_child(saved_label)
 		resume_button = UiKit.button("Resume", &"PrimaryButton")
 		resume_button.tapped.connect(func() -> void: resume_requested.emit())
 		column.add_child(resume_button)
@@ -108,9 +112,9 @@ func _hint(level: LevelData) -> Control:
 	return box.get_parent() as Control
 
 
-func _difficulty(game: GameData, level: LevelData) -> Control:
+func _difficulty(game: GameData, level: LevelData, saved: bool) -> Control:
 	var box: VBoxContainer = UiKit.section()
-	box.add_child(UiKit.heading("Difficulty"))
+	box.add_child(UiKit.heading("Difficulty if you start over" if saved else "Difficulty"))
 	var row: HBoxContainer = HBoxContainer.new()
 	row.add_theme_constant_override(&"separation", 16)
 	normal_button = UiKit.button("Normal")
