@@ -96,11 +96,20 @@ func test_ranges_ids_and_types_are_checked() -> void:
 		["card", {"type": "tower_add", "tower": "sling_post", "stat": "cost", "amount": 2}],
 		["card", {"type": "tower_pct", "tower": "sling_post", "stat": "reach", "pct": 80}],
 		["card", {"type": "add_gold", "amount": "100", "per_wave": 10}],
+		["card", {"type": "refund_pct", "pct": 0}],
+		["card", {"type": "refund_pct", "pct": 101}],
+		["card", {"type": "refund_pct", "pct": 1000}],
 		["card", {"type": "nothing"}],
 		["card", {"pct": 5}],
 	]
 	for item: Array in bad:
 		assert_false(Modifiers.check([item[1]], catalog, StringName(item[0])).is_empty(), str(item[1]))
+
+
+func test_a_refund_card_never_pays_a_profit_rules_4_6() -> void:
+	for pct: int in [1, 90, 100]:
+		assert_eq(Modifiers.check([{"type": "refund_pct", "pct": pct}], catalog, &"card").size(), 0, "refund %d%%" % pct)
+	assert_false(Modifiers.check([{"type": "refund_pct", "pct": 101}], catalog, &"card").is_empty(), "refund 101%")
 
 
 func test_hostile_shapes_never_crash() -> void:

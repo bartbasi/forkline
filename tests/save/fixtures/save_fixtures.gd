@@ -2,11 +2,12 @@
 # Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.
 extends RefCounted
 ## Shared helpers for tests/save/. Every test writes only inside WORK, a folder under
-## user://tests/save/ that each test removes in before_each() and after_each().
+## user://tests/save/ that each test removes in before_each() and after_each(). WORK is
+## named after the process, so two test runs at once never wipe each other's files.
 
 const TEST_ROOT: String = "user://tests/save"
-const WORK: String = "user://tests/save/work"
 const DATA: String = "res://data"
+static var WORK: String = "%s/work_%d" % [TEST_ROOT, OS.get_process_id()]
 
 
 ## Removes WORK and everything in it, then makes it again, empty.
@@ -15,14 +16,16 @@ static func fresh() -> void:
 	DirAccess.make_dir_recursive_absolute(WORK)
 
 
-## Removes the test folder. Refuses any path outside user://tests/save.
+## Removes this run's WORK, then the parent folders if no other run still uses them.
+## Refuses any path outside user://tests/save.
 static func clean() -> void:
-	_remove_tree(TEST_ROOT)
+	_remove_tree(WORK)
+	DirAccess.remove_absolute(TEST_ROOT)               # only succeeds when empty
 	DirAccess.remove_absolute("user://tests")
 
 
 static func _remove_tree(dir_path: String) -> void:
-	if not dir_path.begins_with(TEST_ROOT) or dir_path.contains(".."):
+	if not dir_path.begins_with(TEST_ROOT + "/") or dir_path.contains(".."):
 		return
 	if not DirAccess.dir_exists_absolute(dir_path):
 		return

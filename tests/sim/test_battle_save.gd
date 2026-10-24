@@ -221,6 +221,9 @@ func test_hostile_fields_are_refused() -> void:
 		["tower unknown", func(d: Dictionary) -> void: d["towers"][0]["type"] = "dragon"],
 		["aim unknown", func(d: Dictionary) -> void: d["towers"][0]["aim"] = "sideways"],
 		["reload past its reload", func(d: Dictionary) -> void: d["towers"][0]["reload"] = 99999999],
+		["reload just past its own reload", func(d: Dictionary) -> void: d["towers"][0]["reload"] = _own_reload(d, 0) + 1],
+		["reload just below 0", func(d: Dictionary) -> void: d["towers"][0]["reload"] = -1],
+		["reload far below 0", func(d: Dictionary) -> void: d["towers"][0]["reload"] = -1000000000],
 		["spent_now during a wave", func(d: Dictionary) -> void: d["towers"][0]["spent_now"] = 10],
 		["towers out of order", func(d: Dictionary) -> void: d["towers"].reverse()],
 		["enemy health 0", func(d: Dictionary) -> void: d["enemies"][0]["health"] = 0],
@@ -272,6 +275,50 @@ func test_hostile_fields_are_refused() -> void:
 		var copy: Dictionary = data.duplicate(true)
 		(item[1] as Callable).call(copy)
 		_refused(copy, item[0])
+
+
+## The reload of saved tower i, in the timer's units (1/100 ms).
+func _own_reload(data: Dictionary, i: int) -> int:
+	var item: Dictionary = data["towers"][i]
+	return catalog.tower(StringName(item["type"])).stats(int(item["tier"]), int(item["spec"])).reload_ms * 100
+
+
+func test_a_saved_reload_timer_is_0_to_the_towers_own_reload_rules_5_2() -> void:
+	var data: Dictionary = _mid_wave_data()
+	var own: Array[int] = []
+	for i: int in (data["towers"] as Array).size():
+		own.append(_own_reload(data, i))
+	assert_true(own.size() >= 2 and own.min() != own.max(), "towers with different reloads: %s" % str(own))
+	for i: int in own.size():
+		for value: int in [0, own[i]]:
+			var copy: Dictionary = data.duplicate(true)
+			copy["towers"][i]["reload"] = value
+			var b: Battle = Battle.from_data(copy, catalog)
+			assert_not_null(b, "tower %d accepts %d" % [i, value])
+			if b != null:
+				assert_eq(b.towers[i].reload, value)
+		for value: int in [-1, own[i] + 1]:
+			var copy: Dictionary = data.duplicate(true)
+			copy["towers"][i]["reload"] = value
+			_refused(copy, "tower %d refuses %d" % [i, value])
+
+
+func test_no_real_game_leaves_a_timer_outside_0_to_its_reload_rules_5_2() -> void:
+	# The bounds the loader uses hold on every tick of the scripted level, upgrades and all.
+	var b: Battle = Battle.create(_level(), catalog, false, [])
+	var checked: int = 0
+	while (b.phase == Battle.Phase.BUILD or b.phase == Battle.Phase.WAVE) and b.tick < LIMIT:
+		_act(b)
+		if b.phase != Battle.Phase.WAVE:
+			break
+		b.step()
+		for tower: TowerState in b.towers:
+			var top: int = catalog.tower(tower.type).stats(tower.tier, tower.spec).reload_ms * 100
+			if tower.reload < 0 or tower.reload > top:
+				fail("tick %d: %s timer %d outside 0 to %d" % [b.tick, tower.type, tower.reload, top])
+				return
+			checked += 1
+	assert_true(checked > 1000, "%d timers checked" % checked)
 
 
 func test_every_field_survives_garbage_without_a_crash() -> void:

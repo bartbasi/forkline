@@ -66,6 +66,36 @@ func test_an_idle_tower_never_saves_up_shots_rules_5_2() -> void:
 	assert_true(b.tower_at(Vector2i(2, 6)).reload >= 0)
 
 
+## A tier 2 Pumpkin Catapult that fired on tick 0 and then ran for more ticks.
+func _catapult_after(ticks: int) -> Battle:
+	var b: Battle = _battle([Fx.group("shellback", 1)])
+	b.place_tower(Vector2i(2, 1), &"pumpkin_catapult")
+	b.upgrade_tower(Vector2i(2, 1))
+	b.start_next_wave()
+	b.step()
+	Fx.steps(b, ticks)
+	return b
+
+
+func test_an_upgrade_never_leaves_the_timer_above_the_new_reload_rules_5_2() -> void:
+	# The 5.2 example: 2.0 s reload, fired on tick 0, 4 ticks of 5000 gone: 1.8 s left.
+	var jam: Battle = _catapult_after(3)
+	assert_eq(jam.tower_at(Vector2i(2, 1)).reload, 180000, "1.8 s left at tier 2")
+	assert_eq(jam.upgrade_tower(Vector2i(2, 1), 1), Battle.DONE)
+	assert_eq(jam.tower_at(Vector2i(2, 1)).reload, 150000, "a Jam Pot (1.5 s) drops to 1.5 s")
+	var prize: Battle = _catapult_after(3)
+	assert_eq(prize.upgrade_tower(Vector2i(2, 1), 0), Battle.DONE)
+	assert_eq(prize.tower_at(Vector2i(2, 1)).reload, 180000, "a Prize Pumpkin (2.5 s) keeps 1.8 s")
+	var low: Battle = _catapult_after(13)
+	assert_eq(low.upgrade_tower(Vector2i(2, 1), 1), Battle.DONE)
+	assert_eq(low.tower_at(Vector2i(2, 1)).reload, 130000, "1.3 s left is below 1.5 s: unchanged")
+	# The capped Jam Pot fires 1.5 s later, not sooner: 30 ticks of 5000.
+	jam.take_events()
+	var fired: Array = _of(_log(jam, 40), &"fired")
+	assert_true(fired.size() > 0, "the Jam Pot fires again")
+	assert_eq(fired[0][0], 4 + 29, "on the 30th tick after the upgrade")
+
+
 func test_targeting_first_last_strong_rules_8_2() -> void:
 	# Pip, Scamp, Pip, half a second apart. At tick 40 all three are in reach of [2, 3].
 	var expected: Dictionary = {TowerState.Aim.FIRST: 0, TowerState.Aim.LAST: 2, TowerState.Aim.STRONG: 1}

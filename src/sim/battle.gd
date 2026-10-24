@@ -21,7 +21,6 @@ const MAX_ENEMIES: int = 4000
 const MAX_RELEASES: int = 1000
 const ID_CEILING: int = 2147483648                     # 2^31
 const BIG: int = 1000000000
-const MAX_RELOAD: int = 6000000                        # the longest reload_ms a catalog allows, x 100
 const SAVE_KEYS: PackedStringArray = [
 	"format", "level", "relaxed", "effects", "risk", "tick", "phase", "waves_started",
 	"running", "wave_start", "gold", "lives", "start_lives", "gates_in_hand", "gates",
@@ -192,6 +191,8 @@ func upgrade_tower(cell: Vector2i, spec: int = -1) -> StringName:
 	_pay(tower, price)
 	tower.tier += 1
 	tower.spec = spec
+	# 5.2: the timer keeps running but never stays above the new reload.
+	tower.reload = mini(tower.reload, _stats(tower).reload_ms * 100)
 	_refresh_reach(tower)
 	_max_tier = maxi(_max_tier, tower.tier)
 	_emit({"kind": &"upgraded", "cell": cell, "tower": tower.type, "tier": tower.tier, "spec": tower.spec, "gold": price})
@@ -1255,8 +1256,12 @@ func _load_towers(data: Variant, chk: DataCheck) -> void:
 			chk.fail(path + ".aim", "must be first, last or strong")
 		else:
 			tower.aim = AIM_NAMES.find(String(aim_value)) as TowerState.Aim
-		# An upgrade keeps the running timer, so it may exceed the new tier's reload.
-		tower.reload = chk.integer(item, "reload", path, -BIG, MAX_RELOAD)
+		# Between ticks a timer is 0 to the tower's own reload (5.2). It starts at 0. A tick
+		# drains it by MS_PER_TICK x 100 = 5000, and every reload_ms x 100 is at least that,
+		# so a shot taken at 0 or below lands it back at 0 or more; an idle tower sets 0; an
+		# upgrade caps it at the new reload. Phase 7: recheck the floor once Bakery boosts
+		# make the drain larger.
+		tower.reload = chk.integer(item, "reload", path, 0, _stats(tower).reload_ms * 100)
 		tower.spent_now = chk.integer(item, "spent_now", path, 0, BIG)
 		tower.spent_before = chk.integer(item, "spent_before", path, 0, BIG)
 		if phase == Phase.WAVE and tower.spent_now != 0:

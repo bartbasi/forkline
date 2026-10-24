@@ -13,7 +13,7 @@ const TOWER_ADD_STATS: PackedStringArray = [
 const TOWER_PCT_STATS: PackedStringArray = ["damage", "reload_ms"]
 const MAX_FIXED_CELLS: int = 8
 
-## type: [uses, {field: rule}]. Rules: pct 1 to 1,000; count 1 to 200; gates 0 to
+## type: [uses, {field: rule}]. Rules: pct 1 to 1,000; refund 1 to 100 (4.6); count 1 to 200; gates 0 to
 ## max_gates; lives 1 to 1,000; cells; tower and enemy ids; tier 1 or 2; bool;
 ## time (a multiple of 50 up to 600,000); every (50 to 600,000); entrance 1 to 4;
 ## number -1,000 to 1,000; add_stat and pct_stat (stat names).
@@ -41,7 +41,7 @@ const TYPES: Dictionary = {
 	"tower_hits_air": [["card"], {"tower": "tower"}],
 	"bounty_pct": [["card"], {"pct": "pct"}],
 	"clear_bonus_pct": [["card"], {"pct": "pct"}],
-	"refund_pct": [["card"], {"pct": "pct"}],
+	"refund_pct": [["card"], {"pct": "refund"}],
 	"cost_add": [["card"], {"build": "number", "upgrade": "number"}],
 	"interest": [["card"], {"pct": "pct", "max": "number"}],
 	"gates_stay": [["card"], {}],
@@ -94,6 +94,8 @@ static func _check_one(data: Variant, path: String, catalog: Catalog, use: Strin
 		match String(fields[key]):
 			"pct":
 				chk.whole(value, field_path, 1, 1000)
+			"refund":
+				chk.whole(value, field_path, 1, 100)       # 4.6: selling never makes a profit
 			"count":
 				chk.whole(value, field_path, 1, 200)
 			"gates":
