@@ -445,6 +445,7 @@ func _add_tower(t: TowerState) -> TowerView:
 	v.sprite = _acquire_sprite()
 	v.sprite.z_index = 0
 	v.sprite.position = _ground_px(t.cell)
+	v.sprite.scale = Vector2.ONE / _atlas.texel_scale
 	_set_tower_look(v, t)
 	v.born_t = -10.0 if _first_sync else _fx_time
 	_towers[t.cell] = v

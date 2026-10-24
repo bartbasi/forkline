@@ -143,3 +143,55 @@ static func build(b: Battle, cell: Vector2i, type: StringName, tier: int = 1, sp
 		if b.upgrade_tower(cell, spec if t == 3 else -1) != Battle.DONE:
 			return false
 	return true
+
+
+## The real run data files, read the way src/save/ passes them (2.12). Null if a file is bad.
+static func run_data(stats: Catalog) -> RunData:
+	var files: Dictionary = {}
+	for key: String in ["runs/run.json", "cards/cards.json", "segments/index.json", "segments/packs.json"]:
+		files[key] = JsonFile.read("res://data/" + key, 1048576)["data"]
+	for id: Variant in (files["segments/index.json"] as Dictionary)["segments"]:
+		files["segments/%s.json" % id] = JsonFile.read("res://data/segments/%s.json" % id, 262144)["data"]
+	return RunData.from_data(files, stats)
+
+
+## Every run map the assembler can make from the real segments: each top, a middle that fits
+## under it, a bottom that fits under that. Every tower is allowed and gold is plentiful, so a
+## test can fill the map. The wave packs are the first of each band.
+static func run_levels(stats: Catalog) -> Array[LevelData]:
+	var out: Array[LevelData] = []
+	var data: RunData = run_data(stats)
+	if data == null:
+		return out
+	var packs: Array[StringName] = []
+	for band: int in range(1, RunData.BANDS + 1):
+		var boss: StringName = data.boss_ids()[0] if band == RunData.BANDS else &""
+		packs.append(data.packs_of(band, boss)[0]["id"])
+	for top: Dictionary in data.segments_of(&"top"):
+		for middle: Dictionary in data.segments_under(top["id"]):
+			for bottom: Dictionary in data.segments_under(middle["id"]):
+				var level: LevelData = MapAssembler.build(data, stats, top["id"], middle["id"], bottom["id"], packs)
+				if level != null:
+					level.start_gold = 100000
+					level.towers = ALL_TOWER_IDS.duplicate()
+					out.append(level)
+	return out
+
+
+const ALL_TOWER_IDS: Array[StringName] = [&"sling_post", &"pumpkin_catapult", &"lullaby_bell", &"longbow_loft", &"firework_tower", &"bakery"]
+
+
+## A real level, as a Battle with plenty of gold.
+static func level_battle(level: LevelData, stats: Catalog) -> Battle:
+	return Battle.create(level, stats, false, [])
+
+
+## Builds a tower on every spot, all at tier 3 (the tallest looks), cycling over the six
+## towers and both paths. `shift` moves where the cycle starts. Returns how many stand.
+static func fill(b: Battle, shift: int = 0) -> int:
+	var n: int = 0
+	for i: int in b.level.spots.size():
+		var type: StringName = ALL_TOWER_IDS[(i + shift) % ALL_TOWER_IDS.size()]
+		if build(b, b.level.spots[i], type, 3, ((i + shift) / ALL_TOWER_IDS.size() + i) % 2):
+			n += 1
+	return n

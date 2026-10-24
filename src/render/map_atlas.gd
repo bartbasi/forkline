@@ -18,6 +18,14 @@ const PAD: int = 2
 ## Tower tile, as fractions of a cell: the building reaches 0.86 up and 0.42 down.
 const TOWER_TILE: Vector2 = Vector2(1.12, 1.36)
 const TOWER_CENTER: Vector2 = Vector2(0.56, 0.90)
+## Towers are drawn a little smaller than the cell side, about their ground line. The tallest
+## look reaches TOWER_REACH above its ground line at full size (measured with
+## tests/render/tower_extent.gd), so at this scale it stays inside the cell above's ground
+## line, and a tower on the build spot below never covers the stone steps of the one above.
+## The widest look is TOWER_HALF_WIDTH each side of the center, so side neighbours stay apart.
+const TOWER_SCALE: float = 0.84
+const TOWER_REACH: float = 1.17
+const TOWER_HALF_WIDTH: float = 0.55
 ## A creature tile is its box times this, so the outline has room.
 const ENEMY_TILE: float = 1.26
 const BUBBLE_TILE: float = 1.1
@@ -232,7 +240,9 @@ func paint(canvas: CanvasItem) -> void:
 		var at: Vector2 = e.rect.position + e.center * texel_scale
 		match e.kind:
 			Kind.TOWER:
-				Silhouettes.draw_tower(canvas, e.type, e.tier, e.spec, at, CELL * texel_scale)
+				# Smaller about the ground line: the ground point stays where e.anchor says.
+				var drop: float = Silhouettes.TOWER_GROUND * (1.0 - TOWER_SCALE) * CELL * texel_scale
+				Silhouettes.draw_tower(canvas, e.type, e.tier, e.spec, at + Vector2(0.0, drop), CELL * texel_scale * TOWER_SCALE)
 			Kind.ENEMY:
 				Silhouettes.draw_enemy(canvas, e.type, at, Silhouettes.enemy_size(e.type, CELL) * texel_scale, e.frame)
 			Kind.DROWSY:

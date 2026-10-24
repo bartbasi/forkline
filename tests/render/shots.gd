@@ -11,6 +11,8 @@ extends SceneTree
 ## --arena=mixed, --arena=crack, --arena=boss or --arena=looks shows the arena map of the phase 7
 ## fixtures instead: a mixed wave with every new tower, a Gatecrasher cracking a gate, a boss
 ## wave, or the six gate looks side by side.
+## --dense shows the run map with the most neighbouring build spots with a tier 3 tower on every
+## spot (the overlap check): two shots per screen, one with the towers cycled one step.
 ## Optional: --level=r1_l4 for one level, --size=cover or --size=inner for one screen,
 ## --build (the build phase with a gate, route lines, range, selection and hint), --wave=N (0 based wave to start from), --min=N creatures needed, --wait=S seconds, --tag=name.
 
@@ -27,6 +29,7 @@ var _min: int = 6
 var _wait: float = 0.0
 var _build: bool = false
 var _arena: String = ""
+var _dense: bool = false
 
 
 func _initialize() -> void:
@@ -45,6 +48,8 @@ func _initialize() -> void:
 			_min = int(arg.trim_prefix("--min="))
 		elif arg.begins_with("--arena="):
 			_arena = arg.trim_prefix("--arena=")
+		elif arg == "--dense":
+			_dense = true
 		elif arg == "--build":
 			_build = true
 		elif arg.begins_with("--wait="):
@@ -59,6 +64,13 @@ func _run() -> void:
 		return
 	DirAccess.make_dir_recursive_absolute(_out)
 	_theme = UiTheme.build()
+	if _dense:
+		for size: Vector2i in [Fx.COVER, Fx.INNER]:
+			var label: String = "cover" if size == Fx.COVER else "inner"
+			if _only_size.is_empty() or _only_size == label:
+				await _shoot_dense(size, label)
+		quit(0)
+		return
 	if not _arena.is_empty():
 		if _only_size.is_empty() or _only_size == "cover":
 			await _shoot_arena(Fx.COVER, "cover")
@@ -269,6 +281,57 @@ func _shoot_arena(size: Vector2i, label: String) -> void:
 	await _save(host, "arena_%s_%s" % [_arena, label])
 	host.queue_free()
 	await process_frame
+
+
+## The run map with the most neighbouring spots, a tier 3 tower on every spot.
+func _shoot_dense(size: Vector2i, label: String) -> void:
+	var stats: Catalog = Fx.catalog()
+	var best: LevelData = null
+	var best_score: int = -1
+	for level: LevelData in Fx.run_levels(stats):
+		var score: int = 0
+		for a: Vector2i in level.spots:
+			for c: Vector2i in level.spots:
+				var d: Vector2i = c - a
+				if d == Vector2i(0, 1):
+					score += 10
+				elif absi(d.x) <= 1 and d.y == 1:
+					score += 1
+		if score > best_score:
+			best_score = score
+			best = level
+	for shift: int in 2:
+		var host: SubViewport = SubViewport.new()
+		host.size = size
+		host.transparent_bg = false
+		host.disable_3d = true
+		host.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		root.add_child(host)
+		var screen: Control = Control.new()
+		screen.size = Vector2(size)
+		screen.theme = _theme
+		host.add_child(screen)
+		screen.add_child(Backdrop.new())
+		var b: Battle = Fx.level_battle(best, stats)
+		var view: MapView = MapView.new()
+		screen.add_child(view)
+		view.setup(b)
+		var landscape: bool = size.y < int(1.5 * float(size.x))
+		var rect: Rect2
+		if landscape:
+			var h: float = float(size.y) - 120.0
+			rect = Rect2(40, 60, h * 7.0 / float(b.level.rows), h)
+		else:
+			var w: float = float(size.x)
+			rect = Rect2(0, 236, w, w / 7.0 * float(b.level.rows))
+		view.fit(rect)
+		Fx.fill(b, shift * 3)
+		for i: int in 40:
+			await process_frame
+			view.sync(0.0)
+		await _save(host, "dense_%s_%d" % [label, shift])
+		host.queue_free()
+		await process_frame
 
 
 func _save(host: SubViewport, name: String) -> void:

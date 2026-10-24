@@ -88,6 +88,13 @@ static func look_for(tower: StringName, spec: int) -> int:
 ## step, 0.08 of a cell), so its top moves up. A Triple Bow (spec 1) sends shot `index` from its own
 ## bow: left, middle (a little higher), right.
 static func muzzle(tower: StringName, cell: Vector2i, tier: int = 3, spec: int = -1, index: int = 0) -> Vector2:
+	var at_full: Vector2 = _muzzle_full(tower, cell, tier, spec, index)
+	# Towers are drawn at MapAtlas.TOWER_SCALE about their ground line, so the muzzle moves with them.
+	var ground: Vector2 = (Vector2(cell) + Vector2(0.5, 0.5 + Silhouettes.TOWER_GROUND)) * CELL
+	return ground + (at_full - ground) * MapAtlas.TOWER_SCALE
+
+
+static func _muzzle_full(tower: StringName, cell: Vector2i, tier: int, spec: int, index: int) -> Vector2:
 	var c: Vector2 = (Vector2(cell) + Vector2(0.5, 0.5)) * CELL
 	var lift: float = 0.08 * float(clampi(tier, 1, 3) - 1)
 	match tower:
