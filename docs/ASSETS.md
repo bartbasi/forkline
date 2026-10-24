@@ -20,5 +20,5 @@ Every visual, effect, sound and piece of music in Forkline is made in code. This
 | Map ground, scenery, roads, spots, sockets, gates, base, entrance, route lines | src/theme/map_art.gd | Drawn in code on the level grid. |
 | Wordmark | src/theme/wordmark.gd | Drawn in code. |
 | Launcher icons: icons/icon_192.png, icon_foreground_432.png, icon_background_432.png, icon_monochrome_432.png | tools/icon/make_icon.gd drawing src/theme/icon_art.gd | Generated and committed. Rerun the tool after any change to the icon art. |
-| docs/art/ review images (silhouettes, tiers, grid maps, map pieces, wordmark, icon preview) | tools/icon/art_review.gd | Review images, not shipped. |
+| docs/art/ review images (silhouettes, tiers, grid maps, map pieces, gate looks, wordmark, icon preview) | tools/icon/art_review.gd | Review images, not shipped. |
 | docs/art/*.png screenshots, icon idea and silhouette sheet | prototypes/theme/screenshots.sh running the slice (the slice was deleted on 2026-10-24) | Review images, not shipped. |

@@ -1,6 +1,6 @@
 # Forkline names
 
-Art director, 2026-10-23. Phase 4. For the game designer to review, then for Bart. No code uses a display name until Bart has seen this list. Code uses the ids.
+Art director, 2026-10-23. Phase 4. Bart approved this list on 2026-10-24. Code uses the ids.
 
 ## How this list was made
 

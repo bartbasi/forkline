@@ -3,8 +3,9 @@
 extends SceneTree
 ## Renders the review images in docs/art/ with the src/theme/ code: a grid map
 ## in portrait (Fold5 cover screen) and on the Fold5 inner screen shape, the
-## comparison with the theme slice, the silhouette sheets, the map pieces, a
-## strip at true cover screen size, the wordmark and the icon previews.
+## comparison with the theme slice, the silhouette sheets, the map pieces,
+## every gate look, a strip at true cover screen size, the wordmark and the
+## icon previews.
 ## Needs a display, so run it without --headless, from the repo root:
 ##     godot --path . --script res://tools/icon/art_review.gd
 ## Review images only: nothing here ships. Display names in the labels are the
@@ -100,6 +101,7 @@ func _run() -> void:
 	_save(await _render(Vector2i(1800, 1460), _sheet_scene(Vector2(1800, 1460))), "silhouettes.png", 1.0)
 	_save(await _render(Vector2i(1800, 1600), _tiers_scene(Vector2(1800, 1600))), "tiers.png", 1.0)
 	_save(await _render(Vector2i(1800, 1320), _pieces_scene(Vector2(1800, 1320))), "map_pieces.png", 1.0)
+	_save(await _render(Vector2i(2560, 1420), _gate_looks_scene(Vector2(2560, 1420))), "gate_looks.png", 1.0)
 	_save(await _render(Vector2i(1660, 800), _cover_strip_scene(Vector2(1660, 800))), "cover_actual_size.png", 1.0)
 	_save(await _render(Vector2i(1200, 420), _wordmark_scene(Vector2(1200, 420))), "wordmark.png", 1.0)
 	await _icon_preview()
@@ -657,10 +659,11 @@ func _tiers_scene(size: Vector2) -> Control:
 
 func _pieces_scene(size: Vector2) -> Control:
 	var root_c: Control = _sheet_base(size, "Map pieces and signals", "Gates on a road running down and on one running across, spots, the base, an entrance, route lines and status marks.")
-	var looks: Array[String] = ["Open socket", "Closed", "Fixed (twist)", "Broken", "Refused"]
 	var cell: float = 110.0
-	for k: int in 5:
-		_label(root_c, looks[k], Vector2(205.0 + 300.0 * float(k), 820), 290.0, 28, false)
+	# Every gate look, in narrower columns so they fit left of the route lines.
+	var gate_cell: float = 74.0
+	for k: int in MapArt.Gate.size():
+		_label(root_c, String(MapArt.Gate.keys()[k]).capitalize(), Vector2(170.0 + 230.0 * float(k), 820), 220.0, 28, false)
 	var labels: Array[String] = ["Empty spot", "Hint, selection", "Base", "Entrance A"]
 	for k: int in labels.size():
 		_label(root_c, labels[k], Vector2(205.0 + 300.0 * float(k), 1240), 290.0, 26, false)
@@ -671,13 +674,13 @@ func _pieces_scene(size: Vector2) -> Control:
 	art.paint = func(ci: CanvasItem) -> void:
 		var down: PackedStringArray = [".#.", ".G.", ".#."]
 		var across: PackedStringArray = ["...", "#G#", "..."]
-		for k: int in 5:
-			var x0: float = 205.0 + 300.0 * float(k) - cell * 1.5
-			_mini(ci, down, Vector2(x0, 140.0), cell, null)
-			MapArt.draw_gate(ci, down, Vector2i(1, 1), cell, k as MapArt.Gate)
+		for k: int in MapArt.Gate.size():
+			var x0: float = 170.0 + 230.0 * float(k) - gate_cell * 1.5
+			_mini(ci, down, Vector2(x0, 194.0), gate_cell, null)
+			MapArt.draw_gate(ci, down, Vector2i(1, 1), gate_cell, k as MapArt.Gate)
 			_end_mini(ci)
-			_mini(ci, across, Vector2(x0, 480.0), cell, null)
-			MapArt.draw_gate(ci, across, Vector2i(1, 1), cell, k as MapArt.Gate)
+			_mini(ci, across, Vector2(x0, 534.0), gate_cell, null)
+			MapArt.draw_gate(ci, across, Vector2i(1, 1), gate_cell, k as MapArt.Gate)
 			_end_mini(ci)
 		var spot: PackedStringArray = ["...", ".o.", "..."]
 		_mini(ci, spot, Vector2(205.0 - cell * 1.5, 890.0), cell, null)
@@ -705,6 +708,37 @@ func _pieces_scene(size: Vector2) -> Control:
 		Silhouettes.draw_bubble(ci, Vector2(1690, 1010), cs)
 		Silhouettes.draw_tower(ci, &"sling_post", 1, -1, Vector2(1600, 1140), 110.0)
 		Silhouettes.draw_boost(ci, Vector2(1600, 1140), 110.0)
+	root_c.add_child(art)
+	return root_c
+
+
+## Every gate look side by side at true Fold5 cover size, on a road running
+## down and one running across, then in one flat color.
+func _gate_looks_scene(size: Vector2) -> Control:
+	var root_c: Control = _sheet_base(size, "Gate looks", "MapArt.Gate at true size on the Fold5 cover screen: one cell is 129 screen pixels (49 dp). Road running down, road running across, then one flat color.")
+	var when: Array[String] = ["empty, a gate can go here", "placed, blocks walkers", "Twist or Iron Gate", "until the next build phase", "would close every road", "under Gateless Night"]
+	var cell: float = 154.0 * COVER_PHYSICAL
+	var col_w: float = (size.x - 120.0) / float(MapArt.Gate.size())
+	for k: int in MapArt.Gate.size():
+		var cx: float = 60.0 + col_w * (float(k) + 0.5)
+		_label(root_c, String(MapArt.Gate.keys()[k]).capitalize(), Vector2(cx, 160), col_w, 38, false)
+		_label(root_c, when[k] if k < when.size() else "", Vector2(cx, 212), col_w, 26, true)
+	var art: Painter = Painter.new()
+	art.z_index = 1
+	art.paint = func(ci: CanvasItem) -> void:
+		var down: PackedStringArray = [".#.", ".G.", ".#."]
+		var across: PackedStringArray = ["...", "#G#", "..."]
+		for k: int in MapArt.Gate.size():
+			var cx: float = 60.0 + col_w * (float(k) + 0.5)
+			var look: MapArt.Gate = k as MapArt.Gate
+			_mini(ci, down, Vector2(cx - cell * 1.5, 270.0), cell, null)
+			MapArt.draw_gate(ci, down, Vector2i(1, 1), cell, look)
+			_end_mini(ci)
+			_mini(ci, across, Vector2(cx - cell * 1.5, 700.0), cell, null)
+			MapArt.draw_gate(ci, across, Vector2i(1, 1), cell, look)
+			_end_mini(ci)
+			MapArt.draw_gate_at(ci, Vector2(cx - cell * 0.6, 1290.0), cell, true, look, Palette.INK_LINE)
+			MapArt.draw_gate_at(ci, Vector2(cx + cell * 0.6, 1290.0), cell, false, look, Palette.INK_LINE)
 	root_c.add_child(art)
 	return root_c
 

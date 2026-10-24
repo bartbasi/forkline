@@ -88,6 +88,7 @@ Graphic pairs (need 3.0:1)
   14.99:1  BUBBLE on INK_LINE          a Bubbler's bubble ring in its casing
   14.65:1  FLOUR on INK_LINE           the drowsy mark in its casing
    5.39:1  HEART on INK_LINE           the refused gate cross in its casing
+   4.73:1  TIMBER on ROAD              an open gate's arch and posts over the road
   16.36:1  EYE on INK_LINE             creature eyes
 ```
 
@@ -180,6 +181,10 @@ tests/theme/test_silhouettes.gd records each drawing headless and checks that:
 
 ![map pieces](map_pieces.png)
 
+All six gate looks at true size on the Fold5 cover screen, on both road directions and in one flat color:
+
+![gate looks](gate_looks.png)
+
 | Signal (RULES.md 9.7) | Shape |
 |---|---|
 | Walkers' route | Solid line with arrows (`MapArt.Route.WALK`) |
@@ -187,9 +192,10 @@ tests/theme/test_silhouettes.gd records each drawing headless and checks that:
 | Flyers' route | Dotted straight line (`Route.FLY`) |
 | Open socket | Dashed ring and a ghost gate, two stone post stubs on the road edges |
 | Closed gate | Wooden gate with two lantern posts and a plank across the road |
-| Fixed gate (twist) | Closed gate with a padlock |
+| Fixed gate (Twist, or locked by Iron Gate) | Closed gate with a big padlock hanging outside its outline: below the gate, or on the near post when seen from the side |
 | Broken gate | Two halves hanging open, a zigzag crack |
 | Refused placement | Ghost gate crossed out with a big X |
+| Open gate (under Gateless Night, fixed gates too) | Both posts joined by a round wooden arch, the leaves swung back, the road clear between the posts |
 | Slowed creature | `draw_drowsy`: a "z z" mark |
 | Bubble up | `draw_bubble`: a ring around the Bubbler |
 | Boosted tower | `draw_boost`: a double chevron |

@@ -14,7 +14,7 @@ extends RefCounted
 ## draws a quarter circle of radius half a cell, so turns are round. Forks and
 ## the base draw a round plaza. route_points() follows the same curves.
 
-enum Gate { SOCKET, CLOSED, FIXED, BROKEN, REFUSED }
+enum Gate { SOCKET, CLOSED, FIXED, BROKEN, REFUSED, OPEN }
 enum Route { WALK, BREAK, FLY }
 
 ## Road band width and its border, as fractions of a cell.
@@ -131,8 +131,11 @@ static func draw_highlight(canvas: CanvasItem, at: Vector2i, cell: float, pulse:
 # Gates.
 
 ## A gate on the socket at `at`, in one of the Gate looks. Each look has its
-## own shape: the open socket is a dashed ring, a fixed gate carries a
-## padlock, a broken gate hangs open with a crack, a refused one is crossed out.
+## own shape: the open socket is a dashed ring, a fixed gate has a big
+## padlock hanging below it, a broken gate hangs open with a crack, a refused
+## one is crossed out, and an open gate (OPEN, under `gates_open`) stands
+## under a wooden arch with its leaves swung back and the road clear between
+## its posts.
 static func draw_gate(canvas: CanvasItem, grid: PackedStringArray, at: Vector2i, cell: float, look: Gate) -> void:
 	draw_gate_at(canvas, _center(at, cell), cell, _road_runs_vertically(grid, at), look)
 
@@ -140,7 +143,12 @@ static func draw_gate(canvas: CanvasItem, grid: PackedStringArray, at: Vector2i,
 ## A gate centered on `center` for a cell of `cell` pixels. `across` is true
 ## on a road that runs up and down the screen. With `flat`, one color only.
 static func draw_gate_at(canvas: CanvasItem, center: Vector2, cell: float, across: bool, look: Gate, flat: Color = Color(0.0, 0.0, 0.0, 0.0)) -> void:
-	var pen: InkPen = InkPen.new(canvas, flat)
+	gate_into(InkPen.new(canvas, flat), center, cell, across, look)
+
+
+## Draws a gate look with `pen`. The tests record it with a pen that has no
+## canvas. Internal to src/theme/ and its tests, like InkPen.
+static func gate_into(pen: InkPen, center: Vector2, cell: float, across: bool, look: Gate) -> void:
 	pen.line_px = clampf(cell * 0.03, 1.2, 5.0)
 	pen.begin(center, cell / 100.0)
 	match look:
@@ -151,13 +159,15 @@ static func draw_gate_at(canvas: CanvasItem, center: Vector2, cell: float, acros
 			_gate_shape(pen, across, 1.0)
 		Gate.FIXED:
 			_gate_shape(pen, across, 1.0)
-			_padlock(pen, Vector2(0, -6) if across else Vector2(0, -2))
+			_padlock(pen, Vector2(0, 25) if across else Vector2(-28, -2))
 		Gate.BROKEN:
 			_broken_gate(pen, across)
 		Gate.REFUSED:
 			_gate_shape(pen, across, 0.3)
 			for d: Vector2 in [Vector2(1, 1), Vector2(1, -1)]:
 				pen.stroke(-d * 26.0 + Vector2(0, -8), d * 26.0 + Vector2(0, -8), 7.0, Palette.HEART)
+		Gate.OPEN:
+			_open_gate(pen, across)
 
 
 # Route lines.
@@ -360,10 +370,16 @@ static func _socket_ring(pen: InkPen) -> void:
 		pen.path(InkPen.arc_pts(Vector2(0, -4), 36.0, 36.0, a0, a0 + 0.36, 4), 4.0, Palette.ROUTE)
 
 
-static func _padlock(pen: InkPen, c: Vector2) -> void:
-	pen.path(InkPen.arc_pts(c + Vector2(0, -4), 7.0, 8.0, PI, TAU, 8), 3.5, Palette.IRON)
-	pen.box(c.x - 10, c.y - 4, c.x + 10, c.y + 11, Palette.IRON)
-	pen.detail_circle(c + Vector2(0, 3), 2.4, Palette.LANTERN)
+## A big padlock whose body hangs from `top`, the middle of its top edge.
+## It hangs outside the gate's own outline, below the gate facing the viewer
+## and on the near post of a gate seen from the side, so it shows as its own
+## shape even in one flat color: a fixed gate never differs from a closed one
+## by color alone.
+static func _padlock(pen: InkPen, top: Vector2) -> void:
+	pen.path(InkPen.arc_pts(top, 10.0, 10.0, PI, TAU, 12), 4.0, Palette.IRON)
+	pen.box(top.x - 20, top.y, top.x + 20, top.y + 22, Palette.IRON)
+	pen.detail_circle(top + Vector2(0, 8), 3.2, Palette.LANTERN)
+	pen.detail(top + Vector2(0, 9), top + Vector2(0, 16), 2.6, Palette.LANTERN)
 
 
 static func _broken_gate(pen: InkPen, across: bool) -> void:
@@ -381,6 +397,38 @@ static func _broken_gate(pen: InkPen, across: bool) -> void:
 		pen.stroke(Vector2(13, 18), Vector2(13, -50), 6.0, Palette.TIMBER)
 	# The crack mark: a zigzag, so a broken gate never shows by color alone.
 	pen.path(PackedVector2Array([Vector2(-2, -44), Vector2(6, -32), Vector2(-4, -22), Vector2(5, -10), Vector2(-1, 2)]), 3.5, Palette.FLOUR)
+
+
+## A gate standing open: both posts, a wooden arch over the opening with a
+## lantern on each foot, and the leaves swung back out of the road. The middle
+## of the road stays clear, so it reads as "they walk through" by shape, and
+## the round arch tells it apart from a broken gate, which has none.
+static func _open_gate(pen: InkPen, across: bool) -> void:
+	if across:
+		# Each leaf swung away from the viewer, hinged on its post: a narrow
+		# panel that rises and leans in, leaving the middle of the road clear.
+		for s: float in [-1.0, 1.0]:
+			pen.poly(PackedVector2Array([Vector2(33 * s, -30), Vector2(33 * s, 6), Vector2(20 * s, -10), Vector2(20 * s, -42)]), Palette.WOOD)
+			pen.detail(Vector2(30 * s, 0), Vector2(23 * s, -36), 2.4, Palette.TIMBER)
+		pen.stroke(Vector2(-33, 14), Vector2(-33, -38), 6.0, Palette.TIMBER)
+		pen.stroke(Vector2(33, 14), Vector2(33, -38), 6.0, Palette.TIMBER)
+		pen.path(InkPen.arc_pts(Vector2(0, -38), 33.0, 22.0, PI, TAU, 18), 6.0, Palette.TIMBER)
+		pen.lantern(Vector2(-33, -44), 5.0)
+		pen.lantern(Vector2(33, -44), 5.0)
+	else:
+		# The one leaf swung back along the road, hinged on the far post.
+		pen.poly(PackedVector2Array([Vector2(13, -46), Vector2(38, -40), Vector2(38, 20), Vector2(13, 14)]), Palette.WOOD)
+		pen.detail(Vector2(26, -42), Vector2(26, 16), 2.4, Palette.TIMBER)
+		pen.detail(Vector2(15, 10), Vector2(36, -38), 3.0, Palette.TIMBER)
+		pen.stroke(Vector2(-13, 24), Vector2(-13, -44), 6.0, Palette.TIMBER)
+		pen.stroke(Vector2(13, 18), Vector2(13, -50), 6.0, Palette.TIMBER)
+		# The arch from post top to post top, following the posts' slant.
+		var arch: PackedVector2Array = InkPen.arc_pts(Vector2(0, -47), 13.0, 12.0, PI, TAU, 12)
+		for i: int in arch.size():
+			arch[i].y -= arch[i].x * 3.0 / 13.0
+		pen.path(arch, 5.0, Palette.TIMBER)
+		pen.lantern(Vector2(-13, -50), 4.5)
+		pen.lantern(Vector2(13, -56), 4.5)
 
 
 # Scenery.

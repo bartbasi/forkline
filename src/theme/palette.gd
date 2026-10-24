@@ -147,6 +147,7 @@ static func graphic_pairs() -> Array[PackedStringArray]:
 		PackedStringArray(["BUBBLE", "INK_LINE", "a Bubbler's bubble ring in its casing"]),
 		PackedStringArray(["FLOUR", "INK_LINE", "the drowsy mark in its casing"]),
 		PackedStringArray(["HEART", "INK_LINE", "the refused gate cross in its casing"]),
+		PackedStringArray(["TIMBER", "ROAD", "an open gate's arch and posts over the road"]),
 		PackedStringArray(["EYE", "INK_LINE", "creature eyes"]),
 		PackedStringArray(["TEXT_LIGHT", "PANEL_RAISED", "icons on buttons"]),
 		PackedStringArray(["TEXT_DARK", "CARD", "tower silhouettes on cards"]),
