@@ -11,7 +11,8 @@ extends RefCounted
 ##   "seq":    [tower index, ...]  the k-th time an index shows up is that tower's k-th purchase:
 ##             1 build, 2 upgrade to tier 2, 3 upgrade to tier 3 (its spec). Any order of the
 ##             multiset is a valid strategy, which keeps mutation simple.
-##   "gate":   Vector2i, or NO_CELL for none (placed before wave 1, never moved)
+##   "gates":  [Vector2i, ...] the sockets that get a gate, none for no gate (placed before wave 1, never
+##             moved; a gate the level or Twist cannot give is refused and skipped)
 ##   "early":  {"on": bool, "from": waves started before calling, "live": call when at most this
 ##             many creatures are on the map, "max": most calls}
 ##   "wave_buy": bool, buy in the order of "seq" during waves as gold comes in
@@ -25,9 +26,17 @@ const STYLES: Array[StringName] = [&"casual", &"typical", &"skilled"]
 const LIVE_CHOICES: Array[int] = [0, 3, 8, 15, 40, 999]
 
 
-## Level facts the generator needs, worked out once.
-static func context(game: GameData, level_id: StringName) -> Dictionary:
+## Level facts the generator needs, worked out once. With `twist`, the level's Twist is played
+## (docs/ARCHITECTURE.md 2.8): its tower bans, gate count and fixed gates are in the facts below.
+## "bad" is set when the sim refuses the Twist, which is a bug in the data.
+static func context(game: GameData, level_id: StringName, twist: bool = false) -> Dictionary:
 	var level: LevelData = game.levels[level_id]
+	var effects: Array[Dictionary] = []
+	if twist:
+		effects.append_array(level.twist_effects)
+	var probe: Battle = Battle.create(level, game.catalog, false, effects)
+	if probe == null:
+		return {"bad": "the sim refuses the Twist of %s" % level_id}
 	var map: RoadMap = RoadMap.new(level)
 	var road: Array[Vector2i] = []
 	for r: int in level.rows:
@@ -35,8 +44,10 @@ static func context(game: GameData, level_id: StringName) -> Dictionary:
 			if level.is_road(Vector2i(c, r)):
 				road.append(Vector2i(c, r))
 	# How many road cells a tier 1 Sling Post at each spot reaches: a rough "good spot" weight.
+	# The plain recipe ranks by the same count (RULES 12.6), without the floor of 1.
 	var reach: int = game.catalog.tower(&"sling_post").stats(1, -1).reach
 	var weights: Array[int] = []
+	var seen_road: Array[int] = []
 	for spot: Vector2i in level.spots:
 		var seen: int = 0
 		for cell: Vector2i in road:
@@ -44,19 +55,47 @@ static func context(game: GameData, level_id: StringName) -> Dictionary:
 			var dy: int = (cell.y - spot.y) * 100
 			if dx * dx + dy * dy <= reach * reach:
 				seen += 1
+		seen_road.append(seen)
 		weights.append(maxi(seen, 1))
+	# Gates: what is still in hand after the Twist's fixed gates, and the sockets that can take one.
+	var fixed: Array[Vector2i] = probe.closed_cells()
 	var gate_options: Array[Vector2i] = []
 	for socket: Vector2i in level.sockets:
-		var shut: Array[Vector2i] = [socket]
+		if fixed.has(socket):
+			continue
+		var shut: Array[Vector2i] = fixed.duplicate()
+		shut.append(socket)
 		if not map.seals(shut):
 			gate_options.append(socket)
+	var banned: Array[StringName] = []
+	for effect: Dictionary in effects:
+		if String(effect["type"]) == "ban_tower":
+			banned.append(StringName(String(effect["tower"])))
+	var offered: Array[StringName] = []
+	for id: StringName in level.towers:
+		if not banned.has(id):
+			offered.append(id)
 	var boss: bool = false
+	var flyers: bool = false
 	for wave: WaveData in level.waves:
 		for group: WaveGroup in wave.groups:
-			if game.catalog.enemy(group.enemy).boss:
+			var type: EnemyType = game.catalog.enemy(group.enemy)
+			if type.boss:
 				boss = true
+			if type.flying:
+				flyers = true
+			# A boss that summons or releases flyers brings flyers too (RULES 12.6).
+			for extra: Dictionary in [type.summon, type.release]:
+				if not extra.is_empty() and game.catalog.enemy(StringName(extra["enemy"])).flying:
+					flyers = true
+	var region: int = 1
+	var id_text: String = String(level_id)
+	if id_text.length() > 3 and id_text[0] == "r" and id_text[1].is_valid_int() and id_text[2] == "_":
+		region = int(id_text[1])
 	return {"game": game, "level": level, "catalog": game.catalog, "id": level_id,
-		"weights": weights, "gate_options": gate_options, "boss": boss}
+		"weights": weights, "gate_options": gate_options, "boss": boss,
+		"twist": effects, "twist_on": twist, "offered": offered, "gate_count": probe.gates_in_hand,
+		"fixed": fixed, "map": map, "road_seen": seen_road, "flyers": flyers, "region": region}
 
 
 # Generating strategies.
@@ -125,16 +164,16 @@ static func random_strategy(ctx: Dictionary, rng: RandomNumberGenerator, style: 
 			var pick: int = open[rng.randi_range(0, open.size() - 1)]
 			seq.append(pick)
 			done[pick] += 1
-	var gate: Vector2i = NO_CELL
+	var gates: Array[Vector2i] = []
 	var options: Array[Vector2i] = ctx["gate_options"]
-	if level.gates > 0 and not options.is_empty():
+	if int(ctx["gate_count"]) > 0 and not options.is_empty():
 		var none_chance: float = 0.7 if style == &"casual" else (0.15 if style == &"typical" else 0.25)
 		if rng.randf() >= none_chance:
-			gate = options[rng.randi_range(0, options.size() - 1)]
+			gates = _pick_gates(ctx, rng)
 	var early: Dictionary = {"on": false, "from": 1, "live": 0, "max": 99}
 	if style == &"skilled" and rng.randf() < 0.4:
 		early = {"on": true, "from": rng.randi_range(1, 4), "live": LIVE_CHOICES[rng.randi_range(0, LIVE_CHOICES.size() - 1)], "max": 99}
-	return {"towers": towers, "seq": seq, "gate": gate, "early": early, "wave_buy": rng.randf() < 0.7}
+	return {"towers": towers, "seq": seq, "gates": gates, "early": early, "wave_buy": rng.randf() < 0.7}
 
 
 ## The guided style: a player who read the hint. Every spot gets a tower, both kinds are used, every
@@ -163,11 +202,27 @@ static func _guided_strategy(ctx: Dictionary, rng: RandomNumberGenerator, allowe
 		seq.append(i)
 	for i: int in spots.size():
 		seq.append(i)
-	var gate: Vector2i = NO_CELL
+	var gates: Array[Vector2i] = []
 	var options: Array[Vector2i] = ctx["gate_options"]
-	if level.gates > 0 and not options.is_empty() and rng.randf() < 0.5:
-		gate = options[rng.randi_range(0, options.size() - 1)]
-	return {"towers": towers, "seq": seq, "gate": gate, "early": {"on": false, "from": 1, "live": 0, "max": 99}, "wave_buy": false}
+	if int(ctx["gate_count"]) > 0 and not options.is_empty() and rng.randf() < 0.5:
+		gates = _pick_gates(ctx, rng)
+	return {"towers": towers, "seq": seq, "gates": gates, "early": {"on": false, "from": 1, "live": 0, "max": 99}, "wave_buy": false}
+
+
+## One socket when the level gives one gate (one draw, as before gates came in sets), else 1 to the
+## gates in hand, all different.
+static func _pick_gates(ctx: Dictionary, rng: RandomNumberGenerator) -> Array[Vector2i]:
+	var left: Array[Vector2i] = []
+	left.append_array(ctx["gate_options"])
+	var count: int = 1
+	if int(ctx["gate_count"]) > 1:
+		count = rng.randi_range(1, mini(int(ctx["gate_count"]), left.size()))
+	var out: Array[Vector2i] = []
+	for i: int in count:
+		var at: int = rng.randi_range(0, left.size() - 1)
+		out.append(left[at])
+		left.remove_at(at)
+	return out
 
 
 ## Spots in a random order, half the time weighted toward spots that see more road.
@@ -293,10 +348,11 @@ static func _edit(ctx: Dictionary, s: Dictionary, rng: RandomNumberGenerator, al
 			if not towers.is_empty():
 				var t: Dictionary = towers[rng.randi_range(0, towers.size() - 1)]
 				t["aim"] = rng.randi_range(0, 2) if rng.randf() < 0.5 else TowerState.Aim.FIRST
-		12:                                                 # change the gate
+		12:                                                 # change the gates
 			var options: Array[Vector2i] = ctx["gate_options"]
-			if level.gates > 0 and not options.is_empty():
-				s["gate"] = NO_CELL if rng.randf() < 0.2 else options[rng.randi_range(0, options.size() - 1)]
+			if int(ctx["gate_count"]) > 0 and not options.is_empty():
+				var none: Array[Vector2i] = []
+				s["gates"] = none if rng.randf() < 0.2 else _pick_gates(ctx, rng)
 		13:                                                 # change the early call habit or when to buy
 			if rng.randf() < 0.3:
 				s["wave_buy"] = not bool(s["wave_buy"])
@@ -339,10 +395,9 @@ static func _tower_index(towers: Array, cell: Vector2i) -> int:
 ## With restore_at, the battle is saved and loaded again at that tick (a mid-wave resume).
 static func play(ctx: Dictionary, strat: Dictionary, relaxed: bool, timing: bool = false, restore_at: int = -1) -> Dictionary:
 	var level: LevelData = ctx["level"]
-	var b: Battle = Battle.create(level, ctx["catalog"], relaxed, [])
+	var b: Battle = Battle.create(level, ctx["catalog"], relaxed, ctx["twist"])
 	b.record_events = false
-	var gate: Vector2i = strat["gate"]
-	if gate != NO_CELL and level.gates > 0:
+	for gate: Vector2i in strat["gates"]:
 		b.place_gate(gate)
 	var seq: Array = strat["seq"]
 	var towers: Array = strat["towers"]
@@ -451,6 +506,7 @@ static func play(ctx: Dictionary, strat: Dictionary, relaxed: bool, timing: bool
 	out["boss_hp"] = boss_hp
 	out["boss_steps"] = boss_steps
 	out["digest"] = JSON.stringify(b.to_data()).hash()
+	out["twist"] = bool(ctx["twist_on"])
 	if timing:
 		out["step_us"] = step_us
 		out["step_live"] = step_live
@@ -482,6 +538,150 @@ static func _buy(b: Battle, seq: Array, towers: Array, steps: Array[int], cursor
 				b.set_aim(cell, int(t["aim"]) as TowerState.Aim)
 
 
+# The plain mixed recipe (RULES 12.6).
+
+## The order the recipe takes the attacking towers in, one per spot (RULES 12.6 step 4).
+const ATTACK_ORDER: Array[StringName] = [&"sling_post", &"pumpkin_catapult", &"longbow_loft", &"firework_tower"]
+
+
+## The plain mixed recipe as a strategy with no gates, no early calls and no buying during waves.
+## It has no randomness. Steps are RULES 12.6's, numbered as there.
+static func plain_recipe(ctx: Dictionary) -> Dictionary:
+	var level: LevelData = ctx["level"]
+	var catalog: Catalog = ctx["catalog"]
+	var offered: Array[StringName] = ctx["offered"]
+	var seen: Array[int] = ctx["road_seen"]
+	# 1. Spot order: the most road seen first, ties in cell order (the order of level.spots).
+	var keyed: Array = []
+	for i: int in level.spots.size():
+		keyed.append([-seen[i], i])
+	keyed.sort()
+	var ranked: Array[Vector2i] = []
+	for item: Array in keyed:
+		ranked.append(level.spots[int(item[1])])
+	# 2. The Bakery: the spot with the most other spots among its 8 neighbors, at least 2.
+	var bakery_at: int = -1
+	if offered.has(&"bakery"):
+		var most: int = 1
+		for r: int in ranked.size():
+			var near: int = 0
+			for other: Vector2i in ranked:
+				if other != ranked[r] and absi(other.x - ranked[r].x) <= 1 and absi(other.y - ranked[r].y) <= 1:
+					near += 1
+			if near > most:
+				most = near
+				bakery_at = r
+	# 3. The Lullaby Bell: the third spot, or the fourth when the Bakery has the third.
+	var bell_at: int = -1
+	if offered.has(&"lullaby_bell"):
+		var want: int = 3 if bakery_at == 2 else 2
+		if want < ranked.size():
+			bell_at = want
+	# 4. The other spots take the attacking towers in turn.
+	var attackers: Array[StringName] = []
+	for id: StringName in ATTACK_ORDER:
+		if offered.has(id) and (id != &"firework_tower" or bool(ctx["flyers"])):
+			attackers.append(id)
+	if attackers.is_empty():
+		for id: StringName in offered:
+			if catalog.tower(id).kind == &"attack":
+				attackers.append(id)
+	var towers: Array = []
+	var turn: int = 0
+	var grown: Array[int] = []                              # indexes of the attacking towers
+	for r: int in ranked.size():
+		var type: StringName
+		var depth: int = 1
+		if r == bakery_at:
+			type = &"bakery"
+		elif r == bell_at:
+			type = &"lullaby_bell"
+		else:
+			type = attackers[turn % attackers.size()]
+			turn += 1
+			# 5. From region 2 on, attackers go on to tier 3, on their first path.
+			depth = 2 if int(ctx["region"]) >= 2 else 1
+			grown.append(r)
+		towers.append({"cell": ranked[r], "type": type, "depth": depth, "spec": 0, "aim": TowerState.Aim.FIRST})
+	# 5. Buying: every build, then every tier 2, then the tier 3 steps. The Bakery is last in the first two.
+	var seq: Array = []
+	for _pass: int in 2:
+		for r: int in ranked.size():
+			if r != bakery_at:
+				seq.append(r)
+		if bakery_at >= 0:
+			seq.append(bakery_at)
+	if int(ctx["region"]) >= 2:
+		for r: int in grown:
+			seq.append(r)
+	var none: Array[Vector2i] = []
+	return {"towers": towers, "seq": seq, "gates": none, "early": {"on": false, "from": 1, "live": 0, "max": 99}, "wave_buy": false}
+
+
+## Every placement of up to the gates in hand that seals no entrance, the empty one first, then by
+## size, then in socket order (RULES 12.6 step 7). Each is an Array[Vector2i].
+static func placements(ctx: Dictionary) -> Array:
+	var options: Array[Vector2i] = ctx["gate_options"]
+	var map: RoadMap = ctx["map"]
+	var fixed: Array[Vector2i] = ctx["fixed"]
+	var none: Array[Vector2i] = []
+	var out: Array = [none]
+	for size: int in range(1, mini(int(ctx["gate_count"]), options.size()) + 1):
+		var picks: Array = []
+		_choose_gates(options, size, 0, [], picks)
+		for pick: Array in picks:
+			var cells: Array[Vector2i] = []
+			for at: int in pick:
+				cells.append(options[at])
+			var shut: Array[Vector2i] = fixed.duplicate()
+			shut.append_array(cells)
+			if not map.seals(shut):
+				out.append(cells)
+	return out
+
+
+static func _choose_gates(options: Array[Vector2i], size: int, from: int, cur: Array, out: Array) -> void:
+	if cur.size() == size:
+		out.append(cur.duplicate())
+		return
+	for i: int in range(from, options.size()):
+		cur.append(i)
+		_choose_gates(options, size, i + 1, cur, out)
+		cur.pop_back()
+
+
+## "none", "3,3" or "3,3+5,6".
+static func gates_label(gates: Array) -> String:
+	if gates.is_empty():
+		return "none"
+	var parts: PackedStringArray = PackedStringArray()
+	for gate: Vector2i in gates:
+		parts.append("%d,%d" % [gate.x, gate.y])
+	return "+".join(parts)
+
+
+## A gate list of one socket, or none for NO_CELL.
+static func one_gate(cell: Vector2i) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	if cell != NO_CELL:
+		out.append(cell)
+	return out
+
+
+## Creatures in each wave with the Twist and strength applied, a Puffball counted with its Puffs
+## (RULES 12.5). Boss summons and releases are not counted: `play` measures the real peak.
+static func wave_sizes(ctx: Dictionary) -> Array[int]:
+	var b: Battle = Battle.create(ctx["level"], ctx["catalog"], false, ctx["twist"])
+	var out: Array[int] = []
+	for w: int in b.wave_count():
+		var total: int = 0
+		for row: Dictionary in b.wave_preview(w):
+			var type: EnemyType = ctx["catalog"].enemy(row["enemy"])
+			total += int(row["count"]) * (1 + type.split_count)
+		out.append(total)
+	return out
+
+
 # Describing and saving strategies.
 
 ## The strategy as plain JSON values.
@@ -490,9 +690,18 @@ static func to_data(strat: Dictionary) -> Dictionary:
 	for t: Dictionary in strat["towers"]:
 		var cell: Vector2i = t["cell"]
 		towers.append({"cell": [cell.x, cell.y], "type": String(t["type"]), "depth": t["depth"], "spec": t["spec"], "aim": t["aim"]})
-	var gate: Vector2i = strat["gate"]
-	return {"towers": towers, "seq": strat["seq"].duplicate(), "gate": [gate.x, gate.y],
+	# "gate" is the first gate, [-1, -1] for none, as in the files before the B1 bots, so the files of
+	# a level with one gate keep their old shape. More gates go in "more_gates".
+	var gates: Array = strat["gates"]
+	var first: Vector2i = NO_CELL if gates.is_empty() else gates[0]
+	var out: Dictionary = {"towers": towers, "seq": strat["seq"].duplicate(), "gate": [first.x, first.y],
 		"early": strat["early"].duplicate(), "wave_buy": strat["wave_buy"]}
+	if gates.size() > 1:
+		var more: Array = []
+		for i: int in range(1, gates.size()):
+			more.append([gates[i].x, gates[i].y])
+		out["more_gates"] = more
+	return out
 
 
 static func from_data(data: Dictionary) -> Dictionary:
@@ -504,10 +713,16 @@ static func from_data(data: Dictionary) -> Dictionary:
 	var seq: Array = []
 	for item: Variant in data["seq"]:
 		seq.append(int(item))
+	var gates: Array[Vector2i] = []
 	var gate: Array = data["gate"]
+	if int(gate[0]) >= 0:
+		gates.append(Vector2i(int(gate[0]), int(gate[1])))
+	if data.has("more_gates"):
+		for item: Array in data["more_gates"]:
+			gates.append(Vector2i(int(item[0]), int(item[1])))
 	var early_in: Dictionary = data["early"]
 	var early: Dictionary = {"on": bool(early_in["on"]), "from": int(early_in["from"]), "live": int(early_in["live"]), "max": int(early_in["max"])}
-	return {"towers": towers, "seq": seq, "gate": Vector2i(int(gate[0]), int(gate[1])), "early": early, "wave_buy": bool(data["wave_buy"])}
+	return {"towers": towers, "seq": seq, "gates": gates, "early": early, "wave_buy": bool(data["wave_buy"])}
 
 
 ## A key that is the same for two strategies that play the same.
@@ -534,7 +749,7 @@ static func describe(ctx: Dictionary, strat: Dictionary) -> String:
 	var catalog: Catalog = ctx["catalog"]
 	var letters: String = "ABCDEFGHIJKLMNOPQRSTUVWX"
 	var lines: PackedStringArray = PackedStringArray()
-	var gate: Vector2i = strat["gate"]
+	var gates: Array = strat["gates"]
 	for r: int in level.rows:
 		var row: String = ""
 		for c: int in Sim.MAP_COLUMNS:
@@ -542,12 +757,20 @@ static func describe(ctx: Dictionary, strat: Dictionary) -> String:
 			var ch: String = level.grid[r][c]
 			if level.kind_at(cell) == LevelData.Kind.SPOT:
 				ch = letters[level.spots.find(cell)]
-			elif cell == gate:
+			elif gates.has(cell):
 				ch = "X"
 			row += ch
 		lines.append(row)
 	var text: String = "\n".join(lines) + "\n"
-	text += "Gate: %s\n" % ("none" if gate == NO_CELL else "socket (%d,%d) shown as X" % [gate.x, gate.y])
+	if gates.is_empty():
+		text += "Gate: none\n"
+	elif gates.size() == 1:
+		text += "Gate: socket (%d,%d) shown as X\n" % [gates[0].x, gates[0].y]
+	else:
+		var cells: PackedStringArray = PackedStringArray()
+		for gate: Vector2i in gates:
+			cells.append("(%d,%d)" % [gate.x, gate.y])
+		text += "Gates: sockets %s shown as X\n" % ", ".join(cells)
 	var steps: Array[int] = []
 	steps.resize(strat["towers"].size())
 	steps.fill(0)
@@ -580,6 +803,8 @@ static func describe(ctx: Dictionary, strat: Dictionary) -> String:
 ## Fitness for the search: a win beats everything, then stars, then lives. A loss scores by waves cleared.
 static func fitness(res: Dictionary) -> int:
 	var stars: int = int(res["stars"])
+	if bool(res["won"]) and bool(res.get("twist", false)):
+		return 10000 + int(res["lives"])                    # a Twist has no stars
 	if bool(res["won"]):
 		return 10000 + (1000 if (stars & 2) != 0 else 0) + (3000 if (stars & 4) != 0 else 0) + int(res["lives"])
 	return int(res["cleared"]) * 100 + int(res["lives"])

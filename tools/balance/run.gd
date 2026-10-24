@@ -7,6 +7,9 @@ extends SceneTree
 ##   godot --headless --path . --script X02 evals=3000 only=any out=PATH
 ##   godot --headless --path . --script res://tools/balance/run.gd -- mode=det level=r1_l1 seed=303 out=PATH
 ##   godot --headless --path . --script res://tools/balance/run.gd -- mode=recipes level=r1_l1 out=PATH
+##   godot --headless --path . --script res://tools/balance/run.gd -- mode=plain level=r2_l1 out=PATH
+##   godot --headless --path . --script res://tools/balance/run.gd -- mode=search level=r2_l1 seed=7 evals=2500 only=solo:sling_post out=PATH
+##   godot --headless --path . --script res://tools/balance/run.gd -- mode=search level=r2_l1 twist=1 seed=7 evals=1500 out=PATH
 ##
 ## mode=spread: n random strategies in each style (casual, typical, skilled), each played on
 ##   Normal and on Relaxed. Reports win, two star and three star rates.
@@ -15,8 +18,15 @@ extends SceneTree
 ##   (docs/balance/README.md). `only` is `any` or a comma list of tower ids the strategy may use.
 ## mode=recipes: a few plain recipes a new player might follow (no seed; nothing is random),
 ##   each played on Normal and Relaxed with no gate and with a gate on every socket.
+## mode=plain: the plain mixed recipe of RULES 12.6 (Bot.plain_recipe), played on Normal and on Relaxed once
+##   for every gate placement that seals no entrance, with the wave sizes of the level. compare_old=1 also plays
+##   the old region 1 recipe ("sling, catapult, alternating, road order, tier 2") and lists any difference.
 ## mode=det: the same strategies played twice, played again with a save and load in the middle
 ##   of a wave, and the same search run twice, must all match.
+## mode=search `only` also takes solo:ID, one attacking tower plus every support tower the level offers
+##   (the "no super tower" search of RULES 12.6).
+## Any mode takes twist=1: the level is played with its Twist (ARCHITECTURE 2.8), a banned tower is not offered,
+##   and a win is all that counts (Twists have no stars).
 ## mode=search also takes early=off: no strategy calls a wave early (the star 3 of 1-6 is then out of reach).
 ## Any mode also takes level_file=PATH (a level JSON file played in place of the level named by `level`),
 ##   towers=PATH and enemies=PATH (stat files played in place of data/stats/towers.json and enemies.json).
@@ -56,7 +66,11 @@ func _initialize() -> void:
 	var tweak: String = String(_args.get("tweak", ""))
 	if tweak != "" and not _apply_tweak(game, level_id, tweak):
 		return
-	var ctx: Dictionary = Bot.context(game, level_id)
+	var ctx: Dictionary = Bot.context(game, level_id, String(_args.get("twist", "0")) == "1")
+	if ctx.has("bad"):
+		printerr(String(ctx["bad"]))
+		quit(2)
+		return
 	_waves = ctx["level"].waves.size()
 	var seed_value: int = int(_args.get("seed", "1"))
 	var mode: String = String(_args.get("mode", "spread"))
@@ -75,6 +89,8 @@ func _initialize() -> void:
 		result["only"] = String(_args.get("only", "any"))
 	elif mode == "recipes":
 		result = _recipes(ctx)
+	elif mode == "plain":
+		result = _plain(ctx)
 	else:
 		printerr("unknown mode %s" % mode)
 		quit(2)
@@ -82,6 +98,8 @@ func _initialize() -> void:
 	result["level"] = String(level_id)
 	result["mode"] = mode
 	result["seed"] = seed_value
+	if ctx["twist_on"]:
+		result["twist"] = true
 	result["seconds"] = (Time.get_ticks_msec() - started) / 1000.0
 	var text: String = JSON.stringify(result)
 	print("RESULT " + text)
@@ -218,12 +236,19 @@ func _apply_stat(game: GameData, level_id: StringName, stat: String) -> bool:
 
 
 func _allowed(ctx: Dictionary, only: String) -> Array[StringName]:
-	var level: LevelData = ctx["level"]
+	var offered: Array[StringName] = ctx["offered"]
 	if only == "any":
-		return level.towers.duplicate()
+		return offered.duplicate()
 	var out: Array[StringName] = []
+	if only.begins_with("solo:"):
+		# One attacking tower and every support tower of the level, in the level's order.
+		var attacker: StringName = StringName(only.substr(5))
+		for id: StringName in offered:
+			if id == attacker or ctx["catalog"].tower(id).kind != &"attack":
+				out.append(id)
+		return out
 	for id: String in only.split(",", false):
-		if level.towers.has(StringName(id)):
+		if offered.has(StringName(id)):
 			out.append(StringName(id))
 	return out
 
@@ -231,8 +256,7 @@ func _allowed(ctx: Dictionary, only: String) -> Array[StringName]:
 # Spread: how strategies of each style fare.
 
 func _spread(ctx: Dictionary, seed_value: int, n: int) -> Dictionary:
-	var level: LevelData = ctx["level"]
-	var allowed: Array[StringName] = level.towers.duplicate()
+	var allowed: Array[StringName] = ctx["offered"].duplicate()
 	var styles: Dictionary = {}
 	var share_bins: Dictionary = {}
 	var size_bins: Dictionary = {}
@@ -403,8 +427,12 @@ func _search(ctx: Dictionary, seed_value: int, evals: int, allowed: Array[String
 	out["three_star_best"] = listed
 	var small: Array = []
 	for item: Dictionary in threes:
-		small.append({"inventory": item["res"]["built"], "lives": item["res"]["lives"], "towers": item["res"]["towers"],
-			"early": item["res"]["early"], "gate": String(str(item["strat"]["gate"]))})
+		var placed: Array = item["strat"]["gates"]
+		var entry: Dictionary = {"inventory": item["res"]["built"], "lives": item["res"]["lives"], "towers": item["res"]["towers"],
+			"early": item["res"]["early"], "gate": String(str(placed[0] if not placed.is_empty() else Bot.NO_CELL))}
+		if placed.size() > 1:
+			entry["gates"] = Bot.gates_label(placed)
+		small.append(entry)
 	out["three_star_all"] = small if small.size() <= 400 else small.slice(0, 400)
 	if not best_win.is_empty():
 		var bs: Dictionary = best_win["strat"]
@@ -469,7 +497,7 @@ func _recipes(ctx: Dictionary) -> Dictionary:
 	var level: LevelData = ctx["level"]
 	var weights: Array[int] = ctx["weights"]
 	var gates: Array = [Bot.NO_CELL]
-	if level.gates > 0:
+	if int(ctx["gate_count"]) > 0:
 		gates.append_array(ctx["gate_options"])
 	var rows: Array = []
 	for recipe: Array in RECIPES:
@@ -487,8 +515,8 @@ func _recipes(ctx: Dictionary) -> Dictionary:
 		var seq: Array = []
 		for i: int in spots.size():
 			var type: StringName = StringName(String(pattern[i % pattern.size()]))
-			if not level.towers.has(type):
-				type = level.towers[0]
+			if not ctx["offered"].has(type):
+				type = ctx["offered"][0]
 			# A depth 2 recipe takes only its first three towers to tier 3, the rest stop at tier 2.
 			var depth: int = mini(int(recipe[2]), 1 if i >= 3 else 2)
 			towers.append({"cell": spots[i], "type": type, "depth": depth, "spec": int(recipe[3]), "aim": TowerState.Aim.FIRST})
@@ -504,7 +532,7 @@ func _recipes(ctx: Dictionary) -> Dictionary:
 			var best: Dictionary = {}
 			var worst: Dictionary = {}
 			for gate: Vector2i in gates:
-				var strat: Dictionary = {"towers": towers, "seq": seq, "gate": gate, "early": {"on": false, "from": 1, "live": 0, "max": 99}, "wave_buy": false}
+				var strat: Dictionary = {"towers": towers, "seq": seq, "gates": Bot.one_gate(gate), "early": {"on": false, "from": 1, "live": 0, "max": 99}, "wave_buy": false}
 				var res: Dictionary = Bot.play(ctx, strat, mode == "relaxed")
 				if bool(res["won"]):
 					wins += 1
@@ -521,6 +549,83 @@ func _recipes(ctx: Dictionary) -> Dictionary:
 	return {"recipes": rows, "waves": level.waves.size()}
 
 
+# The plain mixed recipe (RULES 12.6).
+
+## The recipe is played on Normal and on Relaxed once for every gate placement that seals no entrance.
+## Best placement: a win with the most lives left (more stars break a tie), else the loss that clears
+## the most waves. Worst is the other end. The first of equals wins in both. "none" is the empty placement.
+func _plain(ctx: Dictionary) -> Dictionary:
+	var strat: Dictionary = Bot.plain_recipe(ctx)
+	var rows: Array = []
+	var summary: Dictionary = {}
+	for mode: String in ["normal", "relaxed"]:
+		var wins: int = 0
+		var best: Dictionary = {}
+		var worst: Dictionary = {}
+		var none: Dictionary = {}
+		var best_rank: int = -1
+		var worst_rank: int = 1 << 60
+		for gates: Array in Bot.placements(ctx):
+			var typed: Array[Vector2i] = []
+			typed.append_array(gates)
+			strat["gates"] = typed
+			var res: Dictionary = Bot.play(ctx, strat, mode == "relaxed")
+			var rank: int = _plain_rank(res)
+			var row: Dictionary = {"mode": mode, "gate": Bot.gates_label(gates), "won": res["won"], "stars": res["stars"],
+				"lives": res["lives"], "cleared": res["cleared"], "ticks": res["ticks"], "peak": res["peak"],
+				"wave_ticks": res["wave_ticks"], "boss_hp": res["boss_hp"], "built": res["built"], "digest": res["digest"]}
+			rows.append(row)
+			if bool(res["won"]):
+				wins += 1
+			if rank > best_rank:
+				best_rank = rank
+				best = row
+			if rank < worst_rank:
+				worst_rank = rank
+				worst = row
+			if gates.is_empty():
+				none = row
+		summary[mode] = {"placements": Bot.placements(ctx).size(), "wins": wins, "best": best, "worst": worst, "none": none}
+	var no_gates: Array[Vector2i] = []
+	strat["gates"] = no_gates
+	var sizes: Array[int] = Bot.wave_sizes(ctx)
+	var largest: int = 0
+	for size: int in sizes:
+		largest = maxi(largest, size)
+	var out: Dictionary = {"summary": summary, "placements": rows, "wave_sizes": sizes, "largest_wave": largest,
+		"flyers": ctx["flyers"], "region": ctx["region"], "offered": _names(ctx["offered"]), "waves": ctx["level"].waves.size(),
+		"recipe": Bot.to_data(strat), "recipe_text": Bot.describe(ctx, strat)}
+	if String(_args.get("compare_old", "0")) == "1":
+		out["old_recipe"] = _compare_old(ctx, rows)
+	return out
+
+
+## A win ranks by lives left (stars break a tie); a loss by waves cleared, then lives.
+func _plain_rank(res: Dictionary) -> int:
+	if bool(res["won"]):
+		return 1000000 + int(res["lives"]) * 8 + int(res["stars"])
+	return int(res["cleared"]) * 100 + int(res["lives"])
+
+
+## The old region 1 recipe against the plain recipe, placement by placement. The old recipe tries
+## no gate and one gate on each socket, so a level with several gates compares only those.
+func _compare_old(ctx: Dictionary, rows: Array) -> Dictionary:
+	var old: Dictionary = {}
+	for item: Dictionary in _recipes(ctx)["recipes"]:
+		if String(item["recipe"]).begins_with("sling, catapult, alternating, road order, tier 2"):
+			old = item
+	var compared: int = 0
+	var differences: Array = []
+	for old_row: Dictionary in old["per_gate"]:
+		for row: Dictionary in rows:
+			if row["mode"] == old_row["mode"] and row["gate"] == old_row["gate"]:
+				compared += 1
+				for key: String in ["won", "stars", "lives", "cleared"]:
+					if row[key] != old_row[key]:
+						differences.append({"mode": row["mode"], "gate": row["gate"], "field": key, "plain": row[key], "old": old_row[key]})
+	return {"compared": compared, "differences": differences}
+
+
 # Exhaustive check of small builds.
 
 ## mode=exhaust: every static build of at most `max_towers` towers (default 2) of the allowed kinds,
@@ -535,7 +640,7 @@ func _exhaust(ctx: Dictionary, allowed: Array[StringName], max_towers: int, shar
 	var level: LevelData = ctx["level"]
 	var spots: Array[Vector2i] = level.spots
 	var gates: Array = [Bot.NO_CELL]
-	if level.gates > 0:
+	if int(ctx["gate_count"]) > 0:
 		gates.append_array(ctx["gate_options"])
 	var depth_max: int = int(_args.get("depth_max", "2"))
 	var all_aims: bool = String(_args.get("aims", "all")) == "all"
@@ -580,7 +685,7 @@ func _exhaust(ctx: Dictionary, allowed: Array[StringName], max_towers: int, shar
 								for k: int in picked.size():
 									towers.append({"cell": spots[int(picked[k])], "type": combo[k][0], "depth": int(combo[k][1]),
 										"spec": int(combo[k][2]), "aim": (aim_code / int(pow(3.0, k))) % 3})
-								var strat: Dictionary = {"towers": towers, "seq": order, "gate": gate, "wave_buy": wave_buy,
+								var strat: Dictionary = {"towers": towers, "seq": order, "gates": Bot.one_gate(gate), "wave_buy": wave_buy,
 									"early": {"on": early_on, "from": 1, "live": 8, "max": 99}}
 								var res: Dictionary = Bot.play(ctx, strat, false)
 								played += 1
@@ -637,7 +742,7 @@ func _orders(left: Array[int], cur: Array, out: Array) -> void:
 # Determinism.
 
 func _det(ctx: Dictionary, seed_value: int) -> Dictionary:
-	var allowed: Array[StringName] = ctx["level"].towers.duplicate()
+	var allowed: Array[StringName] = ctx["offered"].duplicate()
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = seed_value
 	var same: int = 0

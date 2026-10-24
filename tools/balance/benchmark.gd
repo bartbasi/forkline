@@ -4,6 +4,7 @@ extends SceneTree
 ## Time per sim tick and peak live creatures for one level, on this PC (docs/ARCHITECTURE.md 9.4).
 ##
 ##   godot --headless --path . --script res://tools/balance/benchmark.gd -- level=r1_l1 build=PATH out=PATH
+##   (twist=1 plays the level with its Twist)
 ##
 ## `build` is a JSON file from run.gd: a search result (its best_win.strategy is played) or a
 ## spread result (its peak_strategy is played). Several builds can be given as build=A,B.
@@ -30,7 +31,11 @@ func _initialize() -> void:
 		printerr("bad data or level")
 		quit(2)
 		return
-	var ctx: Dictionary = Bot.context(game, level_id)
+	var ctx: Dictionary = Bot.context(game, level_id, String(_args.get("twist", "0")) == "1")
+	if ctx.has("bad"):
+		printerr(String(ctx["bad"]))
+		quit(2)
+		return
 	var rows: Array = []
 	for path: String in String(_args.get("build", "")).split(",", false):
 		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
@@ -46,10 +51,13 @@ func _initialize() -> void:
 		elif data.has("peak_strategy"):
 			strat_data = data["peak_strategy"]
 		else:
+			# A search that found no win has no strategy: the other builds still run.
 			printerr("%s has no strategy" % path)
-			quit(2)
-			return
+			continue
 		rows.append(_measure(ctx, Bot.from_data(strat_data), label))
+	if rows.is_empty():
+		quit(2)
+		return
 	var result: Dictionary = {"level": String(level_id), "rows": rows, "busy_at_least": BUSY, "repeats": REPEATS}
 	print("RESULT " + JSON.stringify(result))
 	var out: String = String(_args.get("out", ""))
