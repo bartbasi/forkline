@@ -68,7 +68,7 @@ func has_enemy(id: StringName) -> bool:
 
 ## [Catalog, PackedStringArray of problems].
 static func _build(towers: Variant, enemies: Variant, rules_data: Variant) -> Array:
-	var catalog: Catalog = Catalog.new()
+	var catalog: Catalog = new()
 	var problems: PackedStringArray = PackedStringArray()
 	var tower_check: DataCheck = DataCheck.new("towers.json")
 	catalog._read_towers(towers, tower_check)

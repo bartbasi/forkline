@@ -20,7 +20,7 @@ var levels: Dictionary[StringName, LevelData] = {}
 
 
 static func load_from(root: String = "res://data") -> GameData:
-	var game: GameData = GameData.new()
+	var game: GameData = new()
 	game._load(root)
 	return game
 

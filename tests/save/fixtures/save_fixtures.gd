@@ -10,10 +10,14 @@ const DATA: String = "res://data"
 static var WORK: String = "%s/work_%d" % [TEST_ROOT, OS.get_process_id()]
 
 
-## Removes WORK and everything in it, then makes it again, empty.
+## Removes WORK and everything in it, then makes it again, empty. Another run's clean()
+## can remove the empty parent folders while WORK is being made, so it tries again.
 static func fresh() -> void:
 	clean()
-	DirAccess.make_dir_recursive_absolute(WORK)
+	for attempt: int in 20:
+		DirAccess.make_dir_recursive_absolute(WORK)
+		if DirAccess.dir_exists_absolute(WORK):
+			return
 
 
 ## Removes this run's WORK, then the parent folders if no other run still uses them.

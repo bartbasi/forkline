@@ -41,7 +41,7 @@ static func from_data(data: Variant, game: GameData) -> SavedGame:
 	if not chk.object(data, "", KEYS) or not chk.ok():
 		return null
 	var top: Dictionary = data
-	var saved: SavedGame = SavedGame.new()
+	var saved: SavedGame = new()
 	chk.integer(top, "format", "", FORMAT, FORMAT)
 	var mode_value: Variant = top["mode"]
 	if not DataCheck.is_string(mode_value) or not MODES.has(StringName(String(mode_value))):

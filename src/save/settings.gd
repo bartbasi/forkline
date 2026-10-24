@@ -15,7 +15,7 @@ func to_data() -> Dictionary:
 
 ## Any bad field falls back to its default. Unknown keys are ignored.
 static func from_data(data: Variant) -> Settings:
-	var settings: Settings = Settings.new()
+	var settings: Settings = new()
 	if typeof(data) != TYPE_DICTIONARY:
 		return settings
 	var chk: DataCheck = DataCheck.new("settings.json")

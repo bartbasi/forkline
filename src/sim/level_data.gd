@@ -123,7 +123,7 @@ func is_road(cell: Vector2i) -> bool:
 
 ## [LevelData, PackedStringArray of problems].
 static func _build(data: Variant, catalog: Catalog) -> Array:
-	var level: LevelData = LevelData.new()
+	var level: LevelData = new()
 	var chk: DataCheck = DataCheck.new("level")
 	if typeof(data) == TYPE_DICTIONARY and DataCheck.is_id((data as Dictionary).get("id", null)):
 		chk.file = String((data as Dictionary)["id"]) + ".json"

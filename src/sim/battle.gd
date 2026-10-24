@@ -94,7 +94,7 @@ static func create(level_data: LevelData, stats: Catalog, is_relaxed: bool, twis
 	# Twist effects come in phase 7. Until then a Twist cannot be played.
 	if not twist_effects.is_empty():
 		return null
-	var battle: Battle = Battle.new()
+	var battle: Battle = new()
 	battle._setup(level_data, stats)
 	battle.relaxed = is_relaxed
 	var rules: GameRules = stats.rules
@@ -1140,7 +1140,7 @@ static func from_data(data: Variant, stats: Catalog) -> Battle:
 	if stats == null or stats.rules == null:
 		return null
 	var chk: DataCheck = DataCheck.new("battle")
-	var battle: Battle = Battle.new()
+	var battle: Battle = new()
 	if not battle._load(data, stats, chk) or not chk.ok():
 		return null
 	return battle

@@ -141,7 +141,7 @@ func to_data() -> Dictionary:
 ## Any bad field or entry falls back to its default. Unknown keys and counters are dropped.
 ## Unknown but well formed level ids are kept, so a later version's progress survives.
 static func from_data(data: Variant) -> Progress:
-	var progress: Progress = Progress.new()
+	var progress: Progress = new()
 	if typeof(data) != TYPE_DICTIONARY:
 		return progress
 	var top: Dictionary = data
