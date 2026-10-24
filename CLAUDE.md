@@ -31,7 +31,7 @@ Each agent edits only what it owns, plus any path its task brief from the DM exp
 | CLAUDE.md, docs/BRIEF.md, docs/ASSETS.md, .claude/agents/, project.godot, scenes/main.tscn, LICENSE, NOTICE, README.md, .gitignore, .gitattributes, docs/.gdignore, tests/run_tests.gd, tests/base_test.gd, tests/project/, git | DM |
 | docs/design/, data/stats/ | game-designer |
 | docs/ARCHITECTURE.md | architect |
-| docs/art/, src/theme/, prototypes/theme/, tools/icon/, icons/, tests/theme/ | art-director |
+| docs/art/, src/theme/, tools/icon/, icons/, tests/theme/ | art-director |
 | src/sim/, tests/sim/, src/save/, tests/save/ | sim-engineer |
 | data/levels/, data/segments/, tests/levels/ | level-designer |
 | tools/balance/, docs/balance/ | balance-analyst |
@@ -75,6 +75,14 @@ Autoload and input map entries in project.godot are added by the DM during integ
   - No rotation on the unfolded phone: the portrait lock stays, and the landscape layout comes from the window shape.
   - Folding or unfolding mid-wave pauses the game.
   - The level card does not remember Relaxed. Normal is always the default.
+- 2026-10-24, hard stop B: Bart played region 1 on his Fold5, said "so far so good", approved everything and asked the DM to continue. Approved with it, as the DM recommended:
+  - The theme slice on the phone. The DM deleted prototypes/theme/ the same day.
+  - The name list in docs/art/NAMES.md.
+  - Level 1-5 is renamed "Wings at Dusk".
+  - The region 1 tuning (docs/design/TUNING_R1.md), including the new third stars and a 1000 health Grumblesack.
+  - A third star of "no tower above tier 1" reads "Upgrade no towers." on cards and screens.
+  - Speed resets to 1x after Continue.
+  - The fun review's after-playtest list (docs/design/FUN_REVIEW_R1.md) goes ahead, except item 7 (a "packed" mark in the wave preview), which Bart was not asked about and which goes beyond brief 3.5.
 
 ## Rules for every session and agent
 
@@ -90,7 +98,7 @@ Autoload and input map entries in project.godot are added by the DM during integ
 - Every outbound address is a constant, written once, never built from input.
 - Color is never the only signal. Text meets 4.5:1 contrast, checked by a script. Touch targets at least 48 dp. Respect safe areas. 60 fps on the Fold5.
 - The DM runs at most four agents at once and works phase by phase. Never launch the whole team together. If a max effort agent stalls, sprawls or adds unrequested features, the DM drops it to high for that task and tells Bart.
-- Hard stops: A is cleared (2026-10-23). B, Bart playtests region 1 on his phone before more content. C, ask before creating the GitHub repo and the first push. Ask first before GitHub Pages, any signing, any Play Console work, and anything outside the brief. Play Console waits for Play, Inc.'s DUNS number.
+- Hard stops: A is cleared (2026-10-23). B is cleared (2026-10-24). C, ask before creating the GitHub repo and the first push. Ask first before GitHub Pages, any signing, any Play Console work, and anything outside the brief. Play Console waits for Play, Inc.'s DUNS number.
 - Before the first push, remind Bart to search "Forkline" in Google Play on his phone and run a quick trademark search.
 - End every phase with a short status for Bart: done, verified, next, blocking.
 - Every agent ends with a short report: files changed, how it was proven (command and result, test names, screenshot path), open questions, contract change requests.
