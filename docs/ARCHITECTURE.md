@@ -1,12 +1,12 @@
 # Forkline: Architecture
 
-Owner: architect. Status: final for phase 5, 2026-10-23.
+Owner: architect. Status: revised for phase 7, 2026-10-24.
 
-This is the contract every agent builds against: folders and owners, ids and data files, every public class with its methods and data shapes, routing, saves, resume, orientation, outbound links, the performance budget, the tests and the phase 5 build plan. Do not invent a public method that another area must call. If you need a change here, put it in your report for the DM.
+This is the contract every agent builds against: folders and owners, ids and data files, every public class with its methods and data shapes, routing, saves, resume, orientation, outbound links, the performance budget, the tests and the build plans for phase 5 (section 11) and phase 7 (section 13). Do not invent a public method that another area must call. If you need a change here, put it in your report for the DM.
 
 Sources: docs/BRIEF.md, CLAUDE.md (with Bart's hard stop A decisions), docs/design/RULES.md and docs/art/NAMES.md. RULES.md holds every game rule and number, and it wins over this document on every rule. If the two disagree, this document has a bug: report it. "RULES 7.3" means section 7.3 of RULES.md.
 
-Parts marked (phase 7) belong to the roguelite mode, the daily challenge or Twists. Phase 5 code never names a phase 7 class or field.
+Parts marked (phase 7) belong to the roguelite mode, the daily challenge or Twists. They are built in phase 7, in the order of section 13.
 
 ## 0. Principles
 
@@ -91,7 +91,8 @@ These ids are fixed. They come from docs/art/NAMES.md, and src/theme/ already us
 | Bosses (RULES 6.3) | `grumblesack`, `ironshell`, `moon_moth`, `old_tusk` |
 | Regions (RULES 12.1) | `lantern_hill`, `millbrook`, `willow_fen`, `moonspire_keep` |
 | Levels (RULES 12.3) | `r1_l1` to `r1_l6`, `r2_l1` to `r2_l6`, `r3_l1` to `r3_l6`, `r4_l1` to `r4_l6`. Level 2-3 is `r2_l3`. |
-| Cards (phase 7) | The RULES.md card name in id form, for example `spare_gate`, `crowded_night` |
+| Cards (phase 7) | The RULES.md card name in id form, for example `spare_gate`, `crowded_night`. Tower cards have no RULES name: `tower_` plus the tower id, for example `tower_bakery`. The full list is in 2.11. |
+| Run plan and segments (phase 7) | Segment ids are the level designer's, in the same id form, one per file. The assembled run map has the level id `run`. |
 
 One style for every kind: the NAMES.md name in id form, so a region is `lantern_hill`, never `region_1`. Levels are the one exception: `r1_l1` style ids give a level's place in the campaign, because level names are display text that may still change.
 
@@ -160,7 +161,7 @@ The map and waves are placeholders. Both branches are 13 steps long, so with no 
 | format | int | 1 | |
 | id | id | equals the file name | 2.2. GameData checks this, because `LevelData.check` never sees the file name. |
 | name | text | 1 to 24 characters | |
-| grid | array of strings | 8 to 13 rows of 7 characters | 2.3 |
+| grid | array of strings | 8 to 13 rows of 7 characters | 2.3. On a 13 row map the last row is all `.` (the dock rule below). |
 | start_gold | int | 0 to 100,000 | Normal. Twists and Relaxed change it in `Battle.create` (3.1). |
 | gates | int | 0 to 3, and at most the socket count | RULES 7.1 |
 | strength | int | 50 to 1,000 | Every wave's strength unless the wave sets its own. RULES 6.4 |
@@ -179,7 +180,7 @@ The map and waves are placeholders. Both branches are 13 steps long, so with no 
 
 Spawn bound: one wave, with its Twist applied, spawns at most 120 creatures, counting `split_count` for each splitter (RULES 12.5). Boss releases depend on play, so the bots measure them (9.1).
 
-Dock room (7.4): on the Fold5 cover in portrait, the open wave preview fits below a map of up to 11 rows only for a wave of at most 4 groups whose names fit 4 across, or a boss alone whose info takes one line. Anything more makes the preview taller and covers the lowest map row. Today that is 5 or more groups, 4 groups with a `gatecrasher`, a boss with any other group, and `ironshell`, `moon_moth` or `old_tusk` even alone. Later regions keep waves inside this, or extend the dock test (tests/ui/real_tree_checks.gd `_stays_in_sight`, region 1 only today) to their maps. On 12 and 13 row maps the open preview can cover the lowest row in any wave (section 12).
+Map height and the dock (7.4, settled 2026-10-24): waves need no shape limit for the portrait dock. A build phase whose open wave preview would cover the map starts with the preview folded into its one line strip. On the Fold5 cover that strip still covers part of the bottom row of a 13 row map, so **the bottom row of a 13 row map is scenery only**: no road, spot, socket, entrance or home. tests/levels checks it for every level file, and for run maps through their bottom segments (2.9). Maps of 8 to 12 rows have no such rule. This is a level design rule, not a load check, so `LevelData.check` does not change.
 
 ### 2.5 Campaign order: data/levels/campaign.json (level-designer)
 
@@ -299,18 +300,25 @@ Release checks: the creature named by `split_into`, `summon.enemy` or `release.e
 | `towers_at_most` | `value` | Have at most N towers. | The towers on the map were never more than N. Bells and Bakeries count. |
 | `tower_ban` | `tower` | Build no (plural). | That tower was never built. |
 | `gates_at_most` | `value`, 0 to 3 | Use at most N gates. At 0: Use no gates. | At the start of every wave, at most N gates were placed. |
-| `tier_at_most` | `value`, 1 or 2 | No tower above tier N. | No tower went above tier N. |
+| `tier_at_most` | `value`, 1 or 2 | At 1: Upgrade no towers. At 2: No tower above tier 2. (Bart, hard stop B) | No tower went above tier N. |
 | `early_calls_at_least` | `value` | Call N waves early. | At least N waves were called early. |
 | `kinds_at_most` | `value` | Use at most N kinds of tower. | At most N tower types were built. |
 | `gates_whole` | none | Use every gate and keep them whole. | At the start of every wave every gate was placed, and no gate broke. |
 
 `value` is 0 to 100. RULES 10.3 also asks every challenge to leave two kinds of attacking tower usable. tests/levels/ checks that.
 
+**Stars during play** (phase 7, FUN_REVIEW_R1 item 2, approved at hard stop B). Only in a campaign level that is not a Twist; runs, dailies and Twists have no stars.
+
+- The Pause menu (where a resumed game also opens) shows the three star lines. A line says "Earned" when Progress already holds that star for the level, else "Not yet" while `Battle.stars_possible()` (3.1) still has its bit, else "Lost". A lost line is struck through and says "Lost", so it never relies on color. On Relaxed, lines 2 and 3 are not struck through and say "Normal only" (wording to be confirmed by the game designer, section 12).
+- The UI warns before a tap that would lose star 3, as the Upgrade button already does: in the build panel for a tower where `Battle.loses_star3(&"build", tower)` is true (a tower over the limit, a banned tower, a kind over the limit), on an upgrade where `loses_star3(&"upgrade", &"", tier)` is true, and in the gate message when placing a gate where `loses_star3(&"gate")` is true. A gate loses the star only if a wave starts with it placed, and the message says so. Warnings show only on Normal and only while star 3 is not already earned. These queries replace the UI's own tier check, which misses a tower that went above the cap and was then sold.
+
 ### 2.8 Effects: Twists and cards
 
 A Twist or a card is a list of effects. Each effect is an object with a `type` from this closed list and exactly the fields shown. The sim implements each type once.
 
 Uses: **Twist** effects last the whole level. **card** effects last the rest of the run, or change the state once where the table says instant. **risk** effects (the effects of a risk card) wait for the next wave that starts and change only that wave. At most one risk card waits at a time.
+
+Which creatures an effect reaches: a Twist's creature effects reach every creature of every wave, bosses and released creatures (Puffs, boss summons and releases) included. A risk card's creature effects reach every creature of the wave it changes, that wave's released creatures included. `count_pct` changes group counts only: releases keep their data counts.
 
 | type | Fields | Use | What it does | RULES |
 |---|---|---|---|---|
@@ -321,33 +329,52 @@ Uses: **Twist** effects last the whole level. **card** effects last the rest of 
 | `ban_tower` | tower | Twist | The tower cannot be built | 13 |
 | `tier_cap` | tier (1 or 2) | Twist | No tower can go above this tier | 13 |
 | `no_selling` | none | Twist | Towers cannot be sold | 13 |
-| `count_pct` | pct, flyers, last_wave | Twist, risk | Group counts times pct / 100, rounded up. `flyers` true: groups of flyers only. `last_wave` true (Twist only): the final wave only. | 13, 14.5 |
-| `health_pct` | pct | risk | Max health times pct / 100, rounded half up | 14.5, 14.6 |
+| `count_pct` | pct, flyers, last_wave | Twist, risk | Group counts times pct / 100, rounded up. `flyers` true: groups of flyers only. `last_wave` true: the final wave only; a risk card always has false. | 13, 14.5 |
+| `health_pct` | pct | risk | Max health times pct / 100, rounded half up, after strength | 14.5, 14.6 |
 | `speed_pct` | pct | Twist, risk | Speed times pct / 100 | 13, 14.5 |
 | `armor_add` | amount | Twist | Armor plus amount | 13 |
-| `all_bubbles` | none | Twist | Every creature starts with a bubble | 13 |
-| `break_ms` | enemy, ms | Twist | That creature breaks gates in ms | 13 |
+| `all_bubbles` | none | Twist | Every creature starts with a bubble, which comes back as a Bubbler's does | 13 |
+| `break_ms` | enemy, ms | Twist | That creature breaks gates in ms. It must already break gates (`break_ms` in enemies.json). | 13 |
 | `gates_open` | none | risk | From the start of that wave until the next build phase, gates block nothing and cannot be broken | 14.5 |
-| `add_group` | enemy, count, entrance, at_ms, every_ms, after_last | risk | One more group. `after_last` true: at_ms counts from the start of the wave's last group. | 14.5, 14.6 |
-| `reward_gold` | amount | risk | Paid when that wave is cleared, times its strength / 100, rounded half up | 14.5 |
+| `add_group` | enemy, count, entrance, at_ms, every_ms, after_last | risk | One more group, after the wave's own groups in spawn and preview order, belonging to that wave. `after_last` true: at_ms counts from the largest `at_ms` among the wave's own groups. The entrance must exist on the map: `add_effects` refuses the effects with `&"bad_effect"` otherwise, so cards.json uses entrance 1 (2.11). | 14.5, 14.6 |
+| `reward_gold` | amount | risk | Times that wave's strength / 100, rounded half up. Paid with that wave's clear bonus and counted in its `wave_cleared` event's `gold`. `clear_bonus_pct` does not change it. Nothing is paid if the game ends before that wave is cleared. | 14.5 |
 | `add_tower` | tower | card | The tower can be built | 14.5 |
 | `tower_add` | tower, stat, amount | card | Adds to that stat of every tier and path of the tower. stat: `damage`, `reload_ms`, `reach`, `splash`, `slow_pct`, `targets`, `boost_pct` or `boost_damage` | 14.5, 14.6 |
 | `tower_pct` | tower, stat, pct | card | That stat times pct / 100, rounded half up. stat: `damage` or `reload_ms` | 14.5, 14.6 |
 | `tower_hits_air` | tower | card | The tower also hits or slows flyers | 14.6 |
-| `bounty_pct` | pct | card | Bounties times pct / 100, rounded half up | 14.5 |
+| `bounty_pct` | pct | card | Bounties times pct / 100, rounded half up. The early call bonus is worked out from these bounties. | 14.5 |
 | `clear_bonus_pct` | pct | card | Clear bonuses times pct / 100, rounded half up | 14.5 |
 | `refund_pct` | pct | card | Replaces rules.json `refund_pct`. pct is 1 to 100, so selling never pays a profit. | 14.5 |
 | `cost_add` | build, upgrade | card | Added to every build price and every upgrade price, never below 10 | 14.6 |
-| `interest` | pct, max | card | At the start of each build phase, gain pct of unspent gold, rounded down, at most max | 14.6 |
+| `interest` | pct, max | card | When each build phase begins, after the clear bonus, gain pct of the gold held, rounded down, at most max | 14.6 |
 | `gates_stay` | none | card | Each time a wave starts, every placed gate becomes fixed (RULES 14.6) | 14.6 |
-| `add_gates` | count | card, instant | Gain gates, never more than `max_gates` in all | 14.5, 14.6 |
+| `add_gates` | count | card, instant | Gain gates, never more than `max_gates` placed and in hand together | 14.5, 14.6 |
 | `add_gold` | amount, per_wave | card, instant | Gain amount plus per_wave for each wave cleared so far | 14.5 |
 | `add_lives` | amount | card, instant | Gain lives | 14.5 |
 
-- Order: a Twist's start effects come before Relaxed (RULES 11). Tower stats: the data, then every `tower_add`, then every `tower_pct`, then Bakery boosts on top (RULES 8.7). Creatures: the data, then strength, then effects.
+- Order: a Twist's start effects come before Relaxed (RULES 11). Tower stats: the data, then every `tower_add`, then every `tower_pct`, then Bakery boosts on top (RULES 8.7). Creatures: the data, then strength, then effects, each step rounded by its own rule.
+- Floors after card effects (no ceilings, so Volley gives a Triple Bow 4 targets): price at least 10, reach at least 1, reload at least 50 ms, damage at least 1 on a tower that deals damage, splash at least 0, targets at least 1, a slow from 1 to 90 percent on a stat block that has a slow (a card never adds a slow to one that has none), boosts at least 0.
 - Instant effects change the state once and are not kept, so a restore never applies them twice. Every other effect is kept by the battle and saved with it.
-- Checks: the type is known and allowed for its use; the fields are exact; every id exists; pct is 1 to 1,000, except `refund_pct`, which is 1 to 100; counts are 1 to 200, except `set_gates` count, which is 0 to `max_gates` (the No Gates Twist gives 0); `set_lives` is 1 to 1,000; entrances are 1 to 4; times are multiples of 50 up to 600,000; every other number is -1,000 to 1,000. `LevelData.check` also checks that `fixed_gates` cells are sockets of that level.
-- In phase 5 the checks cover every type, but no region 1 level uses an effect yet.
+- Checks (`Modifiers.check`): the type is known and allowed for its use; the fields are exact; every id exists; pct is 1 to 1,000, except `refund_pct`, which is 1 to 100; counts are 1 to 200, except `set_gates` count, which is 0 to `max_gates` (the No Gates Twist gives 0); `set_lives` is 1 to 1,000; entrances are 1 to 4; times are multiples of 50 up to 600,000; every other number is -1,000 to 1,000; a `break_ms` creature already breaks gates (phase 7). `LevelData.check` also checks that `fixed_gates` cells are sockets of that level, that there are no more of them than the level gives, and that they do not seal. `RunData.check` adds the card rules of 2.11.
+
+The Twists of RULES 13 as effects. The level designer writes them into each level's `twist`, with `name` and `text` from RULES 13:
+
+| Twist | Levels | effects |
+|---|---|---|
+| Thin Purse | 1-1, 4-1 | `start_gold_pct` 50 |
+| Stuck Gate, Stuck Gates | 1-2, 2-6 | `fixed_gates` with one cell (1-2) or two cells (2-6), sockets the level designer picks |
+| No Upgrades | 1-3 | `tier_cap` 1 |
+| No Catapults, No Bells, No Fireworks, No Longbows | 1-4 and 3-2, 2-2, 3-1, 4-2 | `ban_tower` `pumpkin_catapult`, `lullaby_bell`, `firework_tower`, `longbow_loft` |
+| Twice the Wings | 1-5, 3-4 | `count_pct` 200, flyers true, last_wave false |
+| Double Trouble | 1-6, 3-6, 4-6 | `count_pct` 200, flyers false, last_wave true |
+| Hurry | 2-1 | `speed_pct` 120 |
+| Thick Shells | 2-3 | `armor_add` 2 |
+| No Gates, One Gate | 2-4, 3-3 | `set_gates` 0, `set_gates` 1 |
+| Bubble Night | 2-5 | `all_bubbles` |
+| Tier 2 Cap | 3-5 | `tier_cap` 2 |
+| Quick Crashers | 4-3 | `break_ms` `gatecrasher` 2000 |
+| No Selling | 4-4 | `no_selling` |
+| Five Lives | 4-5 | `set_lives` 5 |
 
 ### 2.9 Segments and wave packs: data/segments/ (level-designer, phase 7)
 
@@ -363,22 +390,52 @@ A run map is three hand-built segments stacked: top, middle and bottom (RULES 14
 ]}
 ```
 
-- `kind` is `top`, `middle` or `bottom`, with the row count run.json sets for it. Entrances appear only in top segments, on the top or side edges, and the base only in bottom segments.
-- Ports are the columns with a road cell on a segment's top row and on its bottom row, worked out from the grid. A segment fits under another when its top ports equal that segment's bottom ports exactly.
-- data/segments/index.json lists every segment file: `{"format": 1, "segments": ["top_twin", "mid_split"]}`. The game loads only listed files, and tests/levels/ checks that every file in the folder is listed.
-- data/segments/packs.json holds the wave packs (RULES 14.3): `{"format": 1, "packs": [{"id": "band1_scamps", "band": 1, "boss": "", "waves": []}]}`. A pack has exactly 3 waves in the level wave shape, without `strength`. `band` is 1 to 6. Band 6 packs name their `boss`. Entrance 2 means entrance 1 on a map with one entrance.
-- An assembled map is a level checked with `LevelData.check`, plus RULES 14.2: 8 to 12 spots and 2 to 5 sockets. Packs get the spawn bound of 2.4 with the largest risk card applied.
+Segments, one file each, data/segments/<id>.json:
+
+- Keys exactly `format` (1), `id` (equals the file name), `kind` and `grid`. `kind` is `top`, `middle` or `bottom`. The grid has the row count run.json sets for its kind (2.10), 7 characters a row, in the characters of 2.3.
+- A top segment holds 1 or 2 entrances, `1` then `2`, each on its top row or on column 0 or 6. Middle and bottom segments hold no entrance. A bottom segment holds exactly one `B`; the others hold none.
+- **A bottom segment's last row is all `.`** while run.json's `rows` add up to 13, as RULES 14.2 sets them, because a 13 row map keeps its bottom row scenery only (2.4, 7.4).
+- No segment holds a 2 x 2 block of road on its own.
+- Ports: the columns of the road cells on a top or middle segment's bottom row (its bottom ports), and on a middle or bottom segment's top row (its top ports). On those rows no two road cells are side by side, so a seam never makes a 2 x 2 block. Each of those rows has at least one road cell.
+- A segment fits under another when its top ports equal the other's bottom ports, as sets of columns.
+- Coverage: every top segment has at least one middle that fits under it, and every middle that fits under some top has at least one bottom that fits under it.
+- Valid stacks: every stack of a top, a middle that fits under it and a bottom that fits under that middle, assembled as in 3.4, passes `LevelData.check` and has its spots and sockets within run.json's `spots` and `sockets`. So every pick MapAssembler can make is valid. tests/levels/ checks every stack. `RunData.check` checks everything else in this list at load.
+- data/segments/index.json lists every segment file: `{"format": 1, "segments": ["top_twin", "mid_split"]}`, 1 to 256 ids, no repeats. Its order is the order MapAssembler picks from. The game loads only listed files, and tests/levels/ checks that every file in the folder is listed.
+
+Wave packs, data/segments/packs.json (RULES 14.3): `{"format": 1, "packs": [{"id": "band1_scamps", "band": 1, "boss": "", "waves": []}]}`.
+
+- 1 to 256 packs, ids unique. Keys exactly `id`, `band` (1 to 6), `boss` and `waves`. Its order is the order MapAssembler picks from.
+- `waves`: exactly 3 waves in the level wave shape of 2.4, without `strength`. Entrances are 1 or 2; entrance 2 means entrance 1 on a map with one entrance.
+- Creatures: a band b pack uses only the creatures that bands 1 to b add (run.json `bands`, 2.10), never a boss except its own, and never `puff` as a group. Band 1 packs' first wave holds only `scamp` (RULES 14.3).
+- Bands 1 to 5: `boss` is `""`. Band 6: `boss` is a boss id, and that boss comes only in the pack's third wave, as one group of count 1, with any escort.
+- Each band has at least 4 packs, and each boss in enemies.json has at least one band 6 pack.
+- Spawn bound: each pack wave spawns at most 120 creatures (2.4, counting `split_count`) with no risk card and with each risk card of cards.json applied in turn. A band 6 pack's third wave, the boss wave, never gets a risk card (3.4), so it is checked without one.
+- New creatures (RULES 14.3): for every choice of one pack per band (band 6: every pack), reading waves 1 to 18 in order, a creature the run has not shown yet comes in the wave's first group, no group of that wave starts before it, and no wave brings two such creatures. tests/levels/ checks every choice. The simple way to pass: make every band b pack show every creature that band b adds.
+- `RunData.check` checks every rule in this list at load except the new creature rule, which only tests/levels/ checks.
 
 ### 2.10 The run plan: data/runs/run.json (roguelite-engineer, phase 7)
 
 ```json
-{"format": 1, "waves": 18, "strength_start": 100, "strength_step": 10,
+{"format": 1, "strength_start": 100, "strength_step": 10,
  "start_gold": 300, "gates": 1, "towers": ["sling_post"],
  "rows": {"top": 4, "middle": 5, "bottom": 4}, "spots": [8, 12], "sockets": [2, 5],
+ "bands": [["scamp", "pip"], ["skitter", "flitter", "shellback"], ["bubbler", "puffball"],
+           ["mender", "dusk_moth"], ["gatecrasher"], []],
  "weights": {"tower": 30, "perk": 25, "gate": 10, "economy": 20, "risk": 15}}
 ```
 
-Values from RULES 14.1 to 14.4. Lives and the Relaxed numbers come from rules.json.
+Values from RULES 14.1 to 14.4. Every key is required, and unknown keys are problems. A run always has 6 bands of 3 waves: 18 waves, the 18th a boss wave, and a draft after each of waves 1 to 17 (RULES 14.1, 14.3). That shape is fixed in code (`RunData.BANDS` 6), not data. Lives and the Relaxed numbers come from rules.json, so a Relaxed run starts with 450 gold.
+
+| Key | Limits | Meaning |
+|---|---|---|
+| strength_start, strength_step | 50 to 1,000; 0 to 100; wave 18's strength at most 1,000 | Wave w has strength `strength_start + strength_step * (w - 1)` |
+| start_gold | 0 to 100,000, a multiple of 10 | Normal starting gold |
+| gates | 0 to `max_gates` | Gates at the start |
+| towers | 1 to 6 tower ids, no repeats | The towers a run starts with |
+| rows | exactly `top`, `middle`, `bottom`, each 1 to 11, summing to 8 to 13 | Segment heights (2.9) |
+| spots, sockets | `[lo, hi]`: spots 1 <= lo <= hi <= 24; sockets 0 <= lo <= hi <= 8 | What an assembled map must hold (RULES 14.2) |
+| bands | exactly 6 lists of creature ids; no boss, no `puff`; each creature in at most one list | The creatures each band adds (RULES 14.3). Band 6 adds none: it uses every earlier one, plus its boss. |
+| weights | exactly `tower`, `perk`, `gate`, `economy`, `risk`, each 0 to 1,000, at least one above 0 | Draft weights (RULES 14.4) |
 
 ### 2.11 Cards: data/cards/cards.json (roguelite-engineer, phase 7)
 
@@ -396,13 +453,58 @@ Values from RULES 14.1 to 14.4. Lives and the Relaxed numbers come from rules.js
 ]}
 ```
 
-- `kind` is `tower`, `perk`, `gate`, `economy` or `risk`. Tower and perk cards name their `tower`, for the draft rules in RULES 14.4. `once`: gone for the run after it is taken.
-- `unlock` is `{}` for the base cards (RULES 14.5), or `{"counter": name, "at": n}` (RULES 14.6). Counter names: the five progress counters (5.5), plus `stars` and `twists_cleared`, worked out from the level records.
+- 1 to 256 cards, ids unique. Keys exactly `id`, `kind`, `name` (1 to 24 characters), `text` (1 to 80), `once`, `unlock` and `effects`, plus `tower` for tower and perk cards only. The file's order is the order drafts pick from.
+- `kind` is `tower`, `perk`, `gate`, `economy` or `risk`. `once` true: gone for the run after it is taken.
+- `unlock` is `{}` for the base cards (RULES 14.5), or exactly `{"counter": name, "at": n}` (RULES 14.6) with n from 1 to 1,000,000. Counter names: the five progress counters (5.5), plus `stars` and `twists_cleared`, worked out from the level records.
+- `effects` by kind. A risk card's effects pass `Modifiers.check` for use `risk`; every other card's for use `card`.
+  - tower: exactly one `add_tower` of its `tower`. Every tower not in run.json `towers` has exactly one tower card, and no tower in it has one.
+  - perk: 1 to 3 effects, each a `tower_add`, `tower_pct` or `tower_hits_air` of its `tower`. The stat must be one the tower's kind has (2.6): `damage`, `reload_ms`, `splash` and `targets` for an attacking tower; `slow_pct` for a Bell, or an attacking tower with a slow on some tier or path; `boost_pct` and `boost_damage` for a Bakery; `reach` for any. `tower_hits_air` for an attacking tower or a Bell.
+  - gate: an `add_gates`, and optionally a `gates_stay`.
+  - economy: 1 to 3 of `add_gold`, `add_lives`, `bounty_pct`, `clear_bonus_pct`, `refund_pct`, `cost_add` and `interest`.
+  - risk: exactly one `reward_gold`, plus 1 to 3 other risk effects. Every `add_group` uses entrance 1 (entrance A, as RULES 14.5 and 14.6 say), which every map has.
+- `RunData.check` checks all of this. `RunData.pool(counters)` is the base cards plus every card whose counter has reached its `at`, in file order.
+
+Every card of RULES 14.5 and 14.6 as data. `name` is the RULES name; `text` is the roguelite engineer's, at most 80 characters, from the RULES effect line, and names come from the data as 2.1 says.
+
+| id | kind, tower | once | unlock | effects |
+|---|---|---|---|---|
+| `tower_pumpkin_catapult`, `tower_lullaby_bell`, `tower_longbow_loft`, `tower_firework_tower`, `tower_bakery` | tower, that tower | true | `{}` | `add_tower` |
+| `sharp_pebbles` | perk, `sling_post` | true | `{}` | `tower_add` damage 2 |
+| `wide_splash` | perk, `pumpkin_catapult` | true | `{}` | `tower_add` splash 25 |
+| `deep_lullaby` | perk, `lullaby_bell` | true | `{}` | `tower_add` slow_pct 10 |
+| `steady_aim` | perk, `longbow_loft` | true | `{}` | `tower_pct` reload_ms 80 |
+| `bigger_bangs` | perk, `firework_tower` | true | `{}` | `tower_add` damage 5 |
+| `warm_ovens` | perk, `bakery` | true | `{}` | `tower_add` reach 100 |
+| `spare_gate` | gate | false | `{}` | `add_gates` 1 |
+| `gold_purse` | economy | false | `{}` | `add_gold` 100, per_wave 10 |
+| `fat_bounties` | economy | true | `{}` | `bounty_pct` 120 |
+| `feast_days` | economy | true | `{}` | `clear_bonus_pct` 150 |
+| `fair_trade` | economy | true | `{}` | `refund_pct` 90 |
+| `tea_break` | economy | false | `{}` | `add_lives` 5 |
+| `crowded_night` | risk | false | `{}` | `count_pct` 150 (flyers false, last_wave false); `reward_gold` 100 |
+| `thick_hides` | risk | false | `{}` | `health_pct` 150; `reward_gold` 120 |
+| `hurry_night` | risk | false | `{}` | `speed_pct` 125; `reward_gold` 100 |
+| `gateless_night` | risk | false | `{}` | `gates_open`; `reward_gold` 120 |
+| `flock` | risk | false | `{}` | `add_group` flitter, 8, entrance 1, at_ms 2000, every_ms 400, after_last true; `reward_gold` 80 |
+| `twin_pebbles` | perk, `sling_post` | true | `best_run_wave` 6 | `tower_add` targets 1; `tower_add` damage -2 |
+| `heavy_pumpkins` | perk, `pumpkin_catapult` | true | `best_run_wave` 12 | `tower_add` damage 10; `tower_add` reload_ms 500 |
+| `frost_chime` | perk, `lullaby_bell` | true | `dailies_finished` 1 | `tower_hits_air`; `tower_add` reach -50 |
+| `volley` | perk, `longbow_loft` | true | `runs_won` 1 | `tower_add` targets 1; `tower_pct` damage 60 |
+| `long_fuse` | perk, `firework_tower` | true | `runs_won_normal` 1 | `tower_add` reach 100; `tower_add` reload_ms 500 |
+| `spice_rack` | perk, `bakery` | true | `stars` 24 | `tower_add` boost_damage 2; `tower_add` boost_pct -10 |
+| `piggy_bank` | economy | true | `stars` 36 | `interest` pct 10, max 50 |
+| `bargain` | economy | true | `stars` 48 | `cost_add` build 20, upgrade -20 |
+| `iron_gate` | gate | true | `twists_cleared` 1 | `add_gates` 2; `gates_stay` |
+| `moonlit_wager` | risk | false | `stars` 60 | `health_pct` 200; `reward_gold` 250 |
+| `crasher_escort` | risk | false | `risky_wins` 1 | `add_group` gatecrasher, 2, entrance 1, at_ms 0, every_ms 3000, after_last false; `reward_gold` 150 |
+| `pip_parade` | risk | false | `stars` 72 | `add_group` pip, 24, entrance 1, at_ms 1000, every_ms 300, after_last false; `reward_gold` 100 |
+
+That is the 22 base cards and the 12 unlockable ones. Counters (RULES 14.6): a run or daily "reaches" wave N when wave N starts, so `best_run_wave` is the highest wave number started in any run or daily.
 
 ### 2.12 How data is checked on load
 
 1. `GameData.load_from()` (src/save/) reads every bundled file through `JsonFile.read()`: a size cap first, ASCII only, then Godot's JSON parser. Never `load()`, `ResourceLoader`, `str_to_var` or anything that can make objects.
-2. It hands each parsed value to its owner's check, in this order: `Catalog.check` (stats), the campaign list (GameData itself), `LevelData.check` (each listed level), then in phase 7 `RunData.check` (segments, packs, run plan and cards). The checks never see file names, so GameData itself checks that each level's `id` equals its file name and that every level file is listed.
+2. It hands each parsed value to its owner's check, in this order: `Catalog.check` (stats), the campaign list (GameData itself), `LevelData.check` (each listed level), then in phase 7 `RunData.check` (segments, packs, run plan and cards). The level checks never see file names, so GameData itself checks that each level's `id` equals its file name and that every level file is listed. `RunData.check` gets one Dictionary of parsed files keyed by their path under data/: `"runs/run.json"`, `"cards/cards.json"`, `"segments/index.json"`, `"segments/packs.json"`, and `"segments/<id>.json"` for every id the index lists, in index order. GameData reads the index first; a listed file that is missing or unreadable is left out of the Dictionary, and `RunData.check` reports it. RunData checks that each segment's `id` equals its file name.
 3. Each check verifies exact keys, types, whole numbers, ranges, the id format, that every referenced id exists, the map rules in 2.3, times in multiples of 50 ms, the effects in 2.8 and the spawn bound in 2.4.
 4. Each check returns every problem as a plain line naming the file and field, for example `r1_l3.json: waves[2].groups[0].count: must be 1 to 200`. An empty list means valid.
 5. A bundled file with a problem is a build bug. tests/sim/, tests/levels/ and tests/run/ load every real file and fail on any problem. In the game, if `GameData.problems` is not empty, the App shows one message, "This copy of Forkline is damaged. Installing it again should fix it.", and starts nothing else.
@@ -621,6 +723,8 @@ func wave_count() -> int
 func wave_preview(index: int) -> Array[Dictionary]
 func next_wave_info() -> Dictionary                    # {"refusal": StringName (&"" when it can start), "early": bool, "bonus": int}
 func result() -> Dictionary                            # {"won": bool, "stars": int, "lives_left": int, "waves_cleared": int}; won and stars only once WON
+func stars_possible() -> int                           # phase 7: the star bits a win from this moment could still earn (below)
+func loses_star3(action: StringName, tower: StringName = &"", tier: int = 0) -> bool   # phase 7: would this action break star 3 (below)
 
 # Save (section 5.6). All or nothing.
 func to_data() -> Dictionary
@@ -632,6 +736,8 @@ static func from_data(data: Variant, catalog: Catalog) -> Battle   # null when a
 - `enemy_numbers(id)`: `health`, `max_health`, `armor`, `speed` (now, with slows and effects), `base_speed`, `flying`, `lives`, `bounty`, `heal`, `slow_pct`, `slow_ms` (left), `bubble` (up), `bubble_ms` (until it is back), `breaking_ms` (left, 0 when not breaking). RULES 9.4.
 - `wave_preview(index)`: one row per group in spawn order, `{"enemy": StringName, "count": int, "entrance": int (1 based), "health": int, "bounty": int, "heal": int}`, at that wave's strength with the Twist and, for the next wave, a waiting risk card applied (RULES 9.1).
 - `result()["stars"]` holds bits: 1 for star 1, 2 for star 2, 4 for star 3 (2.7).
+- `stars_possible()` (phase 7, for 2.7's stars during play): 0 once LOST. Otherwise bit 1, plus bit 2 on Normal while lives are at least `star2_lives`, plus bit 4 on Normal while the level's `star3` rule is not yet broken. For `no_lives_lost`, `towers_at_most`, `tower_ban`, `gates_at_most`, `tier_at_most`, `kinds_at_most` and `gates_whole` that means the record so far still meets the rule (2.7). For `early_calls_at_least` it means the early calls so far plus the waves not yet started can still reach N; in BUILD one fewer, since the next wave starts from a build phase. Once WON it equals `result()["stars"]`. On Relaxed it is at most 1.
+- `loses_star3(action, tower, tier)` (phase 7): true only while bit 4 is in `stars_possible()` and the action would break it. `&"build"`: placing one more `tower` breaks `towers_at_most` with N towers standing, `tower_ban` of that tower, and `kinds_at_most` with N kinds built when `tower` is not one of them. `&"upgrade"`: a tower reaching `tier` breaks `tier_at_most` below `tier`. `&"gate"`: one more gate placed breaks `gates_at_most` with N already placed; the star is lost only if a wave starts that way. Every other action and kind gives false. Neither query changes anything.
 
 ```gdscript
 class_name TowerState extends RefCounted               # src/sim/tower_state.gd, read only outside src/sim/
@@ -716,7 +822,7 @@ Each event is a Dictionary with `"kind"` and the fields below. Commands add even
 | `&"healed"` | `id: int` (the Mender), `ids: Array[int]` |
 | `&"leaked"` | `id: int`, `enemy: StringName`, `lives: int` |
 | `&"gate_broken"` | `cell: Vector2i` |
-| `&"wave_cleared"` | `wave: int`, `gold: int` |
+| `&"wave_cleared"` | `wave: int`, `gold: int` (the clear bonus, plus a risk card's reward for that wave) |
 | `&"build_started"` | `wave: int` (the next wave) |
 | `&"built"`, `&"upgraded"`, `&"sold"` | `cell: Vector2i`, `tower: StringName`, `tier: int`, `spec: int`, `gold: int` |
 | `&"gate_placed"`, `&"gate_removed"` | `cell: Vector2i` (a move is a removal, then a placement) |
@@ -767,19 +873,64 @@ var outcome: Dictionary = battle.result()
 
 - A copy for trying a branch: `Battle.from_data(battle.to_data(), game.catalog)`.
 - Same input check: play twice with the same bot seed and compare `result()` and `JSON.stringify(battle.to_data())`.
-- Twists (phase 7): pass `level.twist_effects` to `create`. Runs (phase 7): `RunSession.start(...)`, the same loop through `session.start_next_wave()`, and `session.pick()` at each draft.
+- Twists (phase 7): pass `level.twist_effects` to `create`.
+- Runs and the daily (phase 7), the same loop through the session:
+
+```gdscript
+var session: RunSession = RunSession.start(run_seed, "", false, game.run.pool(counters), game.run, game.catalog)
+# the daily: RunSession.start(RunSeeds.daily_seed(day), day, false, game.run.card_ids(), game.run, game.catalog)
+var battle: Battle = session.battle
+battle.record_events = false
+while battle.phase != Battle.Phase.WON and battle.phase != Battle.Phase.LOST:
+	while session.draft_open():
+		session.pick(bot.choose(session.offers()))     # the bot's own seeded generator
+	bot.plan(battle)
+	session.start_next_wave()
+	while battle.phase == Battle.Phase.WAVE:
+		bot.react(session)                             # early calls only through session.start_next_wave()
+		battle.step()
+var outcome: Dictionary = session.result()
+```
+
+- Same input check for runs: play twice with the same run seed and bot seed, and compare `session.result()`, `JSON.stringify(battle.to_data())` and `JSON.stringify(session.to_data())`.
 - Each bot run prints its seeds, so every number in a docs/balance/ report can be repeated.
 
 ### 3.4 Runs, cards and the daily: src/run/ (roguelite-engineer, phase 7)
 
 Seeds:
 
-- A normal run's seed is one `randi()` from a freshly randomized `RandomNumberGenerator`: the only unseeded draw in the game. It is saved with the run.
+- A normal run's seed is drawn by the App: `randi()` from a freshly randomized `RandomNumberGenerator`, 0 to 2^32 - 1. It is the only unseeded draw in the game, and it is saved with the run.
 - The daily seed is the local date as YYYYMMDD, for example 20261023 (RULES 15). The App reads the date with `Time.get_date_dict_from_system()` and passes the day key in. src/run/ never reads the clock.
-- Every other generator is seeded with `RunSeeds.derive(run_seed, tag, index)`, which is `("%d:%s:%d" % [run_seed, tag, index]).hash()`. Tags and indexes: `"map"` 0, `"boss"` 0, `"pack"` the band (1 to 6), `"draft"` the wave just cleared (1 to 17). A test pins a few values, so an engine change to `String.hash()` is caught. Only `randi()` and `randi_range()` are called on these generators.
-- So the map, the waves and each draft's random numbers depend only on the run seed (RULES 14.4). Picks change which cards are eligible, never the numbers drawn.
+- Every other generator is a `RandomNumberGenerator` whose `seed` is set to `RunSeeds.derive(run_seed, tag, index)`, which is `("%d:%s:%d" % [run_seed, tag, index]).hash()`. Tags and indexes: `"map"` 0, `"boss"` 0, `"pack"` the band (1 to 6), `"draft"` the wave the draft follows (1 to 17). A test pins a few values, so an engine change to `String.hash()` is caught.
+- Only `randi_range()` is called on these generators, in exactly the order written below. So the map, the boss and the waves depend only on the run seed, and a draft only on the run seed and the cards eligible when it opens. Earlier picks never change a later draft's generator (RULES 14.4).
 
-Drafts (RULES 14.4): each of waves 1 to 17 owes a draft when it is cleared. Owed drafts open one at a time, in wave order, in the next build phase; a draft with no build phase after it never opens. While a draft is owed, the next wave cannot start: `RunSession.start_next_wave()` refuses with `&"draft_waiting"` in either phase, and the UI says "Pick your card after this wave." The pool is fixed at run start: the base cards plus the unlocked ones for a normal run, every card for the daily (RULES 15).
+Building a run, `MapAssembler.assemble()`:
+
+1. Boss, generator `"boss"` 0: over the bosses that have a band 6 pack, in enemies.json order, `randi_range(0, n - 1)`.
+2. Map, generator `"map"` 0: a top segment by `randi_range(0, n - 1)` over every top in index order; then a middle the same way over the middles that fit under it; then a bottom over the bottoms that fit under that middle (2.9).
+3. Packs, generator `"pack"` b for each band b from 1 to 6: `randi_range(0, n - 1)` over that band's packs in packs.json order; for band 6, only the packs naming the boss.
+4. Waves: band b's pack gives waves 3b - 2, 3b - 1 and 3b, in its order. Wave w gets strength `strength_start + strength_step * (w - 1)`. On a map with one entrance, entrance 2 becomes entrance 1.
+5. The level: `{"format": 1, "id": "run", "name": "Run", "grid": <the top, middle and bottom rows in order>, "start_gold", "gates" and "towers" from run.json, "strength": <strength_start>, "star3": {"kind": "no_lives_lost"}, "waves": <the 18 waves>}`, with no hint and no Twist, through `LevelData.from_data`. Runs have no stars: `star3` is there only because the level shape needs one, and nothing shows it or the name. A null result is a data bug: `RunSession.start` returns null, and the App shows the damaged message of 2.12.
+
+Drafts (RULES 14.4):
+
+- Owed drafts are worked out from the battle, so nothing extra is saved. Wave index w (0 based) is cleared when `w < battle.waves_started` and `battle.running` does not hold w. Each cleared wave among waves 1 to 17 (indexes 0 to 16) owes one draft. Drafts are picked in wave order, so the open draft always follows wave `picks.size() + 1`, and the drafts owed are the cleared waves among waves 1 to 17 less `picks.size()`. In BUILD every started wave is cleared, so that is `mini(battle.waves_started, 17) - picks.size()`.
+- `draft_open()`: a draft is owed and the battle is in BUILD. A draft with no build phase after it never opens.
+- `start_next_wave()`: `&"draft_waiting"` while a draft is owed, in either phase; else `battle.start_next_wave()`. The UI says "Pick your card after this wave." during a wave and "Pick a card first." in a build phase.
+- Eligible cards when a draft opens are the pool's cards, less every `once` card already picked, and:
+  - a tower card only while its tower is not in the run. The run's towers are run.json `towers` plus the tower of every tower card picked;
+  - a perk only while its tower is in the run;
+  - a gate card only while the run's gates, placed and in hand, are fewer than `max_gates` and fewer than the map's sockets;
+  - economy cards always;
+  - a risk card only while `battle.risk_waiting` is empty and wave 17 has not started (`battle.waves_started < 17`). So the boss wave is never changed, even when wave 17 was called early and the draft after wave 16 opens after it.
+- The draw, on generator `"draft"` w, slot by slot, at most 3 slots:
+  1. Slot 1, while the run has fewer than 3 towers and a tower card is eligible: a tower card, with no type draw.
+  2. Otherwise the types with an eligible card not yet offered, in the order tower, perk, gate, economy, risk, leaving out any type of weight 0: `r = randi_range(1, the sum of their weights)`, and the type is the first whose running sum of weights reaches r. After a risk card is offered, risk is left out for the rest of the draft.
+  3. The card: `randi_range(0, n - 1)` over that type's eligible cards not yet offered, in cards.json order.
+  4. When no type has a card left, the draft offers fewer than 3.
+- Offers are worked out again whenever asked and are not saved. Nothing a player can do in a build phase changes eligibility before the pick, so a restored run shows the same offers.
+- `pick(card_id)`: only a card in `offers()`. It calls `battle.add_effects(effects, risk)`, with `risk` true for a risk card, and when that returns `Battle.DONE` it appends the id to `picks`. It returns `Battle.DONE`, `&"not_offered"`, or the battle's refusal.
+- The pool is fixed when the run starts and is saved with it: the App passes `RunData.pool(progress.unlock_counters())` for a normal run and `RunData.card_ids()` for the daily (RULES 15).
 
 ```gdscript
 class_name RunSeeds extends RefCounted                 # src/run/run_seeds.gd
@@ -790,29 +941,38 @@ static func daily_seed(day: String) -> int             # "2026-10-23" to 2026102
 static func day_number(day: String) -> int             # days since 1970-01-01, for "the day after"
 
 class_name RunData extends RefCounted                  # src/run/run_data.gd: segments, packs, run plan and cards, checked
-static func check(files: Dictionary, catalog: Catalog) -> PackedStringArray   # files: each parsed file by its name
+const BANDS: int = 6                                   # 3 waves each: 18 waves and 17 drafts (2.10)
+static func check(files: Dictionary, catalog: Catalog) -> PackedStringArray   # files: 2.12
 static func from_data(files: Dictionary, catalog: Catalog) -> RunData         # null when check() finds anything
-func card(id: StringName) -> Dictionary                # {} when unknown
-func card_ids() -> Array[StringName]
-func pool(counters: Dictionary) -> Array[StringName]   # the base cards plus every card whose unlock the counters meet
+func card(id: StringName) -> Dictionary                # {} when unknown, else {"id": StringName, "kind": StringName, "tower": StringName
+                                                       # (&"" for none), "name": String, "text": String, "once": bool,
+                                                       # "unlock": Dictionary, "effects": Array[Dictionary]}
+func card_ids() -> Array[StringName]                   # cards.json order
+func pool(counters: Dictionary) -> Array[StringName]   # 2.11, cards.json order; counters as Progress.unlock_counters()
 
 class_name MapAssembler extends RefCounted             # src/run/map_assembler.gd
-static func assemble(run_seed: int, data: RunData, catalog: Catalog) -> LevelData   # map, 18 waves and the boss; a checked level
+static func assemble(run_seed: int, data: RunData, catalog: Catalog) -> LevelData   # the steps above; null on a data bug
 
 class_name RunSession extends RefCounted               # src/run/run_session.gd: one run around its Battle
-static func start(run_seed: int, daily: bool, relaxed: bool, pool: Array[StringName], data: RunData, catalog: Catalog) -> RunSession   # a daily is always Normal
-var battle: Battle                                     # read only
+const FORMAT: int = 1
+static func start(run_seed: int, day: String, relaxed: bool, pool: Array[StringName], data: RunData, catalog: Catalog) -> RunSession
+                                                       # day "" for a normal run. A daily passes its day key, run_seed equal to
+                                                       # RunSeeds.daily_seed(day), and relaxed false. null when a daily breaks
+                                                       # that, or when the map cannot be built.
+var battle: Battle                                     # every field is read only
 var run_seed: int
-var daily: bool
-var day: String                                        # the day the daily belongs to; "" for a normal run
-var picks: Array[StringName]
-func draft_open() -> bool                              # a draft is owed and the battle is in BUILD
-func offers() -> Array[StringName]                     # the open draft's 3 cards
-func pick(card_id: StringName) -> StringName           # Battle.DONE or &"not_offered"; adds the card's effects to the battle
-func start_next_wave() -> StringName                   # &"draft_waiting" while a draft is owed, else Battle.start_next_wave()
-func result() -> Dictionary                            # {"won": bool, "waves": int (cleared), "lives": int, "reached": int, "risks": int}
-func to_data() -> Dictionary                           # without the battle
-static func from_data(data: Variant, battle: Battle, run_data: RunData) -> RunSession   # null when invalid
+var daily: bool                                        # day is not ""
+var day: String                                        # the day a daily belongs to; "" for a normal run
+var pool: Array[StringName]
+var picks: Array[StringName]                           # in pick order
+func draft_open() -> bool
+func offers() -> Array[StringName]                     # the open draft's cards, 1 to 3; [] when no draft is open
+func pick(card_id: StringName) -> StringName
+func start_next_wave() -> StringName
+func risk_card() -> StringName                         # the picked risk card still waiting for its wave; &"" for none
+func result() -> Dictionary                            # {"won": bool, "waves": int, "lives": int, "reached": int, "risks": int}
+func to_data() -> Dictionary                           # 5.5, without the battle
+static func from_data(data: Variant, battle: Battle, run_data: RunData) -> RunSession   # 5.6; null when invalid
 
 class_name Daily extends RefCounted                    # src/run/daily.gd: RULES 15
 static func is_better(a: Dictionary, b: Dictionary) -> bool   # a win beats a loss; between wins more lives; between losses more waves; a tie keeps b
@@ -820,7 +980,9 @@ static func streak_after(streak: int, last_day: String, day: String) -> Dictiona
 static func shown_streak(streak: int, last_day: String, today: String) -> int        # 0 unless last_day is today or yesterday
 ```
 
-A daily run belongs to the day it started, even if it ends after midnight (RULES 15).
+- `result()`: `won` is true once the battle is WON; `waves` the waves cleared (`battle.result()["waves_cleared"]`); `lives` the lives left, at least 0; `reached` the highest wave number started (`battle.waves_started`); `risks` the risk cards picked. The App uses it for an abandoned run too, which counts as lost at its current wave (RULES 14.7).
+- `Daily.streak_after`: the day after `last_day` adds 1 and moves the day; `last_day` itself or an earlier day changes nothing; anything else, `""` included, starts again at 1 on `day`.
+- A daily run belongs to the day it started, even if it ends after midnight (RULES 15). If the phone's date is not a day key (before 2026-01-01 or after 2200-12-31), the Daily button says "Check the phone's date." and starts no new daily. A saved daily still resumes.
 
 ### 3.5 Files and saves: src/save/ (sim-engineer)
 
@@ -843,7 +1005,7 @@ var problems: PackedStringArray                        # empty when every file i
 var catalog: Catalog
 var campaign: Array[Dictionary]                        # [{"id": StringName, "name": String, "levels": Array[StringName]}]
 var levels: Dictionary[StringName, LevelData]
-var run: RunData                                       # phase 7; until then GameData has no run field
+var run: RunData                                       # phase 7, from the files of 2.12; until then GameData has no run field
 
 class_name SaveStore extends RefCounted                # src/save/save_store.gd: every save file (section 5)
 func _init(dir: String = "user://") -> void            # tests pass a folder under user://tests/; one outside user:// is refused
@@ -905,6 +1067,9 @@ func to_data() -> Dictionary
 static func from_data(data: Variant) -> DailyRecord
 ```
 
+- `DailyRecord.record_finish(day, result)` (phase 7): `day` is the day the finished daily belongs to, and `result` is `{"won", "waves", "lives"}` from `RunSession.result()`. The streak becomes `Daily.streak_after(streak, streak_day, day)`. The best: a `day` later than the record's `day` (or a record with none) replaces it; the same day keeps the better of the two by `Daily.is_better`; an earlier day leaves it alone. Day keys compare as text, which is date order.
+- The Daily button shows `best` only while the record's `day` is today, and the streak through `Daily.shown_streak`.
+
 ### 3.6 Screens and app glue: src/ui/, scenes/ui/ (ui-engineer)
 
 ```gdscript
@@ -963,19 +1128,27 @@ class_name Links extends RefCounted                    # src/ui/links.gd (sectio
 
 - ScreenFrame (every full screen) and Modal (Settings, Pause, the confirm dialog) are the base classes in src/ui/. BattleScreen opens PausePanel with `App.open_modal()`, and Info and Settings with `open_info()` and `open_settings()`. Other App members are internal.
 - The other screens are used only inside src/ui/, so their signals can change without a contract change: FrontDoor, ModeScreen (the Continue card, Campaign, Roguelite, Daily), LevelSelect, LevelCard (RULES 10.5: name, waves, gates, the three star lines, stars earned, the hint, Normal or Relaxed with Normal always preselected, the Twist once open), WavePreview, InfoCard (first sight), PausePanel (Resume, Info, Settings, "Back to menu" with the game kept saved, "Abandon" after a confirm, the quiet coffee row), SettingsPanel (sound, About), InfoScreen, AboutScreen, EndPanel, ConfirmDialog, and in phase 7 RunCard and DraftPanel.
+- Phase 7 additions to those screens:
+  - LevelCard: once `Progress.twist_open()`, the Twist's name and text from the level file and a way to play it, Normal or Relaxed, Normal preselected.
+  - PausePanel: in a campaign level that is not a Twist, the three star lines with Earned, Not yet or Lost (2.7).
+  - EndPanel: a won Twist says the Twist is cleared. After a Normal loss of a campaign level that is not a Twist, or of a normal run, one more line: "Stuck? Relaxed gives N lives and more gold.", with N worked out from rules.json (`start_lives * relaxed_lives_pct / 100`) (FUN_REVIEW_R1 item 9). A run or daily shows won or lost, waves cleared and lives left (RULES 14.7); a daily also shows the day's best and the shown streak.
+  - RunCard: before a normal run, Normal or Relaxed with Normal preselected, then Start. Before the daily: the day, its best result so far and the shown streak, then Start (always Normal).
+  - DraftPanel: opens by itself whenever `run.draft_open()`, in portrait as a sheet like the build panel and in landscape in the side column, so the map stays readable. It shows each offer's name and text, with the tower's silhouette for tower and perk cards and a glyph for the other kinds (`Silhouettes.draw_glyph`: gate, coin for economy, moon for risk). A pick takes a tap on a card, then Take. It cannot be skipped, and the next draft owed opens after it. The back button never closes it: back opens Pause, as in a battle with no panel open.
+  - WavePreview: in a run, the waiting risk card (`run.risk_card()`) shows first, as a row at the top of the open preview with its name and text, and as a chip at the start of the strip (RULES 9.1).
+  - InfoScreen: every tower, creature and boss from the data, and the rules of Twists, runs, cards and the daily (RULES 13 to 15).
 
 App flow:
 
 1. **Launch.** `GameData.load_from()`. If it has problems, show the damaged message and stop. Load settings, progress and the saved games (an invalid one is deleted), and in phase 7 the daily record. Create the AudioService (3.8). Apply `UiTheme.build()`. Show the front door. Set `get_tree().quit_on_go_back = false`.
-2. **Play** opens ModeScreen. When any game is saved, the Continue card on top resumes the most recent one in one tap. A saved game also resumes from its own way in: the Roguelite or Daily button, or the saved level's card. Playing a different campaign level or Twist while one is saved asks first; a level and its own Twist count as different, since `SavedGame` has a `twist` flag. If the player confirms, the saved game ends as if abandoned from Pause, and nothing is recorded (RULES 4.10). Roguelite and Daily stay locked until `runs_open()`, and in phase 5 they stay locked. Until the run mode exists (`App.RUNS_BUILT`), the Roguelite and Daily cards are locked with "Coming in a later update." whatever the stars, and tapping them does nothing.
-3. **Battle.** A campaign level: `Battle.create(level, catalog, relaxed, effects)`, where `effects` is the level's `twist_effects` when playing its Twist and empty otherwise. A run or the daily (phase 7): `RunSession.start(...)`. Then `BattleScreen.setup()`. Every battle starts at 1x. A resumed game opens paused, on the Pause menu.
+2. **Play** opens ModeScreen. When any game is saved, the Continue card on top resumes the most recent one in one tap. A saved game also resumes from its own way in: the Roguelite or Daily button, or the saved level's card. Playing a different campaign level or Twist while one is saved asks first; a level and its own Twist count as different, since `SavedGame` has a `twist` flag. If the player confirms, the saved game ends as if abandoned from Pause, and nothing is recorded (RULES 4.10). Roguelite and Daily stay locked until `runs_open()`. Until the run mode exists (`App.RUNS_BUILT`, set true in phase 7, section 13), the Roguelite and Daily cards are locked with "Coming in a later update." whatever the stars, and tapping them does nothing.
+3. **Battle.** A campaign level: `Battle.create(level, catalog, relaxed, effects)`, where `effects` is the level's `twist_effects` when playing its Twist and empty otherwise. A normal run (phase 7): the App draws the seed (3.4), then `RunSession.start(seed, "", relaxed, game.run.pool(progress.unlock_counters()), game.run, game.catalog)`. The daily: `RunSession.start(RunSeeds.daily_seed(today), today, false, game.run.card_ids(), game.run, game.catalog)`, where `today` is `RunSeeds.day_key(Time.get_date_dict_from_system())`. Then `BattleScreen.setup()`, and for a run or daily `set_run()`, after which every call of the next wave goes through `run.start_next_wave()`. Every battle starts at 1x, a resumed one too (Bart, hard stop B). A resumed game opens paused, on the Pause menu.
 4. **Saving.** On `save_requested` the App saves that mode's game. A new level is also saved as soon as its battle opens. On `NOTIFICATION_APPLICATION_PAUSED`, `NOTIFICATION_APPLICATION_FOCUS_OUT` and `NOTIFICATION_WM_CLOSE_REQUEST` while a battle is open, it calls `battle_screen.pause()` if a wave is running, then saves. Settings and progress save when they change.
-5. **End.** On `ended`: record the stars (`Progress.record_level`, or `record_twist` for a won Twist), the counters for a run or daily and the daily record for a daily (phase 7), delete that mode's saved game, save, and show EndPanel. An abandoned campaign level records nothing. An abandoned run or daily counts as lost at its current wave (RULES 14.7).
+5. **End.** On `ended`: record the stars (`Progress.record_level`, or `record_twist` for a won Twist), the counters for a run or daily and the daily record for a daily (phase 7), delete that mode's saved game, save, and show EndPanel. An abandoned campaign level records nothing. An abandoned run or daily counts as lost at its current wave (RULES 14.7). For a run or daily, from `run.result()` (RULES 14.6): `raise(&"best_run_wave", reached)`; on a win `bump(&"runs_won", 1)`, also `bump(&"runs_won_normal", 1)` when not Relaxed, and `bump(&"risky_wins", 1)` when `risks` is 3 or more; for a daily, won, lost or abandoned, `bump(&"dailies_finished", 1)` and `DailyRecord.record_finish(run.day, result)` with `won`, `waves` and `lives` from `run.result()`.
 6. **Back button.** One press does exactly one step. `handle_back()`: close or answer the top modal first (a first sight card closes whole and counts as read), then go back one screen. A page opened from a modal, such as About from Settings, goes back before that modal closes. In a battle, an open build, tower or creature panel closes first, and the next press opens Pause. In the short wait between a battle's end and its end panel, a press shows the panel at once. On the front door or the damaged message, quit; everything is already saved. `handle_back()` returns `&"modal"` for a closed modal, a closed battle panel, Pause opening, or the end panel shown at once. A back press from the go-back notification and one from `ui_cancel` go through one entry that ignores a second press within 150 ms.
 7. **Resize.** The App connects its viewport's `size_changed` and calls `apply_layout(window, safe)` with `Layout.safe_rect()`, which lays out every screen and modal (7.5).
 8. **Debug builds** (`OS.is_debug_build()`) add a `PerfProbe` (3.7) that watches the open battle and its map view through `watch()`. BattleScreen times each `battle.step()` with `Time.get_ticks_usec()` and passes it to `record_tick_usec()` (9.2). Release builds do none of this.
 
-First sight (RULES 9.2, 9.6): a tower's card opens at the start of the first level that offers it, a creature's card in the build phase before the first wave that brings it, and also, with the wave paused, when a creature of a kind the player has not seen first appears on the map (a wave called early, a released creature). A level's hint shows at its first start and closes when the player taps it or the first wave starts. A tower or creature goes into `Progress.seen` only when the player closes its card, and a level when its hint closes. A creature keeps its "New" tag in the preview until the wave that brings it starts.
+First sight (RULES 9.2, 9.6): a tower's card opens at the start of the first level that offers it, a creature's card in the build phase before the first wave that brings it, and also, with the wave paused, when a creature of a kind the player has not seen first appears on the map (a wave called early, a released creature). A level's hint shows at its first start and closes when the player taps it or the first wave starts. A tower or creature goes into `Progress.seen` only when the player closes its card, and a level when its hint closes. A creature keeps its "New" tag in the preview until the wave that brings it starts. In a run (phase 7), a tower's card opens after the player picks the tower card that adds it, if the tower is not in `Progress.seen`.
 
 ### 3.7 Render: src/render/, shaders/ (render-engineer)
 
@@ -987,7 +1160,8 @@ func fit(rect: Rect2) -> void                          # rect in the parent's co
 func cell_at(global_point: Vector2) -> Vector2i        # a global canvas position to a cell; (-1, -1) outside the map
 func enemy_at(global_point: Vector2) -> int            # the nearest creature within reach of a finger; -1 for none
 func sync(alpha: float) -> void                        # every frame: adds, moves and frees entity nodes from battle state
-func play_events(events: Array[Dictionary]) -> void    # projectiles, puffs, sparkles, gate effects
+func play_events(events: Array[Dictionary]) -> void    # projectiles, puffs, sparkles, gate effects; phase 7 adds heals,
+                                                       # gate breaks and a small coin glint on each `defeated` with gold
 func show_routes(routes: Array[Dictionary]) -> void    # Battle.routes() entries; [] hides the lines
 func show_refused(cell: Vector2i) -> void              # the crossed out gate on that socket for 1.5 s (RULES 7.4)
 func show_range(cell: Vector2i, reach: int, boost: bool) -> void   # reach in hundredths of a tile; boost: a Bakery's reach and the towers it would boost; (-1, -1) hides it
@@ -1001,6 +1175,7 @@ func record_tick_usec(usec: int) -> void               # how long one Battle.ste
 
 - MapView draws in its own local space, where a cell is `CELL` pixels, with `MapArt` and `Silhouettes` (3.9). `fit()` changes only the node's position and scale, so a fold re-fits one transform and every child, particles in flight included, keeps its place.
 - Towers and creatures draw in row order, lower on the screen in front, because a tower reaches up to 0.85 of a cell above its center. Creatures are drawn facing right; MapView flips a creature's node to face left. `frame` steps a 4 frame walk or flap cycle.
+- Gate looks (phase 7): a fixed gate (a Twist's `fixed_gates`, or locked by `gates_stay`) is `FIXED`; a broken one `BROKEN` until it mends; a placed gate that is neither broken nor in `Battle.closed_cells()` stands open under `gates_open` and is `OPEN`.
 
 ### 3.8 Audio: src/audio/ (audio-engineer)
 
@@ -1045,7 +1220,7 @@ static func draw_boost(canvas: CanvasItem, center: Vector2, size: float) -> void
 static func draw_glyph(canvas: CanvasItem, glyph: StringName, center: Vector2, size: float, flat: Color = NO_FLAT) -> void   # &"heart", &"coin", &"moon", &"star", &"gate"
 
 class_name MapArt extends RefCounted                   # src/theme/map_art.gd: the map, in map local pixels
-enum Gate { SOCKET, CLOSED, FIXED, BROKEN, REFUSED }
+enum Gate { SOCKET, CLOSED, FIXED, BROKEN, REFUSED, OPEN }   # OPEN (phase 7): a placed gate standing open under gates_open
 enum Route { WALK, BREAK, FLY }
 static func draw_ground(canvas: CanvasItem, grid: PackedStringArray, cell: float, font: Font = null) -> void   # all that never moves; grid is LevelData.grid
 static func draw_spot(canvas: CanvasItem, center: Vector2, cell: float) -> void
@@ -1202,6 +1377,12 @@ Ceilings are far above anything a real player reaches. Counters saturate at thei
 - `mode` is `level`, `run` or `daily` and matches the file name. `order` is 0 to 10^12. `level_id` is a campaign level id for `level` and `""` otherwise. `battle` holds `Battle.to_data()` (5.6). `run` is null for `level`, and `RunSession.to_data()` for `run` and `daily` (phase 7). Until phase 7 every saved game holds `"run": null`, so a run or daily save holds only its battle.
 
 ```json
+{"format": 1, "seed": 3141592653, "day": "", "pool": ["tower_bakery", "sharp_pebbles", "spare_gate"], "picks": ["sharp_pebbles"]}
+```
+
+- `RunSession.to_data()` (phase 7): the seed, the day (`""` for a normal run), the pool fixed at the start and the picks in order. Everything else (owed drafts, offers, the run's towers, the risk count) is worked out again from these and the battle.
+
+```json
 {"format": 1, "day": "2026-10-23", "best": {"won": false, "waves": 12, "lives": 0},
  "streak": 3, "streak_day": "2026-10-23"}
 ```
@@ -1231,7 +1412,7 @@ Ceilings are far above anything a real player reaches. Counters saturate at thei
 | releases | at most 1,000; each a known creature of a running wave, 1 to 200 still to come, the next one due within one gap, starting as a creature would (walkers on joined road cells, flyers inside the map) |
 | every number | whole, finite and in range, then converted to int |
 
-`RunSession.from_data` (phase 7) checks the run the same way: a seed from 0 to 2^32, known card ids, at most 64 picks, 0 to 17 drafts owed, and a day key or `""`.
+`RunSession.from_data` (phase 7) checks the run the same way, all or nothing: exact keys and `format` 1; a seed from 0 to 2^32 - 1; `day` either `""` or a day key whose `daily_seed()` is the seed, and then a battle that is not Relaxed; a pool of 1 to 256 known card ids with no repeats; picks of 0 to 17 card ids from the pool, a `once` card at most once, and no more picks than the battle has cleared waves among waves 1 to 17. `SavedGame.from_data` also checks that mode `daily` has a day and mode `run` has none.
 
 ## 6. Resume after the app is killed (brief 3.10)
 
@@ -1289,8 +1470,16 @@ Why 1.5: every phone shape stays portrait, and the Fold5 inner screen gets the l
 
 The map never rotates. The same 7 column grid shows in both layouts; only the HUD moves (RULES 3.1).
 
-- **Portrait:** the HUD above the map and nothing else in the layout flow. The HUD is two rows of 48 dp controls, 360 logical px with its margins. The first row holds the numbers, the gate chip (the gate picture and the number in hand, a lock during a wave; drag from it as from the strip) and the pause button. The map gets the rest of the safe area, as large as fits, aligned to the top. On the cover the width decides, so cells stay 154 px, 49 dp for any row count up to 13. A dock floats at the bottom of the safe area, under the map or over its lowest rows, and holds the messages of the HUD and the gate chip, the Paused strip and the wave preview. The preview is open in a build phase, in portrait too. With 3 or more groups and no boss, its rows become small upright cells about 190 px tall, up to 4 across as the names fit, so most waves of 4 groups take one line. A boss wave, or a row the player opened, uses full rows. The hint floats over a band of map rows that hold no build spot, gate socket, entrance, home or highlighted cell, nearest the highlight, or nearest the bottom when nothing on the map is highlighted. It takes no height and closes on a tap or at the first wave. Only if a map has no such band does it go to the top of the dock. The dock and the floating hint hide while a build, tower or creature sheet is open. On maps of up to 11 rows, with waves inside the limits in 2.4, the dock in the default state, in a wave and with the hint leaves the home, every spot, socket and entrance fully visible. On 12 and 13 row maps the open preview can cover the lowest row (section 12). The Paused strip and messages may cover more of the lower map, but never the highlighted cell. The map never loses height to any state.
-- **Landscape:** the map at full height inside the safe area, and one side panel at least 720 logical px wide for the HUD, the build panel and the wave preview.
+- **Portrait:** the HUD above the map and nothing else in the layout flow. The HUD is two rows of 48 dp controls, 360 logical px with its margins. The first row holds the numbers, the gate chip and the pause button; the second the speeds and the call button. The map gets the rest of the safe area, as large as fits, aligned to the top. On the cover the width decides, so cells stay 154 px, 49 dp for any row count up to 13. The map never loses height to any state.
+- **The gate chip** shows the gate picture and the number in hand, and a lock during a wave. Drag from it as from the landscape strip. A tap on it shows its sentence, "Drag one onto a marked road, or tap a marked road.", as a dock message (FUN_REVIEW_R1 item 6).
+- **The call button** has the honey `PrimaryButton` look only as "Start wave N" in a build phase. An early call keeps the plain `Button` look with its "+N" and works the same (FUN_REVIEW_R1 item 3).
+- **The dock** floats at the bottom of the safe area, under the map or over its lowest rows. Top to bottom it holds the messages (the HUD's and the gate chip's), the Paused strip and the wave preview. The dock and the floating hint hide while a build, tower, creature or draft sheet is open. Messages last 3 s. Besides refusals they include "Wave 3 cleared: +35 gold." when a wave is cleared, from the `wave_cleared` event (FUN_REVIEW_R1 item 8).
+- **The wave preview** (settled 2026-10-24, section 12) is folded into its strip during waves. When a build phase begins, and whenever the layout changes, it opens only if its open form fits in the room under the map: its top, with the dock's 12 px bottom gap, stays at or below the map's lowest row. Otherwise it starts that build phase folded. A tap on the strip opens it over the map and a tap on its header folds it, and that choice holds until the next build phase or layout change. The open form: with 3 or more groups and no boss, small upright cells about 190 px tall, up to 4 across as the names fit; a boss wave, or a row the player opened, uses full rows.
+- **The strip** is always one line: per group its picture, count and entrance letter, with the New tag, in spawn order. When the chips do not fit one line, it shows as many as fit and then a "+N" chip for the rest; the open preview lists them all. On the cover it is 206 px tall above its 12 px gap.
+- **The hint** takes no height and closes on a tap or at the first wave. It goes to the first of these that works: (1) at the top of the dock, when the dock with the hint still stays at or below the map's lowest row; (2) over a band of whole map rows, wholly above the dock, that hold no build spot, gate socket, entrance, home, highlighted cell, fork or join (a road cell with three or four road neighbors), nearest the highlight, or nearest the top of the map when the highlight is the call button, or nearest the bottom when nothing is highlighted; (3) at the top of the dock (FUN_REVIEW_R1 item 5).
+- **The call button highlight** (`hint.button` `"call"`, RULES 12.4, level 2-1; settled 2026-10-24): the call button wears the highlight, a pulsing ring around it (a shape, not only a color), whenever it offers an early call, until the player first calls a wave early on this battle screen. It never glows in a build phase, so it never points at "Start wave N". The hint itself shows at the level's first start, as on every level.
+- **What stays in sight.** On the Fold5 cover in portrait, every build spot, gate socket, entrance, the home and any tower stay fully visible in the default build state, during waves and with the hint, on maps of 8 to 13 rows: the preview folds when it does not fit, the strip is one line, and a 13 row map keeps its bottom row scenery only (2.4, 2.9). The Paused strip and messages may cover more of the lower map, but never the highlighted cell. Measured on 2026-10-24 with the real battle screen at the test insets (96 px top, 171 px bottom): the room under the map is 443 px at 11 rows, 289 px at 12 and 134 px at 13; the open preview is 364 px for 1 or 2 groups, 388 px for 3 or 4 compact groups, 588 px for 5 or more, and 478 to 830 px for boss waves. Shorter screens, such as 20:9 and 16:9 phones, are height limited: the map fills its slot there, and the dock can cover part of the lowest rows. The Fold5 cover is the design target.
+- **Landscape:** the map at full height inside the safe area, and one side panel at least 720 logical px wide for the HUD, the build panel, the draft panel and the wave preview. The preview is always open there in a build phase, and the hint sits in the side panel. The call button highlight and look are the same as in portrait.
 - The project keeps its 1080 x 2400 base with `canvas_items` stretch and `expand`, so the cover screen is 1080 x 2767 logical px and the inner screen 1998 x 2400.
 - An entrance thicket (3.9) that reaches past the map edge may sit under the HUD or the dock, or past the screen edge.
 
@@ -1453,6 +1642,8 @@ General rules (CLAUDE.md "Writing tests" applies):
 | tests/audio/ | audio-engineer | Every sound renders, is not silent and never clips; voice caps hold; disabled means silent; every event kind in 3.1 has a sound or a deliberate silence. |
 | tests/theme/ | art-director | Contrast: every text pair 4.5:1 and graphic pair 3:1, including every text color the UI theme puts on a background; Outfit everywhere and the font files unmodified; every tower tier and path and every creature draws inside its box, in one color when asked, and each silhouette stays distinct from the others; the catalog ids have silhouettes in spec order, and `FLYERS` matches `flying`; route points and gate looks; the launcher icons exist at their sizes with the right transparency. |
 
+Phase 7 adds to these folders what the "Done when" column of section 13 lists.
+
 The balance bots in tools/balance/ are tools, not tests. They run on demand and write dated reports to docs/balance/.
 
 ## 11. Phase 5 build plan
@@ -1496,5 +1687,94 @@ The roguelite-engineer builds nothing for region 1. Its first task is phase 7: s
 
 ## 12. Open questions
 
-1. **The dock on 12 and 13 row maps.** Regions 2 to 4 use 10 to 13 rows, and every run map has 13 (RULES 3.1). On the Fold5 cover in portrait, with the tests/ui/ insets (96 px at the top, 171 at the bottom), the open wave preview covers the lowest row of a 12 or 13 row map in every build phase, and on 13 rows the folded strip covers it during waves too. With the 170 px insets of 7.4, 12 rows fit waves of 1 or 2 groups only, and 13 rows are covered in every build phase but not during waves. Region 1 (up to 11 rows) is not affected. This needs an answer before phase 7 content.
-2. **Level 2-1's call button highlight.** RULES 12.4 has the hint of level 2-1 highlight the call button (`hint.button` `"call"`, `LevelData.hint_button`). src/ui/ does not read `hint_button` yet, so nothing glows and the hint floats nearest the map's bottom. Open for phase 7.
+Settled on 2026-10-24:
+
+1. **The dock on 12 and 13 row maps.** The wave preview starts a build phase folded when its open form does not fit under the map, the strip is always one line, and a 13 row map keeps its bottom row scenery only (7.4, 2.4, 2.9). Why: with the test insets the room under a 13 row map on the cover is 134 px, less than any 48 dp control with its gap, so no form of the preview fits there, and the alternatives cost more. A smaller HUD cannot hold its 48 dp controls in one row, and keeping two free rows at the bottom of every tall map would waste a sixth of the map. The dock test covers every real level and the run maps (section 13).
+2. **Level 2-1's call button highlight.** The call button glows whenever it offers an early call, until the first early call on that battle screen, and never in a build phase (7.4).
+
+Open, with who answers and by when:
+
+1. **Game designer, before wave 2** (the UI's dock and star work; item (a) at once, because the sim engineer is building that effect now):
+   - (a) RULES 13, Bubble Night: does every creature's bubble come back after it pops, as a Bubbler's does? 2.8 assumes yes.
+   - (b) RULES 9.1: in portrait a build phase may start with the preview folded when it does not fit under the map. The strip still shows what is coming, how many and from which entrance (brief 3.5), and one tap opens the names. RULES 9.1 was approved by Bart as "open during build phases", so the DM decides whether Bart should hear about this change.
+   - (c) RULES 10: the star lines in Pause and the warnings of 2.7, and the words for lines 2 and 3 on Relaxed ("Normal only" proposed).
+   - (d) RULES 12.4: "Upgrade no towers." and the new hints of 1-2 and 1-3 (FUN_REVIEW_R1 items 4, 6, 10).
+   - (e) RULES 14.4: no risk card once wave 17 has started. Without it, a risk card picked in the draft after wave 16 can land on the boss wave when wave 17 was called early.
+   - (f) RULES 14.6: "reach wave N" means wave N starts (2.11).
+   - (g) RULES 3.1 and 14.2: a 13 row map's bottom row is scenery only.
+2. **Game designer, before wave 3** (the first balance pass): the plain mixed recipe and the checks for regions 2 to 4. RULES 12.5 defines the recipe for region 1's two towers only.
+3. **Game designer, by the run tuning (G3 in section 13)**: the win rate normal runs need on Normal from the bots, and whether "every daily seed for the 400 days after the report is won by at least one bot strategy" is the right bar for the daily. The first run report (B2) gives the numbers to decide from.
+4. **DM:** FUN_REVIEW_R1 item 8 calls the coin glint optional. Section 13 includes it in the render work; drop it there if Bart's approval did not cover it.
+
+## 13. Phase 7 build plan
+
+Goal (brief phase 7): regions 2 to 4 with their bosses, a Twist for every campaign level, the roguelite mode and the daily challenge, with a balance pass after each region, and the fixes Bart approved at hard stop B (FUN_REVIEW_R1 items 2 to 6 and 8 to 10, and "Upgrade no towers."). The DM runs at most four agents at once. After each wave the DM integrates, runs every test and commits. Items have labels, such as **S1**, so later rows can name them.
+
+Ground rules for the whole phase:
+
+- **The region loop.** For regions 2, 3 and 4 in turn: the level designer builds the region's six levels and their Twists with tests/levels/ passing; the balance analyst runs a pass; the game designer tunes from it (RULES.md and data/stats/ in one step, and a list of level changes); the level designer applies the level changes. A region's levels may be built while the region before it is being tuned, but a region's pass starts only after that tuning has landed, so every pass measures the current numbers.
+- **Every balance pass** covers every level and Twist built so far, because tuning can move older levels. Its dated report in docs/balance/, with seeds, gives for each level: a Normal win by the plain mixed recipe (section 12, question 2), a Relaxed win, all three stars in one Normal win, no single tower type earning three stars alone, random strategies earning three stars in under 10% of plays, 5 to 10 minutes at 1x (RULES 12.5), the peak live creatures and the ms per tick. For each Twist: a Normal win by some strategy (RULES 13). Across the campaign: every tower type in some three-star win (brief section 11). And the same seed playing the same.
+- **No new audio.** Every event kind and every tower and path already has a sound (3.8), and neither RULES.md nor docs/art/THEME.md asks for region music or region sounds. One exception: S1's work in progress emits event kinds that 3.1 does not list yet (`released`, `break_started`, `sped_up`, `interest`). Once the sim engineer reports them and the DM adds them to 3.1, the audio engineer gives each one a sound or a deliberate silence (tests/audio/ checks every kind in 3.1), as a short task in the first slot that frees after S1, and V1 draws the ones it needs.
+- **No new art** except the OPEN gate look (3.9). Every tower, path, creature and boss already has a silhouette, checked by tests/theme/.
+- **DM checks on the Fold5,** both screens: region 2 after wave 2, including a fold mid-wave; a run and a daily after wave 4, including killing the app mid-wave and with a draft open, then Continue; everything at the end (the list below).
+
+**Wave 1**, now. The sim engineer is already at work. The second slot runs two short tasks one after the other.
+
+| Agent | Builds | Depends on | Done when |
+|---|---|---|---|
+| sim-engineer (running) | **S1**: src/sim/ for phase 7. Every tower (Bell slows, Longbow armor piercing, Firework air splash, Bakery boosts), creature rule (bubbles, Puffball splits, heals, gate breakers), boss (Ironshell's speed ups, Moon Moth's flyer summons, Old Tusk's breaks and release), broken gates and mending, every Twist and card effect of 2.8 (Twists in `Battle.create`, cards and risk cards in `add_effects`), and save and restore for all of it. The DM adds this revision's sim items: `stars_possible()` and `loses_star3()` (3.1), and 2.8 as revised on 2026-10-24: which creatures each effect reaches, `add_group`'s order, `after_last` and entrance, the risk reward inside `wave_cleared` gold, the early call bonus from `bounty_pct` bounties, interest after the clear bonus, the floors, the `break_ms` check, and Bubble Night once the game designer answers section 12 question 1 (a). | 2.6 to 2.8, 3.1, 4, 5.6 | tests/sim/: every rule and effect; both queries for every `star3` kind, including a tower sold after going above a tier cap; snapshot, restore and continue equal to an uninterrupted run on battles with every new tower, creature, boss and effect |
+| game-designer, then art-director | **G1**: answers section 12's questions 1 and 2, and brings RULES.md in line with this revision. Then **A1**: `MapArt.Gate.OPEN` (3.9). | this contract | G1: RULES.md updated, the DM checks it against this contract. A1: tests/theme/ with the OPEN look, and a picture of all six gate looks |
+| roguelite-engineer | **R1**: src/run/ except RunSession: RunSeeds, RunData (every load check of 2.9 to 2.11), MapAssembler, Daily; data/runs/run.json and data/cards/cards.json (2.10, 2.11); tests/run/ with fixture segments and packs | 2.9 to 2.11, 3.4; LevelData and `Modifiers.check` (built) | tests/run/: good and hostile fixtures for every check; derived seeds pinned; the boss, segment and pack picks pinned for fixed seeds; the same seed gives an equal level; the daily seed from a date; `is_better`, `streak_after` and `shown_streak`; the real run.json and cards.json pass `RunData.check` |
+| level-designer | **L1**: the Twists of region 1 (2.8 table); region 2, r2_l1 to r2_l6 with their Twists (RULES 12, 13), added to campaign.json; the hints of 1-2 and 1-3 (FUN_REVIEW_R1 items 6 and 10) | 2.3 to 2.8, RULES 12 and 13 | `GameData` loads every file with no problems, and the data checks in tests/levels/ pass. The checks that play levels run in wave 2. |
+
+**Wave 2** needs S1, G1 and A1.
+
+| Agent | Builds | Depends on | Done when |
+|---|---|---|---|
+| ui-engineer | **U1**: the approved fixes: star lines in Pause and the warnings (2.7, item 2) on the new queries, the call button look (item 3), "Upgrade no towers." in `StarText` (item 4), the hint placement (item 5), the gate chip's tap sentence (item 6), the wave cleared message (item 8), the Relaxed line on a loss (item 9); the preview that folds when it does not fit and the one line strip (7.4); the call button highlight (7.4). Also every region of campaign.json in LevelSelect with its unlock (RULES 16), the numbers of the Bell, the Bakery and the new creatures in the panels (RULES 9.3, 9.4), and the new towers and creatures in InfoScreen. | S1, G1, L1 | tests/ui/ for each item; the dock test (`_stays_in_sight`) on every real level and every wave, and on a 13 row fixture whose bottom row is scenery, checking that the strip is one line; screenshots at both Fold5 sizes: a region 2 build phase, a wave, Pause with star lines, 2-1 with the glowing call button |
+| render-engineer | **V1**: MapView for what is new: the shots of the Longbow Loft and the Firework Tower and their paths (one arrow, the Giant Bow's, the Triple Bow's three; a burst, the Star Bloom's, the Skyrocket), Mender heals (`healed`), a gate being broken and the moment it breaks (`gate_broken`), the OPEN gate look (3.7), and the coin glint (item 8). Drowsy marks, boost marks, bubbles, splits, releases and the new creatures and bosses use what region 1 built; V1 checks each of them on fixtures. | S1, A1 | tests/render/ with a fixture for each new tower, path, creature and boss, and no node leak after a full wave of each; screenshots at both Fold5 sizes, mid-wave |
+| level-designer | **L2**: tests/levels/ for region 2 and the Twists of regions 1 and 2 (RULES 12 and 13, the 13 row rule, two attacking towers left usable), and the fixes they need | S1, L1 | tests/levels/ |
+| roguelite-engineer | **R2**: RunSession (3.4) | S1, R1 | tests/run/: owed drafts with early calls, including a wave cleared while another runs; the risk rule once wave 17 has started; eligibility; offers pinned for fixed seeds; a whole fixture run played twice with the same seed and picks ends in equal state; save and restore mid-wave and with a draft open equal to an uninterrupted run; hostile run data gives null |
+
+**Wave 3** needs wave 2.
+
+| Agent | Builds | Depends on | Done when |
+|---|---|---|---|
+| balance-analyst | **B1**: the region 2 pass (region 1 again, and the Twists of regions 1 and 2); the bots extended to the new towers and to Twists | L2, G1's answer to question 2 | the pass report described above |
+| sim-engineer | **S2**: src/save/ for phase 7: `GameData.run` (2.12), `SavedGame.run`, `DailyRecord.record_finish` (3.5), `SaveStore.load_daily` and `save_daily`, the 5.5 and 5.6 rules | R2 | tests/save/: run and daily saves round trip; hostile seeds, days, pools and picks refused; the daily record with an earlier, the same and a later day; a daily resumed after midnight keeps its day |
+| level-designer | **L4**: data/segments/: the segments, index.json and packs.json (2.9), with at least 4 packs a band and a band 6 pack for each boss | R1 | the real files pass `RunData.check`; tests/levels/: every file listed, every stack valid, every choice of packs keeps the new creature rule, every bottom segment's last row is scenery |
+| ui-engineer | **U2**: Twists in the UI (LevelCard, playing one, EndPanel, `record_twist`) and the run screens on RunSession: RunCard, DraftPanel, `BattleScreen.set_run`, the risk row and chip, and the run and daily end panels (3.6) | S1, R2 | tests/ui/: a Twist starts with its effects and records its win; on a fixture run a draft blocks the next wave and back opens Pause instead of skipping it, a pick adds its card, the risk row shows; screenshots |
+
+**Wave 4** needs wave 3.
+
+| Agent | Builds | Depends on | Done when |
+|---|---|---|---|
+| game-designer | **G2**: region 2 tuning from B1 | B1 | RULES.md and data/stats/ changed in one step, with a list of level changes |
+| level-designer | **L3**: region 3, r3_l1 to r3_l6 with their Twists and tests/levels/; region 2's level changes from G2 as soon as they land | L2, G2 | tests/levels/ |
+| ui-engineer | **U3**: the App flow for runs and the daily (3.6 steps 2, 3 and 5): seeds, pools, saves, the Continue card, counters and the daily record at the end, the Daily button's best and streak; `App.RUNS_BUILT` set true | S2, U2 | tests/ui/: a run and a daily start, save, resume paused at 1x, end and record their counters and the daily record; Continue resumes the most recent of the three saved games; the dock test also on the run maps of 10 fixed seeds; screenshots |
+| balance-analyst | **B2**: the first run and daily report, with the real segments, packs and cards | L4, R2 | for 50 seeds, the same seed plays the same (map, waves, offers, and equal state after equal picks); win rates by strategy on Normal and Relaxed, with no unlocks and with all; run length at 1x; the peak live creatures with each risk card; card pick and win rates; the daily seeds of the next 400 days and how many some strategy wins |
+
+From wave 5 the work is the rest of the two loops. The DM starts each step when what it depends on is in, at most four agents at once.
+
+| Step | Agent | Builds | Depends on | Done when |
+|---|---|---|---|---|
+| **B3** | balance-analyst | The pass over regions 1 to 3 and every Twist so far, which also confirms G2 | L3 | the pass report |
+| **G3** | game-designer | Run tuning from B2: the targets of section 12 question 3 in RULES 14, and changes to cards, the run plan, packs and segments for their owners | B2 | RULES.md and a list of changes |
+| **R3, L5** | roguelite-engineer, level-designer | G3's changes to data/cards/ and data/runs/ (roguelite) and data/segments/ (level) | G3 | tests/run/, tests/levels/ |
+| **G4** | game-designer | Region 3 tuning from B3 | B3 | as G2 |
+| **L6** | level-designer | Region 3's level changes, then region 4, r4_l1 to r4_l6 with their Twists and tests/levels/ | G4 | tests/levels/ |
+| **B4** | balance-analyst | The pass over all 24 levels and every Twist, and the second run and daily report | L6, R3, L5 | both reports |
+| **G5** | game-designer | Region 4 and the last run tuning | B4 | as G2 and G3 |
+| **L7, R4** | their owners | G5's changes | G5 | their tests |
+| **B5** | balance-analyst | The final confirmation of every check below, and the benchmark's largest wave across all levels, Twists and run packs with the largest risk card, written as a saved game for the phone (9.4) | L7, R4 | the report, and the saved game file |
+| **V2** | render-engineer | The Fold5 measurement of that wave at 3x on both screens and while folding (9.2, 9.4). If the sim's 99th percentile tick is over 2 ms, the sim engineer speeds up the sim first (9.2). | B5 | the numbers within 9.2, in its report |
+
+Phase 7 is done when:
+
+- All headless tests pass, exit code 0.
+- The bots confirm, for every campaign level: it can be won, three stars can be reached, no single tower type gets three stars alone, and every tower type appears in some three-star win; and every Twist can be won on Normal (brief section 11, RULES 13).
+- The bots confirm runs and the daily seed are winnable to the targets of section 12 question 3, and that the same seed always plays the same.
+- 60 fps on the Fold5 during the largest wave of the game, on both screens (V2).
+- Killing the app mid-wave in a level, a run and a daily, then reopening, resumes at the exact moment, paused, at 1x.
+- Folding and unfolding mid-wave switches the layout without losing state, in a level and in a run with a draft open.
+- The dock test passes on every real level and on the run maps.
