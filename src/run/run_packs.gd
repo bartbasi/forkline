@@ -158,24 +158,22 @@ static func _check_spawn_bound(pack: Dictionary, path: String, catalog: Catalog,
 
 
 ## Creatures one wave spawns, counting split_count for each splitter, with a risk
-## card's count_pct and add_group effects (2.8). A count_pct also scales added groups,
-## which makes this an upper bound.
+## card's effects (2.8). count_pct scales only the wave's own groups. A group added by
+## add_group comes at its card's count.
 static func spawn_total(groups: Array, catalog: Catalog, effects: Array[Dictionary]) -> int:
 	var total: int = 0
 	for group: Variant in groups:
 		var item: Dictionary = group
-		total += _group_total(StringName(String(item["enemy"])), int(item["count"]), catalog, effects)
+		var type: EnemyType = catalog.enemy(StringName(String(item["enemy"])))
+		if type == null:
+			continue
+		total += Modifiers.group_count(effects, int(item["count"]), type.flying, false) * (1 + type.split_count)
 	for effect: Dictionary in effects:
 		if effect["type"] == "add_group":
-			total += _group_total(StringName(String(effect["enemy"])), int(effect["count"]), catalog, effects)
+			var added: EnemyType = catalog.enemy(StringName(String(effect["enemy"])))
+			if added != null:
+				total += int(effect["count"]) * (1 + added.split_count)
 	return total
-
-
-static func _group_total(enemy: StringName, count: int, catalog: Catalog, effects: Array[Dictionary]) -> int:
-	var type: EnemyType = catalog.enemy(enemy)
-	if type == null:
-		return 0
-	return Modifiers.group_count(effects, count, type.flying, false) * (1 + type.split_count)
 
 
 ## At least 4 packs in every band, and a band 6 pack for every boss.

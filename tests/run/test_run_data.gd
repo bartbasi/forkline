@@ -366,3 +366,15 @@ func test_every_economy_effect_is_allowed_and_a_gate_card_may_keep_gates() -> vo
 	assert_eq(RunData.check(files, catalog), PackedStringArray())
 	_card(files, "spare_gate")["effects"] = [{"type": "add_gates", "count": 2}, {"type": "gates_stay"}]
 	assert_eq(RunData.check(files, catalog), PackedStringArray())
+
+
+## 2.8: a negative gain is refused when the card loads, not counted as 0.
+func test_a_negative_gain_in_a_card_is_refused_when_run_data_loads() -> void:
+	_expect("add_gold amount -1", func(f: Dictionary) -> void: _card(f, "gold_purse")["effects"] = [{"type": "add_gold", "amount": -1, "per_wave": 0}], "amount")
+	_expect("add_gold per_wave -1", func(f: Dictionary) -> void: _card(f, "gold_purse")["effects"] = [{"type": "add_gold", "amount": 100, "per_wave": -1}], "per_wave")
+	_expect("add_lives amount -1", func(f: Dictionary) -> void: _card(f, "gold_purse")["effects"] = [{"type": "add_lives", "amount": -1}], "amount")
+	_expect("interest max -1", func(f: Dictionary) -> void: _card(f, "gold_purse")["effects"] = [{"type": "interest", "pct": 10, "max": -1}], "max")
+	_expect("reward_gold amount -1", func(f: Dictionary) -> void: _card(f, "crowded_night")["effects"][1]["amount"] = -1, "amount")
+	var files: Dictionary = Fx.files_from_json()
+	_card(files, "gold_purse")["effects"] = [{"type": "add_gold", "amount": 0, "per_wave": 0}]
+	assert_eq(RunData.check(files, catalog), PackedStringArray(), "zero is still a whole number from 0 to 1,000")
