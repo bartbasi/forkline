@@ -8,6 +8,7 @@ const EVENT_KINDS: Array[StringName] = [
 	&"wave_started", &"spawned", &"fired", &"popped", &"defeated", &"healed",
 	&"leaked", &"gate_broken", &"wave_cleared", &"build_started", &"built",
 	&"upgraded", &"sold", &"gate_placed", &"gate_removed", &"won", &"lost",
+	&"released", &"break_started", &"sped_up", &"interest",
 ]
 
 var service: AudioService = null
@@ -252,15 +253,28 @@ func test_two_towers_fired_events_pick_different_streams() -> void:
 
 func test_every_tower_and_path_has_a_shot_stream() -> void:
 	var seen: Dictionary[StringName, bool] = {}
-	for tower: StringName in [&"sling_post", &"pumpkin_catapult", &"lullaby_bell", &"longbow_loft", &"firework_tower", &"bakery"]:
+	for tower: StringName in [&"sling_post", &"pumpkin_catapult", &"longbow_loft", &"firework_tower"]:
 		for spec: int in [-1, 0, 1]:
 			var sound: StringName = AudioService.sound_for(_shot(tower, spec, Vector2i(2, 2)))
 			assert_not_null(service._bank.stream(sound), "%s %d has no stream" % [tower, spec])
 			assert_true(AudioService.SHOT_IDS.has(sound), "%s %d: %s is not a shot" % [tower, spec, sound])
 			seen[sound] = true
-	# Five towers with three sounds each, and one shared Bakery sound.
-	assert_eq(seen.size(), 16)
-	assert_eq(AudioService.SHOT_IDS.size(), 16)
+	# Four attacking towers with three sounds each.
+	assert_eq(seen.size(), 12)
+	assert_eq(AudioService.SHOT_IDS.size(), 12)
+
+
+func test_bells_and_bakeries_have_no_shot_sound() -> void:
+	# They never fire (architecture 3.1), so no shot sound is kept for them.
+	for tower: StringName in [&"lullaby_bell", &"bakery"]:
+		assert_false(AudioService.SHOT_SOUNDS.has(tower), "%s has a shot row" % tower)
+	for sound: StringName in SoundBank.EFFECTS:
+		var text: String = String(sound)
+		assert_false(text.contains("bell") or text.contains("bakery"), "%s is an unused shot sound" % sound)
+	for sound: StringName in AudioService.GAIN_DB:
+		assert_true(SoundBank.EFFECTS.has(sound), "%s has a gain but no sound" % sound)
+	for sound: StringName in AudioService.GAP_MS:
+		assert_true(SoundBank.EFFECTS.has(sound), "%s has a gap but no sound" % sound)
 
 
 func test_shot_pitch_spread_comes_from_the_cell() -> void:
@@ -273,7 +287,7 @@ func test_shot_pitch_spread_comes_from_the_cell() -> void:
 
 func test_shots_of_every_tower_in_one_frame_stay_under_the_shot_cap() -> void:
 	var all: Array[Dictionary] = []
-	for tower: StringName in [&"sling_post", &"pumpkin_catapult", &"lullaby_bell", &"longbow_loft", &"firework_tower", &"bakery"]:
+	for tower: StringName in [&"sling_post", &"pumpkin_catapult", &"longbow_loft", &"firework_tower"]:
 		for spec: int in [-1, 0, 1]:
 			all.append(_shot(tower, spec, Vector2i(spec + 1, 2)))
 	var most: int = 0
@@ -287,3 +301,54 @@ func test_shots_of_every_tower_in_one_frame_stay_under_the_shot_cap() -> void:
 		assert_true(service.voice_count() <= AudioService.VOICES)
 		OS.delay_msec(70)
 	assert_eq(most, AudioService.MAX_SHOTS, "the shot cap was never reached")
+
+
+## The four phase 7 events, shaped as the sim sends them (architecture 3.1).
+func _phase7_events() -> Array[Dictionary]:
+	var out: Array[Dictionary] = [
+		{"kind": &"released", "id": 3, "source": &"puffball", "enemy": &"puff", "count": 3, "pos": Vector2i(40000, 20000)},
+		{"kind": &"break_started", "id": 5, "cell": Vector2i(2, 4)},
+		{"kind": &"sped_up", "id": 9, "speed": 140},
+		{"kind": &"interest", "gold": 12},
+	]
+	return out
+
+
+func test_phase_7_events_each_play_their_own_sound() -> void:
+	for event: Dictionary in _phase7_events():
+		var kind: StringName = event["kind"]
+		assert_eq(AudioService.sound_for(event), kind, "%s maps to the wrong sound" % kind)
+		service.set_enabled(false)
+		service.set_enabled(true)
+		service.play_events([event] as Array[Dictionary])
+		assert_eq(service.voice_count(kind), 1, "%s made no sound" % kind)
+		assert_eq(service.voice_count(), 1, "%s started more than one sound" % kind)
+
+
+func test_a_big_split_does_not_machine_gun() -> void:
+	# Forty releases in one frame make one sound. Spread over time, the cap of 3 holds.
+	var split: Array[Dictionary] = []
+	for i: int in 40:
+		split.append(_phase7_events()[0])
+	service.play_events(split)
+	assert_eq(service.voice_count(&"released"), 1)
+	var gap: int = int(AudioService.GAP_MS[&"released"]) + 15
+	for i: int in 8:
+		service.play_events(split)
+		assert_true(service.voice_count(&"released") <= AudioService.MAX_SAME)
+		OS.delay_msec(gap)
+
+
+func test_warnings_still_play_when_voices_are_full() -> void:
+	for round_index: int in 8:
+		service.play_events(_events(&"defeated", 3))
+		service.play_events(_events(&"fired", 3))
+		service.play_events(_events(&"spawned", 3))
+		service.play_events(_events(&"popped", 3))
+		service.play_events(_events(&"released", 3))
+		OS.delay_msec(70)
+	var warnings: Array[Dictionary] = [_phase7_events()[1], _phase7_events()[2]]
+	service.play_events(warnings)
+	assert_eq(service.voice_count(&"break_started"), 1)
+	assert_eq(service.voice_count(&"sped_up"), 1)
+	assert_true(service.voice_count() <= AudioService.VOICES)

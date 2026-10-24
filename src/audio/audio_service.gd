@@ -26,6 +26,8 @@ const FADE_IN_SECONDS: float = 0.8
 const FADE_OUT_SECONDS: float = 0.35
 
 ## Event kind (architecture 3.1) to sound id. Every kind has a sound.
+## break_started and sped_up warn the player, so they are heard. released and
+## interest are soft and quiet.
 const EVENT_SOUNDS: Dictionary[StringName, StringName] = {
 	&"wave_started": &"wave_started",
 	&"spawned": &"spawned",
@@ -44,6 +46,10 @@ const EVENT_SOUNDS: Dictionary[StringName, StringName] = {
 	&"gate_removed": &"gate_removed",
 	&"won": &"won",
 	&"lost": &"lost",
+	&"released": &"released",
+	&"break_started": &"break_started",
+	&"sped_up": &"sped_up",
+	&"interest": &"interest",
 }
 ## UI sound names (architecture 3.8). Each is also a sound id.
 const UI_SOUNDS: Array[StringName] = [&"tap", &"refuse", &"star"]
@@ -55,12 +61,11 @@ const GAIN_DB: Dictionary[StringName, float] = {
 	&"wave_cleared": -6.0, &"build_started": -9.0, &"built": -7.0, &"upgraded": -7.0,
 	&"sold": -8.0, &"gate_placed": -7.0, &"gate_removed": -8.0, &"won": -4.0,
 	&"lost": -5.0, &"tap": -8.0, &"refuse": -8.0, &"star": -6.0,
+	&"released": -16.0, &"break_started": -9.0, &"sped_up": -10.0, &"interest": -14.0,
 	&"shot_quickshot": -14.0, &"shot_stone_sling": -13.0,
 	&"shot_pumpkin_catapult": -12.0, &"shot_prize_pumpkin": -11.0, &"shot_jam_pot": -12.0,
-	&"shot_lullaby_bell": -14.0, &"shot_hush_bell": -14.0, &"shot_night_bell": -14.0,
 	&"shot_longbow_loft": -13.0, &"shot_giant_bow": -12.0, &"shot_triple_bow": -14.0,
 	&"shot_firework_tower": -14.0, &"shot_star_bloom": -14.0, &"shot_skyrocket": -14.0,
-	&"shot_bakery": -16.0,
 }
 ## The least time between two starts of the same sound, in ms. Events in the
 ## same frame therefore make one sound, not a stack.
@@ -70,38 +75,34 @@ const GAP_MS: Dictionary[StringName, int] = {
 	&"wave_cleared": 300, &"build_started": 300, &"built": 80, &"upgraded": 80,
 	&"sold": 80, &"gate_placed": 80, &"gate_removed": 80, &"won": 500,
 	&"lost": 500, &"tap": 60, &"refuse": 120, &"star": 80,
+	&"released": 140, &"break_started": 400, &"sped_up": 300, &"interest": 300,
 	&"shot_quickshot": 55, &"shot_stone_sling": 55,
 	&"shot_pumpkin_catapult": 70, &"shot_prize_pumpkin": 70, &"shot_jam_pot": 70,
-	&"shot_lullaby_bell": 90, &"shot_hush_bell": 90, &"shot_night_bell": 90,
 	&"shot_longbow_loft": 60, &"shot_giant_bow": 60, &"shot_triple_bow": 60,
 	&"shot_firework_tower": 70, &"shot_star_bloom": 70, &"shot_skyrocket": 70,
-	&"shot_bakery": 90,
 }
 ## Shot sounds by tower id: the tower's plain shot, then its tier 3 path 0 and
-## path 1 (the order of architecture 2.2). Unknown towers use &"fired".
+## path 1 (the order of architecture 2.2). The Lullaby Bell and the Bakery never
+## fire (architecture 3.1), so they have no row. Unknown towers use &"fired".
 const SHOT_SOUNDS: Dictionary[StringName, Array] = {
 	&"sling_post": [&"fired", &"shot_quickshot", &"shot_stone_sling"],
 	&"pumpkin_catapult": [&"shot_pumpkin_catapult", &"shot_prize_pumpkin", &"shot_jam_pot"],
-	&"lullaby_bell": [&"shot_lullaby_bell", &"shot_hush_bell", &"shot_night_bell"],
 	&"longbow_loft": [&"shot_longbow_loft", &"shot_giant_bow", &"shot_triple_bow"],
 	&"firework_tower": [&"shot_firework_tower", &"shot_star_bloom", &"shot_skyrocket"],
-	&"bakery": [&"shot_bakery", &"shot_bakery", &"shot_bakery"],
 }
 ## Every shot sound.
 const SHOT_IDS: Dictionary[StringName, bool] = {
 	&"fired": true,
 	&"shot_quickshot": true, &"shot_stone_sling": true,
 	&"shot_pumpkin_catapult": true, &"shot_prize_pumpkin": true, &"shot_jam_pot": true,
-	&"shot_lullaby_bell": true, &"shot_hush_bell": true, &"shot_night_bell": true,
 	&"shot_longbow_loft": true, &"shot_giant_bow": true, &"shot_triple_bow": true,
 	&"shot_firework_tower": true, &"shot_star_bloom": true, &"shot_skyrocket": true,
-	&"shot_bakery": true,
 }
 ## Most shot sounds of any kind at once, so a big wave never turns into a rattle.
 const MAX_SHOTS: int = 4
 ## Frequent sounds: every shot, plus these. When all voices are busy they give
-## way to every other sound.
-const OTHER_COMMON: Array[StringName] = [&"spawned", &"popped", &"defeated", &"healed"]
+## way to every other sound. A big split releases many creatures, so released is one.
+const OTHER_COMMON: Array[StringName] = [&"spawned", &"popped", &"defeated", &"healed", &"released"]
 
 ## Shots take one of five pitches by tower cell, and puffs one of three by
 ## creature id, so a big wave sounds like a music box, not a machine.

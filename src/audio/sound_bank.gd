@@ -12,13 +12,14 @@ const EFFECTS: Array[StringName] = [
 	&"leaked", &"gate_broken", &"wave_cleared", &"build_started", &"built",
 	&"upgraded", &"sold", &"gate_placed", &"gate_removed", &"won", &"lost",
 	&"tap", &"refuse", &"star",
+	# Released creatures, a gate being broken, Ironshell speeding up, interest gold.
+	&"released", &"break_started", &"sped_up", &"interest",
 	# Shot sounds by tower and tier 3 path. The Sling Post's plain shot is &"fired".
+	# The Lullaby Bell and the Bakery never fire (architecture 3.1), so they have none.
 	&"shot_quickshot", &"shot_stone_sling",
 	&"shot_pumpkin_catapult", &"shot_prize_pumpkin", &"shot_jam_pot",
-	&"shot_lullaby_bell", &"shot_hush_bell", &"shot_night_bell",
 	&"shot_longbow_loft", &"shot_giant_bow", &"shot_triple_bow",
 	&"shot_firework_tower", &"shot_star_bloom", &"shot_skyrocket",
-	&"shot_bakery",
 ]
 const TRACKS: Array[StringName] = [&"menu", &"battle"]
 
@@ -137,21 +138,21 @@ static func render_effect(id: StringName) -> AudioStreamWAV:
 		&"tap": return _tap()
 		&"refuse": return _refuse()
 		&"star": return _star()
+		&"released": return _released()
+		&"break_started": return _break_started()
+		&"sped_up": return _sped_up()
+		&"interest": return _interest()
 		&"shot_quickshot": return _shot_quickshot()
 		&"shot_stone_sling": return _shot_stone_sling()
 		&"shot_pumpkin_catapult": return _lob(260.0, 110.0, 0.22, 16.0, 0.8, 7)
 		&"shot_prize_pumpkin": return _lob(200.0, 80.0, 0.3, 11.0, 0.85, 8)
 		&"shot_jam_pot": return _shot_jam_pot()
-		&"shot_lullaby_bell": return _bell_shot(&"shot_lullaby_bell")
-		&"shot_hush_bell": return _bell_shot(&"shot_hush_bell")
-		&"shot_night_bell": return _bell_shot(&"shot_night_bell")
 		&"shot_longbow_loft": return _twang(1, 520.0, 380.0, 0.12, 22.0, 0.45)
 		&"shot_giant_bow": return _twang(1, 300.0, 210.0, 0.18, 16.0, 0.6)
 		&"shot_triple_bow": return _twang(3, 560.0, 420.0, 0.06, 40.0, 0.35)
 		&"shot_firework_tower": return _firework(&"shot_firework_tower")
 		&"shot_star_bloom": return _firework(&"shot_star_bloom")
 		&"shot_skyrocket": return _firework(&"shot_skyrocket")
-		&"shot_bakery": return _shot_bakery()
 	return null
 
 
@@ -393,6 +394,51 @@ static func _lost() -> AudioStreamWAV:
 	return AudioSynth.to_stream(buf, r, false)
 
 
+## Creatures released: two tiny soft bubbles, the second a little higher. It
+## stays quiet because a split can release a whole batch.
+static func _released() -> AudioStreamWAV:
+	var r: int = AudioSynth.EFFECT_RATE
+	var buf: PackedFloat32Array = AudioSynth.buffer(0.22, r)
+	AudioSynth.noise(buf, r, 0.0, 0.03, 0.15, 0.2, 51)
+	AudioSynth.sweep(buf, r, 0.0, 0.08, 340.0, 520.0, 0.45, 30.0)
+	AudioSynth.sweep(buf, r, 0.07, 0.09, 420.0, 640.0, 0.4, 30.0)
+	return AudioSynth.to_stream(buf, r, false)
+
+
+## A creature starts to break a gate: two soft wooden knocks under a small bell.
+## Gentle, but different from every other sound, so the player looks up.
+static func _break_started() -> AudioStreamWAV:
+	var r: int = AudioSynth.EFFECT_RATE
+	var buf: PackedFloat32Array = AudioSynth.buffer(0.5, r)
+	AudioSynth.noise(buf, r, 0.0, 0.04, 0.45, 0.3, 53)
+	AudioSynth.sweep(buf, r, 0.0, 0.1, 190.0, 120.0, 0.6, 28.0)
+	AudioSynth.noise(buf, r, 0.12, 0.04, 0.4, 0.3, 55)
+	AudioSynth.sweep(buf, r, 0.12, 0.1, 180.0, 115.0, 0.55, 28.0)
+	AudioSynth.bell(buf, r, 0.0, 698.0, 0.14, 8.0)
+	AudioSynth.bell(buf, r, 0.24, 698.0, 0.12, 8.0)
+	return AudioSynth.to_stream(buf, r, false)
+
+
+## A creature speeds up: a soft rising whoosh that ends in a small bell.
+static func _sped_up() -> AudioStreamWAV:
+	var r: int = AudioSynth.EFFECT_RATE
+	var buf: PackedFloat32Array = AudioSynth.buffer(0.45, r)
+	AudioSynth.noise(buf, r, 0.0, 0.2, 0.12, 0.15, 57)
+	AudioSynth.sweep(buf, r, 0.0, 0.22, 330.0, 820.0, 0.4, 7.0)
+	AudioSynth.bell(buf, r, 0.2, 1047.0, 0.16, 9.0)
+	return AudioSynth.to_stream(buf, r, false)
+
+
+## Interest gold: a tiny coin tick and two quick high notes. Soft and short.
+static func _interest() -> AudioStreamWAV:
+	var r: int = AudioSynth.EFFECT_RATE
+	var buf: PackedFloat32Array = AudioSynth.buffer(0.35, r)
+	AudioSynth.noise(buf, r, 0.0, 0.015, 0.2, 0.5, 59)
+	AudioSynth.bell(buf, r, 0.0, 1760.0, 0.16, 14.0)
+	AudioSynth.bell(buf, r, 0.06, 2349.0, 0.14, 14.0)
+	return AudioSynth.to_stream(buf, r, false)
+
+
 # Shot sounds. Short and soft; the mixer keeps them in the background.
 
 ## Quickshot: two quick pips.
@@ -432,21 +478,6 @@ static func _shot_jam_pot() -> AudioStreamWAV:
 	return AudioSynth.to_stream(buf, r, false)
 
 
-## Lullaby Bell: a soft ring. Hush is lower and mellow, Night adds a fifth.
-static func _bell_shot(id: StringName) -> AudioStreamWAV:
-	var r: int = AudioSynth.EFFECT_RATE
-	var buf: PackedFloat32Array = AudioSynth.buffer(0.4, r)
-	match id:
-		&"shot_hush_bell":
-			AudioSynth.bell(buf, r, 0.0, 740.0, 0.22, 7.0)
-		&"shot_night_bell":
-			AudioSynth.bell(buf, r, 0.0, 880.0, 0.2, 9.0)
-			AudioSynth.bell(buf, r, 0.0, 1319.0, 0.1, 9.0)
-		_:
-			AudioSynth.bell(buf, r, 0.0, 988.0, 0.2, 9.0)
-	return AudioSynth.to_stream(buf, r, false)
-
-
 ## Longbow Loft: a soft string twang. `count` twangs, `step` seconds apart.
 static func _twang(count: int, f0: float, f1: float, step: float, decay: float, amp: float) -> AudioStreamWAV:
 	var r: int = AudioSynth.EFFECT_RATE
@@ -475,12 +506,4 @@ static func _firework(id: StringName) -> AudioStreamWAV:
 	if id == &"shot_star_bloom":
 		AudioSynth.bell(buf, r, 0.16, 1976.0, 0.1, 14.0)
 		AudioSynth.bell(buf, r, 0.2, 2349.0, 0.08, 14.0)
-	return AudioSynth.to_stream(buf, r, false)
-
-
-## Bakery: a warm, quiet low pluck.
-static func _shot_bakery() -> AudioStreamWAV:
-	var r: int = AudioSynth.EFFECT_RATE
-	var buf: PackedFloat32Array = AudioSynth.buffer(0.25, r)
-	AudioSynth.bell(buf, r, 0.0, 440.0, 0.25, 12.0)
 	return AudioSynth.to_stream(buf, r, false)

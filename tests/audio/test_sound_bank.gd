@@ -10,6 +10,7 @@ const EVENT_KINDS: Array[StringName] = [
 	&"wave_started", &"spawned", &"fired", &"popped", &"defeated", &"healed",
 	&"leaked", &"gate_broken", &"wave_cleared", &"build_started", &"built",
 	&"upgraded", &"sold", &"gate_placed", &"gate_removed", &"won", &"lost",
+	&"released", &"break_started", &"sped_up", &"interest",
 ]
 ## The UI sounds of architecture 3.8.
 const UI_SOUNDS: Array[StringName] = [&"tap", &"refuse", &"star"]
@@ -149,6 +150,24 @@ func test_threaded_bank_matches_the_static_recipes() -> void:
 func test_shot_sounds_differ_from_each_other() -> void:
 	var seen: Dictionary[PackedByteArray, StringName] = {}
 	for sound: StringName in AudioService.SHOT_IDS:
+		var data: PackedByteArray = SoundBank.render_effect(sound).data
+		assert_false(seen.has(data), "%s sounds the same as %s" % [sound, seen.get(data, &"")])
+		seen[data] = sound
+
+
+func test_phase_7_sounds_sit_under_the_warnings_and_the_wave_sounds() -> void:
+	# released and interest are soft; the two warnings are heard but never loud.
+	assert_true(float(AudioService.GAIN_DB[&"released"]) <= -14.0)
+	assert_true(float(AudioService.GAIN_DB[&"interest"]) <= -12.0)
+	assert_true(float(AudioService.GAIN_DB[&"break_started"]) >= float(AudioService.GAIN_DB[&"interest"]))
+	assert_true(float(AudioService.GAIN_DB[&"sped_up"]) >= float(AudioService.GAIN_DB[&"interest"]))
+	assert_true(float(AudioService.GAIN_DB[&"break_started"]) <= -6.0)
+	assert_true(float(AudioService.GAIN_DB[&"sped_up"]) <= -6.0)
+
+
+func test_phase_7_sounds_differ_from_every_other_sound() -> void:
+	var seen: Dictionary[PackedByteArray, StringName] = {}
+	for sound: StringName in SoundBank.EFFECTS:
 		var data: PackedByteArray = SoundBank.render_effect(sound).data
 		assert_false(seen.has(data), "%s sounds the same as %s" % [sound, seen.get(data, &"")])
 		seen[data] = sound
