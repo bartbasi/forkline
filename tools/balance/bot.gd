@@ -66,6 +66,8 @@ static func context(game: GameData, level_id: StringName) -> Dictionary:
 ##   typical: most spots, some upgrades, a gate or none, no early calls.
 ##   skilled: any number of spots, any upgrades, targeting, early calls.
 static func random_strategy(ctx: Dictionary, rng: RandomNumberGenerator, style: StringName, allowed: Array[StringName]) -> Dictionary:
+	if style == &"guided":
+		return _guided_strategy(ctx, rng, allowed)
 	var level: LevelData = ctx["level"]
 	var spots: Array[Vector2i] = _spot_order(ctx, rng)
 	var count: int = spots.size()
@@ -133,6 +135,39 @@ static func random_strategy(ctx: Dictionary, rng: RandomNumberGenerator, style: 
 	if style == &"skilled" and rng.randf() < 0.4:
 		early = {"on": true, "from": rng.randi_range(1, 4), "live": LIVE_CHOICES[rng.randi_range(0, LIVE_CHOICES.size() - 1)], "max": 99}
 	return {"towers": towers, "seq": seq, "gate": gate, "early": early, "wave_buy": rng.randf() < 0.7}
+
+
+## The guided style: a player who read the hint. Every spot gets a tower, both kinds are used, every
+## tower goes to tier 2, builds come first and upgrades after. Where each kind goes and where the
+## gate goes (or none) is random, so this is a floor for a thoughtful player, not a ceiling.
+static func _guided_strategy(ctx: Dictionary, rng: RandomNumberGenerator, allowed: Array[StringName]) -> Dictionary:
+	var level: LevelData = ctx["level"]
+	var spots: Array[Vector2i] = []
+	spots.append_array(level.spots)
+	for i: int in range(spots.size() - 1, 0, -1):
+		var j: int = rng.randi_range(0, i)
+		var tmp: Vector2i = spots[i]
+		spots[i] = spots[j]
+		spots[j] = tmp
+	var kinds: Array[int] = []
+	for i: int in spots.size():
+		kinds.append(rng.randi_range(0, allowed.size() - 1))
+	# Both kinds are used at least once, when the level offers two.
+	for k: int in allowed.size():
+		if not kinds.has(k):
+			kinds[rng.randi_range(0, spots.size() - 1)] = k
+	var towers: Array = []
+	var seq: Array = []
+	for i: int in spots.size():
+		towers.append({"cell": spots[i], "type": allowed[kinds[i]], "depth": 1, "spec": 0, "aim": TowerState.Aim.FIRST})
+		seq.append(i)
+	for i: int in spots.size():
+		seq.append(i)
+	var gate: Vector2i = NO_CELL
+	var options: Array[Vector2i] = ctx["gate_options"]
+	if level.gates > 0 and not options.is_empty() and rng.randf() < 0.5:
+		gate = options[rng.randi_range(0, options.size() - 1)]
+	return {"towers": towers, "seq": seq, "gate": gate, "early": {"on": false, "from": 1, "live": 0, "max": 99}, "wave_buy": false}
 
 
 ## Spots in a random order, half the time weighted toward spots that see more road.
@@ -389,10 +424,18 @@ static func play(ctx: Dictionary, strat: Dictionary, relaxed: bool, timing: bool
 	out["cleared"] = out["waves_cleared"]
 	var kinds: Array[StringName] = []
 	var max_tier: int = 0
+	# What stands at the end: towers by id, and tier 3 paths by id (not what the strategy planned).
+	var built: Dictionary = {}
 	for tower: TowerState in b.towers:
 		if not kinds.has(tower.type):
 			kinds.append(tower.type)
 		max_tier = maxi(max_tier, tower.tier)
+		var key: String = String(tower.type)
+		built[key] = int(built.get(key, 0)) + 1
+		if tower.tier == 3:
+			var path: String = String(ctx["catalog"].tower(tower.type).specs[tower.spec])
+			built[path] = int(built.get(path, 0)) + 1
+	out["built"] = built
 	out["ticks"] = b.tick
 	out["peak"] = peak
 	out["early"] = calls

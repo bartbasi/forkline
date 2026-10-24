@@ -15,26 +15,104 @@ var _dir: String = ""
 
 
 func _initialize() -> void:
+	var whatif: bool = false
 	for argument: String in OS.get_cmdline_user_args():
 		if argument.begins_with("dir="):
 			_dir = argument.trim_prefix("dir=")
-	_economy_table()
+		if argument == "whatif=1":
+			whatif = true
+	if whatif:
+		_economy_table()                                    # the old RULES 12.5 guide, kept for the 2026-10-23 report
+	_waves_table()
 	_recipe_tables()
+	_mixed_recipe_table()
 	_spread_tables()
 	_search_tables()
 	_single_tables()
+	_exhaust_tables()
+	_rerun_whatif_tables()
+	_guided_table()
 	_coverage_table()
+	_mix_tables()
 	_length_table()
 	_boss_table()
 	_peak_table()
 	_det_table()
 	_bench_table()
 	_died_table()
-	_whatif_tables()
-	_stats_table()
-	_spot_table()
+	if whatif:
+		_whatif_tables()
+		_stats_table()
+		_spot_table()
 	_builds()
 	quit(0)
+
+
+## Wave sizes from the level files: creatures in each wave, and the biggest.
+func _waves_table() -> void:
+	print("\n### Wave sizes (creatures in each wave, from the level files)\n")
+	_head(["Level", "Waves", "Creatures per wave", "Largest wave", "Creatures in all", "Starting gold"])
+	var game: GameData = GameData.load_from("res://data")
+	for id: String in LEVELS:
+		var level: LevelData = game.levels[StringName(id)]
+		var sizes: Array[String] = []
+		var biggest: int = 0
+		var all: int = 0
+		for wave: WaveData in level.waves:
+			var count: int = 0
+			for group: WaveGroup in wave.groups:
+				count += group.count
+			sizes.append(str(count))
+			biggest = maxi(biggest, count)
+			all += count
+		_row([id, level.waves.size(), ", ".join(sizes), biggest, all, level.start_gold])
+
+
+## The mixed recipe of RULES 12.5 (Sling Posts and Catapults in turn, spots with the most road first,
+## each upgraded once), and the two one-tower recipes at tier 2, over every gate choice.
+func _mixed_recipe_table() -> void:
+	print("\n### The three tier 2 recipes over every gate choice: result with the best gate | with the worst gate\n")
+	_head(["Level", "Recipe", "Normal", "Relaxed"])
+	var wanted: Array[String] = ["sling, catapult, alternating, road order, tier 2", "sling x all, road order, tier 2", "catapult x all, tier 2",
+		"sling, catapult, alternating, road order, no upgrades"]
+	for id: String in LEVELS:
+		var d: Dictionary = _read(id + "_recipes.json")
+		if d.is_empty():
+			continue
+		for r: Dictionary in d["recipes"]:
+			if not wanted.has(String(r["recipe"])):
+				continue
+			var cells: Array = [id, r["recipe"]]
+			for mode: String in ["normal", "relaxed"]:
+				var s: Dictionary = r["summary"][mode]
+				cells.append("%s \\| %s (wins on %d of %d gate choices)" % [_outcome(s["best"], mode == "relaxed"), _outcome(s["worst"], mode == "relaxed"),
+					int(s["wins"]), int(s["gates_tried"])])
+			_row(cells)
+
+
+## What the three-star builds of the any-tower search hold: tower mix, lives left, tower count, early calls.
+func _mix_tables() -> void:
+	print("\n### Three-star builds found (any-tower search): tower mix at the end, as builds (top 6 mixes)\n")
+	_head(["Level", "Three-star builds", "Mean Sling Posts", "Mean Catapults", "Mixes (towers at the end: builds)", "Lives left (lives: builds)", "Towers built (count: builds)", "Builds that called early"])
+	for id: String in LEVELS:
+		var d: Dictionary = _read(id + "_search_any.json")
+		if d.is_empty():
+			continue
+		_row([id, d["three_star_found"], _mean_of(d["three_star_mix"], "sling_post"), _mean_of(d["three_star_mix"], "pumpkin_catapult"), _top(d["three_star_mix"], 6, false), _top(d["three_star_lives"], 5, true),
+			_top(d["three_star_towers"], 8, true), d["three_star_early_used"]])
+
+
+## "key: n" pairs, biggest first (or by numeric key, biggest first, when by_key is true).
+func _top(hist: Dictionary, limit: int, by_key: bool) -> String:
+	var keys: Array = hist.keys()
+	if by_key:
+		keys.sort_custom(func(a: String, b: String) -> bool: return int(a) > int(b))
+	else:
+		keys.sort_custom(func(a: String, b: String) -> bool: return int(hist[a]) > int(hist[b]))
+	var parts: Array[String] = []
+	for key: String in keys.slice(0, limit):
+		parts.append("%s: %d" % [key, int(hist[key])])
+	return "; ".join(parts)
 
 
 func _read(name: String) -> Dictionary:
@@ -139,20 +217,20 @@ func _outcome(res: Dictionary, relaxed: bool) -> String:
 
 func _spread_tables() -> void:
 	print("\n### Spread: win, two star and three star rates of random strategies (Normal)\n")
-	_head(["Level", "Style", "Plays", "Won", "Keep 15 lives (2 stars)", "Three stars", "Mean lives left in a win"])
+	_head(["Level", "Style", "Plays", "Won", "Keep 15 lives (2 stars)", "Three stars", "Star 3 rule met, share of wins", "Mean lives left in a win"])
 	for id: String in LEVELS:
 		var d: Dictionary = _read(id + "_spread.json")
 		if d.is_empty():
 			continue
-		var all: Dictionary = {"n": 0, "won": 0, "two": 0, "three": 0, "lives_sum": 0}
+		var all: Dictionary = {"n": 0, "won": 0, "two": 0, "three": 0, "rule3": 0, "lives_sum": 0}
 		for style: String in ["casual", "typical", "skilled"]:
 			var t: Dictionary = d["styles"][style]["normal"]
 			_row([id, style, int(t["n"]), _pct(int(t["won"]), int(t["n"])), _pct(int(t["two"]), int(t["n"])),
-				_pct(int(t["three"]), int(t["n"])), "-" if int(t["won"]) == 0 else "%.1f" % (float(t["lives_sum"]) / int(t["won"]))])
+				_pct(int(t["three"]), int(t["n"])), _pct(int(t.get("rule3", 0)), int(t["won"])), "-" if int(t["won"]) == 0 else "%.1f" % (float(t["lives_sum"]) / int(t["won"]))])
 			for key: String in all:
-				all[key] = int(all[key]) + int(t[key])
+				all[key] = int(all[key]) + int(t.get(key, 0))
 		_row([id, "**all**", all["n"], _pct(int(all["won"]), int(all["n"])), _pct(int(all["two"]), int(all["n"])),
-			_pct(int(all["three"]), int(all["n"])), "-" if int(all["won"]) == 0 else "%.1f" % (float(all["lives_sum"]) / int(all["won"]))])
+			_pct(int(all["three"]), int(all["n"])), _pct(int(all["rule3"]), int(all["won"])), "-" if int(all["won"]) == 0 else "%.1f" % (float(all["lives_sum"]) / int(all["won"]))])
 	print("\n### Spread on Relaxed (40 lives, 1.5 times gold): win rate\n")
 	_head(["Level", "casual", "typical", "skilled", "all"])
 	for id: String in LEVELS:
@@ -200,7 +278,7 @@ func _spread_tables() -> void:
 
 func _search_tables() -> void:
 	print("\n### Search: best builds found (any tower, Normal)\n")
-	_head(["Level", "Builds tried", "Wins", "Three-star wins", "Tried before the first three-star win", "Best lives left"])
+	_head(["Level", "Builds tried", "Wins", "Wins that met the star 3 rule", "Three-star wins", "Tried before the first three-star win", "Best lives left"])
 	for id: String in LEVELS:
 		var d: Dictionary = _read(id + "_search_any.json")
 		if d.is_empty():
@@ -208,26 +286,31 @@ func _search_tables() -> void:
 		var best: int = 0
 		if d.has("best_win"):
 			best = int(d["best_win"]["result"]["lives"])
-		_row([id, d["evals"], d["wins"], d["three_star_found"], d["first_three_star_eval"], best])
+		_row([id, d["evals"], d["wins"], d.get("rule3_wins", "-"), d["three_star_found"], d["first_three_star_eval"], best])
 
 
 func _single_tables() -> void:
 	print("\n### One tower type alone (search, Normal)\n")
-	_head(["Level", "Only", "Builds tried", "Wins", "Three-star wins", "Best result found"])
+	_head(["Level", "Only", "Seed", "Builds tried", "Wins", "Wins that met the star 3 rule", "Most lives left in such a win", "Three-star wins", "Best result found"])
 	for id: String in LEVELS:
 		for only: String in ["sling_post", "pumpkin_catapult"]:
-			var d: Dictionary = _read("%s_search_%s.json" % [id, only])
-			if d.is_empty():
-				continue
-			var best: String = "no win"
-			if d.has("top"):
-				var r: Dictionary = d["top"]["result"]
-				if bool(r["won"]):
-					var stars: int = int(r["stars"])
-					best = "won, %d lives left, %s" % [int(r["lives"]), "3 stars" if stars == 7 else ("2 stars" if (stars & 2) != 0 else "1 star")]
-				else:
-					best = "lost after %d of %d waves cleared" % [int(r["cleared"]), 0 if not r.has("waves") else int(r["waves"])]
-			_row([id, only, d["evals"], d["wins"], d["three_star_found"], best])
+			for suffix: String in ["", "_b"]:
+				_single_row(id, only, suffix)
+
+
+func _single_row(id: String, only: String, suffix: String) -> void:
+	var d: Dictionary = _read("%s_search_%s%s.json" % [id, only, suffix])
+	if d.is_empty():
+		return
+	var best: String = "no win"
+	if d.has("top"):
+		var r: Dictionary = d["top"]["result"]
+		if bool(r["won"]):
+			var stars: int = int(r["stars"])
+			best = "won, %d lives left, %s" % [int(r["lives"]), "3 stars" if stars == 7 else ("2 stars" if (stars & 2) != 0 else "1 star")]
+		else:
+			best = "lost after %d of %d waves cleared" % [int(r["cleared"]), 0 if not r.has("waves") else int(r["waves"])]
+	_row([id, only, int(d["seed"]), d["evals"], d["wins"], d.get("rule3_wins", "-"), d.get("rule3_best_lives", "-"), d["three_star_found"], best])
 
 
 func _coverage_table() -> void:
@@ -530,4 +613,97 @@ func _spot_table() -> void:
 			w += int(t["won"])
 			fin += int(t["final"])
 		_row([row[0], _pct(w, n), _pct(fin, n), _pct(w, fin), "%d / %d" % [int(any["wins"]), int(any["evals"])], int(any["three_star_found"]), int(any["first_three_star_eval"])])
+	_dir = saved
+
+
+## The extra jobs of run_exhaust.sh: the exhaustive 1-3 check and the longer one-tower searches.
+func _exhaust_tables() -> void:
+	var saved: String = _dir
+	_dir = saved.path_join("exhaust")
+	print("\n### Level 1-3, one tower type, every build of one or two towers (exhaustive, Normal)\n")
+	_head(["Only", "Builds in the set", "Builds played", "Wins", "Wins that met the star 3 rule (at most 2 towers)", "Most lives left in such a win", "Three-star wins"])
+	for only: String in ["sling_post", "pumpkin_catapult"]:
+		var played: int = 0
+		var total: int = 0
+		var wins: int = 0
+		var rule3: int = 0
+		var best: int = -1
+		var threes: int = 0
+		var shards: int = 0
+		for shard: int in 10:
+			var d: Dictionary = _read("r1_l3_%s_s%d.json" % [only, shard])
+			if d.is_empty():
+				continue
+			shards += 1
+			total = int(d["builds_in_all"])
+			played += int(d["evals"])
+			wins += int(d["wins"])
+			rule3 += int(d["rule3_wins"])
+			best = maxi(best, int(d["rule3_best_lives"]))
+			threes += int(d["three_star_found"])
+		if shards > 0:
+			_row([only, "%d (%d of 10 shards)" % [total, shards], played, wins, rule3, best, threes])
+	print("\n### Longer searches with one tower type (8000 builds, Normal)\n")
+	_head(["Level", "Only", "Seed", "Builds tried", "Wins", "Wins that met the star 3 rule", "Most lives left in such a win", "Three-star wins"])
+	for id: String in LEVELS:
+		for only: String in ["sling_post", "pumpkin_catapult"]:
+			var d2: Dictionary = _read("%s_long_%s.json" % [id, only])
+			if d2.is_empty():
+				continue
+			_row([id, only, int(d2["seed"]), d2["evals"], d2["wins"], d2["rule3_wins"], d2["rule3_best_lives"], d2["three_star_found"]])
+	_dir = saved
+
+
+## The small what-ifs of the 2026-10-24 rerun (files in whatif/).
+func _rerun_whatif_tables() -> void:
+	var saved: String = _dir
+	_dir = saved.path_join("whatif")
+	print("\n### What-if, level 1-5: other star 3 rules (any-tower search, 3000 builds, Normal)\n")
+	_head(["Star 3 rule", "Seed", "Wins", "Wins that met the rule", "Three-star wins", "Tried before the first three-star win", "Towers in the three-star builds (count: builds)"])
+	for n: int in [4, 3]:
+		var d: Dictionary = _read("r1_l5_towers%d_any.json" % n)
+		if not d.is_empty():
+			_row(["At most %d towers" % n, int(d["seed"]), d["wins"], d["rule3_wins"], d["three_star_found"], d["first_three_star_eval"], _top(d["three_star_towers"], 5, true)])
+	print("\n### What-if, level 1-3: tier 1 only (the Twist \"No Upgrades\"), every build of up to 4 towers of either kind, default aim\n")
+	_head(["Builds in the set", "Builds played", "Wins"])
+	var all: int = 0
+	var played: int = 0
+	var wins: int = 0
+	for shard: int in 4:
+		var s: Dictionary = _read("r1_l3_tier1_only_s%d.json" % shard)
+		if s.is_empty():
+			continue
+		all = int(s["builds_in_all"])
+		played += int(s["evals"])
+		wins += int(s["wins"])
+	_row([all, played, wins])
+	_dir = saved
+
+
+## Mean number of one tower id per build, from a mix histogram ("sling_post:3,pumpkin_catapult:2": builds).
+func _mean_of(mix: Dictionary, id: String) -> String:
+	var total: int = 0
+	var builds: int = 0
+	for key: String in mix:
+		builds += int(mix[key])
+		for part: String in key.split(","):
+			if part.begins_with(id + ":"):
+				total += int(part.get_slice(":", 1)) * int(mix[key])
+	return "-" if builds == 0 else "%.1f" % (float(total) / builds)
+
+
+## The guided style (run.gd style=guided): every spot, both kinds, all tier 2, random places and gate.
+func _guided_table() -> void:
+	var saved: String = _dir
+	_dir = saved.path_join("guided")
+	print("\n### Guided random plays (every spot, both kinds, all tier 2, random places and gate)\n")
+	_head(["Level", "Plays", "Normal: won", "Normal: keep 15 lives", "Normal: mean lives left in a win", "Relaxed: won"])
+	for id: String in LEVELS:
+		var d: Dictionary = _read(id + "_guided.json")
+		if d.is_empty():
+			continue
+		var t: Dictionary = d["styles"]["guided"]["normal"]
+		var r: Dictionary = d["styles"]["guided"]["relaxed"]
+		_row([id, int(t["n"]), _pct(int(t["won"]), int(t["n"])), _pct(int(t["two"]), int(t["n"])),
+			"-" if int(t["won"]) == 0 else "%.1f" % (float(t["lives_sum"]) / int(t["won"])), _pct(int(r["won"]), int(r["n"]))])
 	_dir = saved

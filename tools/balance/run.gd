@@ -10,6 +10,7 @@ extends SceneTree
 ##
 ## mode=spread: n random strategies in each style (casual, typical, skilled), each played on
 ##   Normal and on Relaxed. Reports win, two star and three star rates.
+## mode=spread also takes style=guided: only the guided style (every spot, both kinds, all tier 2, random places and gate).
 ## mode=search: a seeded search for the best strategy, from random starts and small edits
 ##   (docs/balance/README.md). `only` is `any` or a comma list of tower ids the strategy may use.
 ## mode=recipes: a few plain recipes a new player might follow (no seed; nothing is random),
@@ -17,6 +18,9 @@ extends SceneTree
 ## mode=det: the same strategies played twice, played again with a save and load in the middle
 ##   of a wave, and the same search run twice, must all match.
 ## mode=search also takes early=off: no strategy calls a wave early (the star 3 of 1-6 is then out of reach).
+## Any mode also takes level_file=PATH (a level JSON file played in place of the level named by `level`),
+##   towers=PATH and enemies=PATH (stat files played in place of data/stats/towers.json and enemies.json).
+##   Paths are res:// or plain file paths. The usual checks still apply. Data files are never touched.
 ## Any mode also takes stat=pumpkin_catapult.splash:+25 (a what-if on tower numbers; see _apply_stat).
 ## Any mode also takes tweak=gold:300,count_pct:120 (a what-if; see _apply_tweak).
 ## The result is one JSON object, written to `out` when given and always printed after "RESULT ".
@@ -44,6 +48,8 @@ func _initialize() -> void:
 		printerr("unknown level %s" % level_id)
 		quit(2)
 		return
+	if not _apply_files(game, level_id):
+		return
 	var stat: String = String(_args.get("stat", ""))
 	if stat != "" and not _apply_stat(game, level_id, stat):
 		return
@@ -63,6 +69,10 @@ func _initialize() -> void:
 		result["only"] = String(_args.get("only", "any"))
 	elif mode == "det":
 		result = _det(ctx, seed_value)
+	elif mode == "exhaust":
+		result = _exhaust(ctx, _allowed(ctx, String(_args.get("only", "any"))), int(_args.get("max_towers", "2")),
+			int(_args.get("shard", "0")), int(_args.get("shards", "1")))
+		result["only"] = String(_args.get("only", "any"))
 	elif mode == "recipes":
 		result = _recipes(ctx)
 	else:
@@ -85,6 +95,47 @@ func _initialize() -> void:
 		file.store_string(JSON.stringify(result, "  "))
 		file.close()
 	quit(0)
+
+
+## level_file=, towers= and enemies=: play other files than the ones in data/. A missing or bad file
+## stops the run with exit code 2. The level is rebuilt against the (possibly new) catalog.
+func _apply_files(game: GameData, level_id: StringName) -> bool:
+	var level_path: String = String(_args.get("level_file", ""))
+	var towers_path: String = String(_args.get("towers", ""))
+	var enemies_path: String = String(_args.get("enemies", ""))
+	if level_path == "" and towers_path == "" and enemies_path == "":
+		return true
+	var towers: Variant = _read_json(towers_path if towers_path != "" else "res://data/stats/towers.json")
+	var enemies: Variant = _read_json(enemies_path if enemies_path != "" else "res://data/stats/enemies.json")
+	var rules: Variant = _read_json("res://data/stats/rules.json")
+	var level_data: Variant = _read_json(level_path) if level_path != "" else game.levels[level_id].to_data()
+	if towers == null or enemies == null or rules == null or level_data == null:
+		quit(2)
+		return false
+	var catalog: Catalog = Catalog.from_data(towers, enemies, rules)
+	if catalog == null:
+		printerr("stat files are refused: %s" % ", ".join(Catalog.check(towers, enemies, rules)))
+		quit(2)
+		return false
+	var changed: LevelData = LevelData.from_data(level_data, catalog)
+	if changed == null:
+		printerr("level is refused: %s" % ", ".join(LevelData.check(level_data, catalog)))
+		quit(2)
+		return false
+	game.catalog = catalog
+	game.levels[level_id] = changed
+	return true
+
+
+func _read_json(path: String) -> Variant:
+	if not FileAccess.file_exists(path):
+		printerr("cannot read %s" % path)
+		return null
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if not parsed is Dictionary:
+		printerr("%s is not a JSON object" % path)
+		return null
+	return parsed
 
 
 ## A what-if for a suggestion in a report. `tweak` is a comma list of name:value pairs:
@@ -134,8 +185,8 @@ func _apply_tweak(game: GameData, level_id: StringName, tweak: String) -> bool:
 ## of 0, such as splash on a Sling Post, is left alone). The catalog is rebuilt through
 ## Catalog.from_data, so the usual checks still apply. Data files on disk are never touched.
 func _apply_stat(game: GameData, level_id: StringName, stat: String) -> bool:
-	var towers: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://data/stats/towers.json"))
-	var enemies: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://data/stats/enemies.json"))
+	var towers: Variant = JSON.parse_string(FileAccess.get_file_as_string(String(_args.get("towers", "res://data/stats/towers.json"))))
+	var enemies: Variant = JSON.parse_string(FileAccess.get_file_as_string(String(_args.get("enemies", "res://data/stats/enemies.json"))))
 	var rules: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://data/stats/rules.json"))
 	for change: String in stat.split("~", false):
 		var halves: PackedStringArray = change.split(":")
@@ -187,8 +238,11 @@ func _spread(ctx: Dictionary, seed_value: int, n: int) -> Dictionary:
 	var size_bins: Dictionary = {}
 	var peak_max: int = 0
 	var peak_strategy: Dictionary = {}
-	for s: int in Bot.STYLES.size():
-		var style: StringName = Bot.STYLES[s]
+	var style_list: Array[StringName] = Bot.STYLES.duplicate()
+	if String(_args.get("style", "")) == "guided":
+		style_list = [&"guided"]
+	for s: int in style_list.size():
+		var style: StringName = style_list[s]
 		var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 		rng.seed = seed_value + 7919 * (s + 1)
 		var rows: Dictionary = {"normal": _tally(), "relaxed": _tally()}
@@ -214,7 +268,7 @@ func _spread(ctx: Dictionary, seed_value: int, n: int) -> Dictionary:
 
 
 func _tally() -> Dictionary:
-	return {"n": 0, "won": 0, "two": 0, "three": 0, "lives_sum": 0, "ticks_sum": 0, "stuck": 0, "final": 0, "died_at": {}}
+	return {"n": 0, "won": 0, "two": 0, "three": 0, "rule3": 0, "lives_sum": 0, "ticks_sum": 0, "stuck": 0, "final": 0, "died_at": {}}
 
 
 func _bin(bins: Dictionary, key: String) -> Dictionary:
@@ -240,6 +294,8 @@ func _add(t: Dictionary, res: Dictionary) -> void:
 		var stars: int = int(res["stars"])
 		if (stars & 2) != 0:
 			t["two"] = int(t["two"]) + 1
+		if (stars & 4) != 0:
+			t["rule3"] = int(t["rule3"]) + 1                    # the level's own star 3 rule was met
 		if stars == 7:
 			t["three"] = int(t["three"]) + 1
 
@@ -257,6 +313,8 @@ func _search(ctx: Dictionary, seed_value: int, evals: int, allowed: Array[String
 	var threes: Array = []
 	var best_win: Dictionary = {}
 	var first_three: int = -1
+	var rule3_wins: int = 0                                 # wins that met the level's star 3 rule, with or without star 2
+	var rule3_best_lives: int = -1                          # the most lives left in such a win
 	var peak_max: int = 0
 	var attempts: int = 0
 	var start_count: int = evals / 3
@@ -285,6 +343,9 @@ func _search(ctx: Dictionary, seed_value: int, evals: int, allowed: Array[String
 			var stars: int = int(res["stars"])
 			var key: String = "3" if stars == 7 else ("2" if (stars & 2) != 0 else "1")
 			star_counts[key] = int(star_counts[key]) + 1
+			if (stars & 4) != 0:
+				rule3_wins += 1
+				rule3_best_lives = maxi(rule3_best_lives, int(res["lives"]))
 			if stars == 7:
 				if first_three < 0:
 					first_three = played
@@ -305,23 +366,44 @@ func _search(ctx: Dictionary, seed_value: int, evals: int, allowed: Array[String
 			return la > lb
 		return Bot.signature(a["strat"]) < Bot.signature(b["strat"]))
 	var out: Dictionary = {"evals": played, "wins": wins, "outcomes": star_counts, "first_three_star_eval": first_three,
-		"three_star_found": threes.size(), "peak_max": peak_max, "allowed": _names(allowed)}
-	# Tower use across every three star win found.
+		"three_star_found": threes.size(), "peak_max": peak_max, "allowed": _names(allowed),
+		"rule3_wins": rule3_wins, "rule3_best_lives": rule3_best_lives}
+	# Tower use across every three star win found: what stood at the end, not what was planned.
 	var use: Dictionary = {}
+	var mix: Dictionary = {}
+	var lives_hist: Dictionary = {}
+	var towers_hist: Dictionary = {}
+	var early_used: int = 0
 	for item: Dictionary in threes:
-		var inventory: Dictionary = Bot.inventory(ctx, item["strat"])
-		for key: String in inventory:
+		var built: Dictionary = item["res"]["built"]
+		var parts: Array = []
+		for key: String in built:
 			use[key] = int(use.get(key, 0)) + 1
+			if not (key in ["quickshot", "stone_sling", "prize_pumpkin", "jam_pot"]):
+				parts.append("%s:%d" % [key, int(built[key])])
+		parts.sort()
+		var mix_key: String = ",".join(parts)
+		mix[mix_key] = int(mix.get(mix_key, 0)) + 1
+		var lives_key: String = str(int(item["res"]["lives"]))
+		lives_hist[lives_key] = int(lives_hist.get(lives_key, 0)) + 1
+		var towers_key: String = str(int(item["res"]["towers"]))
+		towers_hist[towers_key] = int(towers_hist.get(towers_key, 0)) + 1
+		if int(item["res"]["early"]) > 0:
+			early_used += 1
 	out["three_star_builds_using"] = use
+	out["three_star_mix"] = mix
+	out["three_star_lives"] = lives_hist
+	out["three_star_towers"] = towers_hist
+	out["three_star_early_used"] = early_used
 	var listed: Array = []
 	for i: int in mini(threes.size(), 12):
 		var strat2: Dictionary = threes[i]["strat"]
-		listed.append({"strategy": Bot.to_data(strat2), "result": threes[i]["res"], "inventory": Bot.inventory(ctx, strat2),
+		listed.append({"strategy": Bot.to_data(strat2), "result": threes[i]["res"], "inventory": threes[i]["res"]["built"],
 			"text": Bot.describe(ctx, strat2)})
 	out["three_star_best"] = listed
 	var small: Array = []
 	for item: Dictionary in threes:
-		small.append({"inventory": Bot.inventory(ctx, item["strat"]), "lives": item["res"]["lives"], "towers": item["res"]["towers"],
+		small.append({"inventory": item["res"]["built"], "lives": item["res"]["lives"], "towers": item["res"]["towers"],
 			"early": item["res"]["early"], "gate": String(str(item["strat"]["gate"]))})
 	out["three_star_all"] = small if small.size() <= 400 else small.slice(0, 400)
 	if not best_win.is_empty():
@@ -355,7 +437,7 @@ func _slim(res: Dictionary) -> Dictionary:
 	return {"waves": _waves, "won": res["won"], "stars": res["stars"], "lives": res["lives"], "cleared": res["cleared"], "ticks": res["ticks"],
 		"peak": res["peak"], "early": res["early"], "towers": res["towers"], "max_tier": res["max_tier"], "kinds": _names(res["kinds"]),
 		"gold_at": res["gold_at"], "lives_at": res["lives_at"], "spent_at": res["spent_at"], "wave_ticks": res["wave_ticks"],
-		"end_gold": res["end_gold"], "boss_hp": res["boss_hp"], "boss_steps": res["boss_steps"], "digest": res["digest"]}
+		"end_gold": res["end_gold"], "boss_hp": res["boss_hp"], "boss_steps": res["boss_steps"], "digest": res["digest"], "built": res["built"]}
 
 
 # Recipes.
@@ -437,6 +519,119 @@ func _recipes(ctx: Dictionary) -> Dictionary:
 			summary[mode] = {"gates_tried": gates.size(), "wins": wins, "best": best["res"], "worst": worst["res"]}
 		rows.append({"recipe": recipe[0], "summary": summary, "per_gate": per_gate})
 	return {"recipes": rows, "waves": level.waves.size()}
+
+
+# Exhaustive check of small builds.
+
+## mode=exhaust: every static build of at most `max_towers` towers (default 2) of the allowed kinds,
+## on every spot choice, every upgrade depth and tier 3 path for each tower, every
+## purchase order, every aim for each tower, every gate choice, buying during waves or not, and early
+## calls off or on (from wave 2, when at most 8 creatures are on the map). The builds are numbered;
+## `depth_max=N` limits the upgrade depth (0 is tier 1 only) and `aims=first` plays only the default aim.
+## `shard=K shards=N` plays only those whose number leaves K when divided by N, so N processes
+## cover the whole set together. This is the check behind "no single tower type earns three stars
+## alone" for a level whose star 3 limits the number of towers.
+func _exhaust(ctx: Dictionary, allowed: Array[StringName], max_towers: int, shard: int, shards: int) -> Dictionary:
+	var level: LevelData = ctx["level"]
+	var spots: Array[Vector2i] = level.spots
+	var gates: Array = [Bot.NO_CELL]
+	if level.gates > 0:
+		gates.append_array(ctx["gate_options"])
+	var depth_max: int = int(_args.get("depth_max", "2"))
+	var all_aims: bool = String(_args.get("aims", "all")) == "all"
+	var options: Array = []                                      # depth, spec
+	for option: Array in [[0, 0], [1, 0], [2, 0], [2, 1]]:
+		if int(option[0]) <= depth_max:
+			options.append(option)
+	var number: int = 0
+	var played: int = 0
+	var wins: int = 0
+	var rule3_wins: int = 0
+	var rule3_best_lives: int = -1
+	var threes: int = 0
+	var best_fit: int = -1
+	var best: Dictionary = {}
+	for picked: Array in _subsets(spots.size(), max_towers):
+		var combos: Array = [[]]                                # per tower: type and (depth, spec)
+		for slot: int in picked.size():
+			var grown: Array = []
+			for partial: Array in combos:
+				for type: StringName in allowed:
+					for option: Array in options:
+						var more: Array = partial.duplicate()
+						more.append([type, option[0], option[1]])
+						grown.append(more)
+			combos = grown
+		for combo: Array in combos:
+			var counts: Array[int] = []
+			for item: Array in combo:
+				counts.append(1 + int(item[1]))
+			var orders: Array = []
+			_orders(counts.duplicate(), [], orders)
+			for aim_code: int in (int(pow(3.0, picked.size())) if all_aims else 1):
+				for gate: Vector2i in gates:
+					for order: Array in orders:
+						for wave_buy: bool in [false, true]:
+							for early_on: bool in [false, true]:
+								number += 1
+								if number % shards != shard:
+									continue
+								var towers: Array = []
+								for k: int in picked.size():
+									towers.append({"cell": spots[int(picked[k])], "type": combo[k][0], "depth": int(combo[k][1]),
+										"spec": int(combo[k][2]), "aim": (aim_code / int(pow(3.0, k))) % 3})
+								var strat: Dictionary = {"towers": towers, "seq": order, "gate": gate, "wave_buy": wave_buy,
+									"early": {"on": early_on, "from": 1, "live": 8, "max": 99}}
+								var res: Dictionary = Bot.play(ctx, strat, false)
+								played += 1
+								if bool(res["won"]):
+									wins += 1
+									var stars: int = int(res["stars"])
+									if (stars & 4) != 0:
+										rule3_wins += 1
+										rule3_best_lives = maxi(rule3_best_lives, int(res["lives"]))
+									if stars == 7:
+										threes += 1
+								var fit: int = Bot.fitness(res)
+								if bool(res["won"]) and (int(res["stars"]) & 4) != 0 and fit > best_fit:
+									best_fit = fit
+									best = {"strategy": Bot.to_data(strat), "result": _slim(res), "text": Bot.describe(ctx, strat)}
+	return {"builds_in_all": number, "evals": played, "wins": wins, "rule3_wins": rule3_wins, "rule3_best_lives": rule3_best_lives,
+		"three_star_found": threes, "max_towers": max_towers, "shard": shard, "shards": shards, "allowed": _names(allowed),
+		"best_rule3_win": best}
+
+
+## Every set of 1 to `most` spot indexes out of `count`, as arrays of indexes in order.
+func _subsets(count: int, most: int) -> Array:
+	var out: Array = []
+	for size: int in range(1, most + 1):
+		_choose(count, size, 0, [], out)
+	return out
+
+
+func _choose(count: int, size: int, from: int, cur: Array, out: Array) -> void:
+	if cur.size() == size:
+		out.append(cur.duplicate())
+		return
+	for i: int in range(from, count):
+		cur.append(i)
+		_choose(count, size, i + 1, cur, out)
+		cur.pop_back()
+
+
+## Every distinct order of the purchases: the tower index appears counts[i] times.
+func _orders(left: Array[int], cur: Array, out: Array) -> void:
+	var done: bool = true
+	for i: int in left.size():
+		if left[i] > 0:
+			done = false
+			left[i] -= 1
+			cur.append(i)
+			_orders(left, cur, out)
+			cur.pop_back()
+			left[i] += 1
+	if done:
+		out.append(cur.duplicate())
 
 
 # Determinism.
