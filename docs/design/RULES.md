@@ -21,6 +21,8 @@ Phase 7 alignment, 2026-10-24 (task G1), after hard stop B and the contract revi
 - New: a card text for every Twist (13), a guide of 4 groups or fewer a wave (12.5), and the balance checks with the plain mixed recipe for every region (12.6).
 - One Twist changed, the same day. Level 1-3's Twist is now Tier 2 Cap, `tier_cap` 2, card text "No tower can go above tier 2.", the same as 3-5's (13). It replaces No Upgrades, which the bots could not win on Normal with tier 1 towers (TUNING_R1.md S4). The DM chose it on 2026-10-24, on the game designer's advice. The level data and contract 2.8 already use it. It changes the Twist list approved at hard stop A, so it is for the DM to tell Bart.
 
+Region 2 tuning, 2026-10-24 (task G2), after the region 2 balance report. The plan and its evidence are in docs/design/TUNING_R2.md. Changed numbers: Ironshell's armor 6 to 10 (6.3) and its card line (6.6), with the 5.10 Ironshell columns recomputed and a note there that Bells help single-target towers too. Changed plan: level 2-2's star 3 is now "Use no gates." and level 3-2's is "Have at most 6 towers." (12.4); level 3-1 keeps one entrance, and the boss waves' strengths are listed (12.3). New: three guides for building waves (12.5), the search minimum and two shortcuts for the "No super tower" check (12.6), and starting a new run or daily over a saved one (4.10, 14.7). The region 2 wave changes are in TUNING_R2.md. Items 2-2's star 3, Ironshell's armor, 3-2's star 3 and 3-1's entrance change what Bart approved, so they are for the DM to tell Bart.
+
 Names follow docs/art/NAMES.md, which Bart approved at hard stop B. The tables in 5.1, 5.3 to 5.8, 6.1, 6.3 and 12.1 give each tower, tier 3 path, creature, boss and region its id from that list, so the data files have one source. In each tower's tier table, the first tier 3 row is spec 0 and the second is spec 1.
 
 This file holds every game rule and number for version 1. The sim engineer, level designer, roguelite engineer, balance analyst and UI engineer build from it. If something here is unclear or seems to conflict with docs/ARCHITECTURE.md, ask the DM. Do not guess.
@@ -256,6 +258,7 @@ All prices are multiples of 10, so 70% is always a whole number.
 - Leaving the app saves the game at that exact moment, even mid-wave (Bart, hard stop A). Coming back resumes it paused, on the Pause menu.
 - One game can be saved per mode: one campaign level or Twist, one roguelite run and one daily run. One never ends another. The Continue card resumes the most recent one. The saved level's card, the Roguelite button and the Daily button each resume their own.
 - Starting a different campaign level or Twist while one is saved first asks the player. If they confirm, the saved game ends as if it were abandoned from Pause, so nothing is recorded. If they cancel, nothing changes.
+- Starting a new roguelite run while one is saved, or a new daily while a daily is saved, also asks first. If they confirm, the saved run ends as if it were abandoned from Pause: it counts as lost at its current wave (14.7), and it records what any ended run records: its unlock counters (14.6), and for a daily its result for the day's best and the streak (15). So starting over never hides a loss. If they cancel, nothing changes.
 
 ## 5. Towers
 
@@ -403,14 +406,14 @@ Plurals, for the star 3 line "Build no ..." (10.3): Sling Posts, Pumpkin Catapul
 
 ### 5.10 Why no tower is best everywhere
 
-Method. These tables come from a rough model, not from the bots. They show useful damage per second for every 100 gold spent, against a steady stream of one creature type, with wasted damage on kills counted and no support towers. Creature spacing: Pips 0.3 s apart, Flitters 0.4 s, Skitters 0.8 s, Scamps 1.0 s, Bubblers and Menders 1.2 s, Shellbacks 1.5 s, Dusk Moths 2.0 s, Gatecrashers 3.0 s, Puffs in their threes. Boss columns use one huge target. The best value in each column is in bold. The model counts splash on both sides of the target, as in a long stream. In a short pack a tower aiming First hits the front, so splash finds creatures on one side only, and the model overrates splash there. The balance bots on real maps have the final word (docs/design/TUNING_R1.md). Recomputed on 2026-10-24 with the region 1 tuning numbers.
+Method. These tables come from a rough model, not from the bots. They show useful damage per second for every 100 gold spent, against a steady stream of one creature type, with wasted damage on kills counted and no support towers. Creature spacing: Pips 0.3 s apart, Flitters 0.4 s, Skitters 0.8 s, Scamps 1.0 s, Bubblers and Menders 1.2 s, Shellbacks 1.5 s, Dusk Moths 2.0 s, Gatecrashers 3.0 s, Puffs in their threes. Boss columns use one huge target. The best value in each column is in bold. The model counts splash on both sides of the target, as in a long stream. In a short pack a tower aiming First hits the front, so splash finds creatures on one side only, and the model overrates splash there. The balance bots on real maps have the final word (docs/design/TUNING_R1.md). Recomputed on 2026-10-24 with the region 1 tuning numbers. The Ironshell columns were recomputed the same day for its armor 10 (docs/design/TUNING_R2.md).
 
 Tier 1 at strength 100:
 
 | Tower | Scamp | Pip | Skitter | Flitter | Shellback | Bubbler | Puff | Mender | Gatecrasher | Dusk Moth | Ironshell | Moon Moth | Old Tusk |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | Sling Post | **11.4** | 10.5 | **12.0** | 12.0 | 4.0 | **8.3** | 12.0 | **10.0** | 8.0 | 2.0 | 2.0 | 6.0 | 4.0 |
-| Pumpkin Catapult | 5.6 | **21.9** | 4.2 | 0 | 4.2 | 0 | **15.0** | 4.9 | 4.8 | 0 | 3.3 | 0 | 4.2 |
+| Pumpkin Catapult | 5.6 | **21.9** | 4.2 | 0 | 4.2 | 0 | **15.0** | 4.9 | 4.8 | 0 | 1.7 | 0 | 4.2 |
 | Longbow Loft | 10.7 | 5.6 | 8.0 | 0 | **8.0** | 0 | 3.2 | 9.3 | **10.7** | 0 | **10.7** | 0 | **10.7** |
 | Firework Tower | 0 | 0 | 0 | **27.3** | 0 | 0 | 0 | 0 | 0 | **6.1** | 0 | **8.2** | 0 |
 
@@ -418,10 +421,10 @@ Tier 3 at strength 220:
 
 | Tower | Scamp | Pip | Skitter | Flitter | Shellback | Bubbler | Puff | Mender | Gatecrasher | Dusk Moth | Ironshell | Moon Moth | Old Tusk |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Quickshot | 9.8 | 9.3 | 8.9 | 8.9 | 4.8 | **8.6** | **7.9** | 8.5 | 7.3 | 3.7 | 2.4 | 6.1 | 4.9 |
-| Stone Sling | 8.6 | 7.5 | 8.0 | 8.0 | 7.4 | 6.7 | 6.3 | 8.3 | 8.6 | 7.2 | 6.8 | 8.3 | 7.8 |
-| Prize Pumpkin | **11.0** | **34.5** | 2.8 | 0 | 9.9 | 0 | 6.5 | 9.6 | 3.7 | 0 | 3.7 | 0 | 3.8 |
-| Jam Pot | 9.2 | 22.4 | 3.1 | 0 | 8.2 | 4.6 | 5.4 | 9.2 | 3.1 | 0 | 2.5 | 0 | 2.8 |
+| Quickshot | 9.8 | 9.3 | 8.9 | 8.9 | 4.8 | **8.6** | **7.9** | 8.5 | 7.3 | 3.7 | 1.2 | 6.1 | 4.9 |
+| Stone Sling | 8.6 | 7.5 | 8.0 | 8.0 | 7.4 | 6.7 | 6.3 | 8.3 | 8.6 | 7.2 | 4.9 | 8.3 | 7.8 |
+| Prize Pumpkin | **11.0** | **34.5** | 2.8 | 0 | 9.9 | 0 | 6.5 | 9.6 | 3.7 | 0 | 3.3 | 0 | 3.8 |
+| Jam Pot | 9.2 | 22.4 | 3.1 | 0 | 8.2 | 4.6 | 5.4 | 9.2 | 3.1 | 0 | 1.9 | 0 | 2.8 |
 | Giant Bow | 5.0 | 2.6 | 3.7 | 0 | 5.6 | 0 | 1.5 | 8.7 | 9.9 | 0 | **10.2** | 0 | **10.2** |
 | Triple Bow | 8.9 | 9.4 | **13.4** | 0 | **13.4** | 0 | 5.3 | **10.4** | **11.9** | 0 | 4.7 | 0 | 4.7 |
 | Star Bloom | 0 | 0 | 0 | **25.0** | 0 | 0 | 0 | 0 | 0 | 5.5 | 0 | 6.1 | 0 |
@@ -437,7 +440,7 @@ What the tables show:
 The support towers, from the same rough model with the phase 4 numbers (before the region 1 tuning), using a straight road past five spots in a row:
 
 - Bell with splash. Ten Shellbacks at strength 200. Five tier 2 Catapults let 7 through. Four tier 2 Catapults and a tier 2 Bell let 4 through. With a Hush Bell, 3. Drowsy walkers bunch up, so splash hits more of them.
-- Bell without splash. With five tier 2 Sling Posts, 7 Shellbacks got through, and swapping one Sling Post for a Bell did not help. Against 24 Scamps at strength 200, five tier 2 Sling Posts let none through. Four and a Hush Bell let 7 through. A Bell is a poor pick in a build of single-target towers.
+- Bell without splash. With five tier 2 Sling Posts, 7 Shellbacks got through, and swapping one Sling Post for a Bell did not help. Against 24 Scamps at strength 200, five tier 2 Sling Posts let none through. Four and a Hush Bell let 7 through. A Bell is a poor pick in a build of single-target towers. The region 2 bots found the opposite on real maps: a Bell gives every tower in its ring more time, so it let a lone Sling Post hold crowds it could not hold alone (TUNING_R2.md).
 - Bakery. Sixteen Shellbacks at strength 200 past a cluster of four Quickshots. A fifth Quickshot let 9 through. A Grand Oven in the middle let 7 through. A Spice Kitchen let none through.
 - Jam Pot against Prize Pumpkin, each at the point where one build starts to leak: against 30 Scamps the Jam Pot build let 0 through and the Prize Pumpkin build 9. Against 12 Shellbacks, 1 against 4. Against 16 fast Skitters, 9 against 3. Against 40 Pips, 4 against 3.
 
@@ -518,7 +521,7 @@ A boss always comes in the final wave of its level or run. A boss that reaches t
 | Boss | Id | Region | Health | Armor | Speed | Moves | Lives lost | Bounty | Special |
 |---|---|---|---|---|---|---|---|---|---|
 | Grumblesack | `grumblesack` | 1 | 2000 | 0 | 0.4 | Walks | 20 | 100 | Every 6.0 s it drops 2 Scamps. |
-| Ironshell | `ironshell` | 2 | 2500 | 6 | 0.4, rising | Walks | 20 | 150 | Gets faster as it is hurt. |
+| Ironshell | `ironshell` | 2 | 2500 | 10 | 0.4, rising | Walks | 20 | 150 | Gets faster as it is hurt. |
 | Moon Moth | `moon_moth` | 3 | 1600 | 3 | 0.3 | Flies | 20 | 200 | Every 6.0 s, 3 Flitters fly out. |
 | Old Tusk | `old_tusk` | 4 | 3000 | 4 | 0.35 | Walks | 20 | 250 | Breaks gates in 2.0 s. At half health, 4 Dusk Moths fly out. |
 
@@ -568,7 +571,7 @@ Example: a Shellback at strength 150 has 135 health, armor 4, speed 0.7, and pay
 | Gatecrasher | Heads for your gates and breaks one open in 4 seconds. |
 | Dusk Moth | An armored flyer. Small hits barely scratch it. |
 | Grumblesack | Huge and slow. Drops 2 Scamps every 6 seconds. |
-| Ironshell | Armor 6. It gets faster each time it loses a quarter of its health. |
+| Ironshell | Armor 10. It gets faster each time it loses a quarter of its health. |
 | Moon Moth | A flying boss with armor 3. Every 6 seconds, 3 Flitters fly out. |
 | Old Tusk | Armor 4. Breaks gates in 2 seconds. At half health, 4 Dusk Moths fly out. |
 
@@ -938,7 +941,9 @@ Region 4, Moonspire Keep:
 | 4-5 | Castle Steps | Flyers, breakers and healers together. | none | none | 3 (6) | 12 | 250 | 750 | 1130 |
 | 4-6 | Old Tusk | The final boss breaks gates. | Old Tusk | 12 | 3 (6) | 12 | 260 | 800 | 1200 |
 
-Suggested entrances: one in region 1, one or two in region 2, two in region 3, two or three in region 4. Level 3-5 has two and 4-4 has three.
+Suggested entrances: one in region 1, one or two in region 2, two in region 3 from 3-2 on, two or three in region 4. Level 3-1 keeps one entrance, so the Firework Tower is its only new idea. The second entrance joins on 3-2, first in a wave of its own. Level 3-5 has two and 4-4 has three.
+
+From region 2 on, most waves set their own strength in the level file, often below the level's, which is the default for a wave that sets none. Pip waves stay at 115 or less where a tier 2 Catapult should pop a Pip in one hit (12.5). Boss waves set theirs too: Grumblesack at 50 on 1-6 (1000 health), Ironshell at 100 on 2-6 (2500 health) and the Moon Moth at 70 on 3-6 (1120 health).
 
 ### 12.4 Level cards: star 3, hint and highlight
 
@@ -953,13 +958,13 @@ The number in each star 3 rule is a starting target. The level designer confirms
 | 1-5 | No tower above tier 2. | Flitters fly over roads and gates. Only Sling Posts hit them. | A spot under the flight line |
 | 1-6 | Use no gates. | At tier 3, a tower picks one of two paths for good. | The spot beside the boss's longest stretch |
 | 2-1 | Call 6 waves early. | Doing well? Call the next wave early for bonus gold. | The call button |
-| 2-2 | Have at most 6 towers. | Bells make walkers drowsy. Slow crowds are easy Catapult targets. | A spot whose ring covers a bend beside a Catapult spot |
+| 2-2 | Use no gates. | Bells make walkers drowsy. Slow crowds are easy Catapult targets. | A spot whose ring covers a bend beside a Catapult spot |
 | 2-3 | No tower above tier 2. | Armor blocks small hits. Longbow arrows go straight through. | A spot that sees two stretches of road |
 | 2-4 | Use at most 1 gate. | Two gates now. Make their road as long as you can. | The socket that starts the longest road |
 | 2-5 | Build no Longbow Lofts. | A bubble stops one hit. Quick Sling Posts pop it for the big hitters. | A spot near the start of the road |
 | 2-6 | Use at most 3 kinds of tower. | Ironshell gets faster as it gets hurt. Keep it drowsy. | The spot beside its longest stretch |
 | 3-1 | Lose no lives. | Fireworks hit only flyers, but the whole flock at once. | A spot under the flight line |
-| 3-2 | Have at most 7 towers. | Puffballs burst into three Puffs. Pop them near a Catapult. | The spot where the road bunches |
+| 3-2 | Have at most 6 towers. | Puffballs burst into three Puffs. Pop them near a Catapult. | The spot where the road bunches |
 | 3-3 | Use at most 2 gates. | Three gates. Try each socket and watch the line. | A socket that looks good but is not the best |
 | 3-4 | Build no Sling Posts. | Dusk Moths wear armor. Skyrockets punch through it. | A spot under the flight line |
 | 3-5 | No tower above tier 2. | none | none |
@@ -974,6 +979,8 @@ The number in each star 3 rule is a starting target. The level designer confirms
 Star 2 on every level: "Keep 15 lives."
 
 Region 1's star 3 rules were set with the bots (TUNING_R1.md): a rule that limits spending is what stops one tower type from earning all three stars. Level 1-6 no longer asks for early calls, which level 2-1 teaches.
+
+Region 2 keeps five of its six rules (TUNING_R2.md). They hold because 2-1, 2-4 and 2-5 bring a dense crowd early (12.5), 2-3 brings a few Flitters, so a tower that cannot hit flyers can never keep 15 lives there (12.6), and Ironshell's shell stops pebbles (6.3). Level 2-2 now asks for no gates: on its short road only Bells and splash keep up, and a lone Sling Post never wins there. Level 3-2 asks for at most 6 towers, because the level designer found that 7 let Sling Posts alone earn three stars.
 
 ### 12.5 Building waves: a guide for the level designer
 
@@ -1007,7 +1014,10 @@ Region 1's star 3 rules were set with the bots (TUNING_R1.md): a rule that limit
 
   A thoughtful player reads the hint and the wave preview, builds the towers the waves call for where they see the most road, and upgrades as gold allows. The bots cannot play like that, so they check what they can instead (12.6): the plain mixed recipe must win, and random strategies must rarely earn all three stars. Random strategies pick their tower mix by chance and never buy more than their list, so their win rate is a floor for comparing levels, not a target. Bart's playtest at hard stop B was the real check for region 1. Later regions: aim for about 85% on each region's first level, falling to about 65% on its boss level.
 - Giving each tower its job. Spread-out Scamps, and tougher Scamps from waves at strength 140 to 180 spaced 1.6 to 2.0 s, are the Sling Post's job: they walk farther apart than a pumpkin splashes. Packs of Scamps and Pip crowds are the Catapult's job. Flitters need Sling Posts. A Pip crowd and a Flitter flock arriving together is the hardest moment for one tower type alone.
-- Third stars that bite. A star 3 rule that limits spending (Upgrade no towers, No tower above tier 2, Have at most N towers) makes the mix matter. In region 1, rules that limit nothing about towers (Call N waves early, Lose no lives) did not stop one tower type from earning all three stars: it bought its way through. Use no gates works on 1-6 only because its late waves are hard.
+- A crowd before the gold. From region 2 on, tier 3 paths and Bells let one tower type buy its way through almost any wave once it has the gold. It cannot do that early, while gold is short. A dense crowd by wave 5 uses that: 36 to 40 Pips 0.05 s apart, at strength 115 or less (30 was not enough on 2-5). Levels 2-1, 2-4 and 2-5 have one, and on each it took a lone Sling Post's best under the level's third star from 19 or 20 lives down to 9 to 13, while mixed builds still keep all 20 (TUNING_R2.md). A crowd after wave 6 does not do it: by then the gold is there.
+- Pip health and splash. A Pip at strength 115 or less has 24 health or less, so one pumpkin from a tier 2 Catapult or a Jam Pot pops it. At strength 120 to 230 it takes two of those, and one from a Prize Pumpkin. Keep a Pip wave at 115 or less when tier 2 Catapults should clear it.
+- A short road favors splash. Single-target towers need time to work through a crowd, so they need a long road. Splash and slows need a crowd that is packed, not time, so they hold a short road too. This is why "Use no gates" asks for a mix on 2-2.
+- Third stars that bite. A star 3 rule that limits spending (Upgrade no towers, No tower above tier 2, Have at most N towers) makes the mix matter. In region 1, rules that limit nothing about towers (Call N waves early, Lose no lives) did not stop one tower type from earning all three stars: it bought its way through. Use no gates works on 1-6 only because its late waves are hard, and on 2-2 because a short road favors splash.
 - Largest wave: one wave spawns at most 120 creatures, counting 3 Puffs for every Puffball, with the level's Twist applied. Boss summons depend on how long the boss lives, so the bots report the real peak. At most 2 waves run at once (4.9). That is the contract's performance ceiling. Aim for 80 or fewer per wave so the screen stays readable.
 - Groups per wave. The folded preview strip is one line (9.1), with room for about 4 groups on the cover screen. Prefer 4 groups or fewer a wave, so even a folded preview shows the whole wave. This is a guide, not a limit.
 - Map height: see 3.1. On a 13 row map the bottom row is scenery only. Ranges are long on a 7-wide map by design: a Longbow Loft in the middle column reaches both side lanes.
@@ -1047,12 +1057,14 @@ Every campaign level must pass these checks:
 | The plain mixed recipe on Normal | Region 1: it keeps 15 lives or more on 1-1 to 1-5, and wins 1-6. Regions 2 to 4: it keeps 15 lives or more on each region's first two levels, and wins the other four. |
 | The plain mixed recipe on Relaxed | It wins with no gates placed, and with its best placement. |
 | All three stars | A search finds one Normal win that earns all three stars. |
-| No super tower | For each attacking tower the level offers, a search that may use only that tower plus the level's support towers finds no Normal win with all three stars. Bells and Bakeries never defeat anything alone, so they need no search of their own. Each search tries at least 2500 builds (TUNING_R1.md: on some levels the first single-tower win only turned up after 1000 to 2200). |
+| No super tower | For each attacking tower the level offers, searches that may use only that tower plus the level's support towers find no Normal win with all three stars. Bells and Bakeries never defeat anything alone, so they need no search of their own. Each attacking tower gets two searches with different seeds, each of at least 6000 builds. If neither of the two has won a single game after 2500 builds, both may stop there. A tower that cannot hit flyers lets every flyer through, so it needs no search on a level whose flyers in the wave data cost 6 lives or more: it can never keep 15 lives there. In the same way the Firework Tower, which cannot hit walkers, needs no search on a level whose walkers cost 6 lives or more. |
 | Random play | Random strategies earn all three stars in under 10% of plays. |
 | Length | 5 to 10 minutes at 1x (12.5). |
 | Size and speed | The report gives the largest wave, the most creatures on the map at once and the time per tick. |
 
 The "No super tower" check is stricter than the brief's words, "no single tower type earns three stars alone". One attacking tower type with Bells or Bakeries still has one tower doing every job, so it counts as that tower alone.
+
+Why two searches of 6000 builds: a search starts from random builds and edits the best ones, so it can get stuck. On 2-2 a lone Sling Post lost every build of one 2500 build search, a 6000 build search found no three-star win, and another 6000 build search found its first one at build 3872 (docs/balance/region2-2026-10-24.md, F7). A draft of the new 2-5 did the same: its 2500 build search found a best of 14 lives, and a 6000 build search found three-star builds from build 4783 on (TUNING_R2.md). Earlier passes used 2500 builds (TUNING_R1.md: on some levels the first single-tower win turned up after 1000 to 2200).
 
 Every Twist: some strategy wins it on Normal (13).
 
@@ -1247,7 +1259,7 @@ Risk (5). Each changes the next wave only.
 ### 14.7 Leaving, losing and results
 
 - A run can be left at any time and resumed later at the exact moment it was left, from the Continue card or its own mode button (4.10).
-- A run ends when lives reach 0, or when the player abandons it from Pause after a confirm. An abandoned run counts as a loss at its current wave.
+- A run ends when lives reach 0, when the player abandons it from Pause after a confirm, or when the player starts a new run of the same mode over it (4.10). An abandoned run counts as a loss at its current wave, and so does a run that was started over.
 - A run's result is: won or lost, waves cleared, and lives left.
 - Runs carry nothing over except progress toward unlocks (14.6).
 
