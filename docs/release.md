@@ -57,3 +57,15 @@ bash scripts/install.sh       # needs exactly one ready phone on USB
 ```
 
 PowerShell has `scripts\install.ps1`.
+
+## Check a release APK
+
+```bash
+bash scripts/check_apk.sh --release path/to/forkline-release.apk
+```
+
+`--release` adds one check: the manifest must not have `android:debuggable` set to true (absent or false is fine). The debug APK is debuggable on purpose, so the default mode only prints a note. Play also refuses debuggable uploads. Release signing is ask first, so no release APK exists yet.
+
+## Wording for the privacy policy and store listing (phase 9)
+
+The export sets `allowBackup` to false, so there is no cloud or adb backup of saves. Android's documentation says some manufacturers' devices can still move app files in a device to device transfer on API 31 and higher. So write that the app never sends saves anywhere. Do not write that saves can never leave the phone.

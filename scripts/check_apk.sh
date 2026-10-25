@@ -3,7 +3,8 @@
 # Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.
 #
 # Checks a built APK. Run from any folder, in Git Bash:
-#   scripts/check_apk.sh [path-to-apk]        (default: build/forkline-debug.apk)
+#   scripts/check_apk.sh [path-to-apk]              (default: build/forkline-debug.apk)
+#   scripts/check_apk.sh --release [path-to-apk]    (default: build/forkline-release.apk)
 #
 # It prints everything the APK bundles, the Java packages and native libraries
 # inside it, and the permissions in its manifest. It then checks that:
@@ -18,6 +19,9 @@
 #   5. the launcher icons are Forkline's, not Godot's stock icon (each icon
 #      file differs from the one in Godot's export template);
 #   6. every bundled third party part is credited in NOTICE and README.md.
+# With --release, the check also fails if the manifest has android:debuggable
+# set to true. A release APK must be absent or false there. In the default
+# debug mode a debuggable APK is expected, and the script only says so.
 # Exit code 0 means every check passed. 1 means a permission, a missing or
 # wrong file or manifest value, or a missing tool. 2 means a bundled part is
 # not credited.
@@ -30,14 +34,27 @@
 set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-apk="${1:-$root/build/forkline-debug.apk}"
+release=0
+apk_arg=""
+for arg in "$@"; do
+	case "$arg" in
+		--release) release=1 ;;
+		-*) echo "Unknown option: $arg"; exit 1 ;;
+		*) apk_arg="$arg" ;;
+	esac
+done
+if [ "$release" -eq 1 ]; then
+	apk="${apk_arg:-$root/build/forkline-release.apk}"
+else
+	apk="${apk_arg:-$root/build/forkline-debug.apk}"
+fi
 sdk="${ANDROID_SDK:-C:/Android/Sdk}"
 failed=0
 uncredited=0
 missing=""
 
 if [ ! -f "$apk" ]; then
-	echo "There is no APK at $apk. Build it first: scripts/build.sh"
+	echo "There is no APK at $apk. Build it first (scripts/build.sh builds the debug APK)."
 	exit 1
 fi
 apk="$(cd "$(dirname "$apk")" && pwd)/$(basename "$apk")"
@@ -139,7 +156,20 @@ if [ -z "$manifest" ]; then
 	echo "FAIL: aapt2 could not read the manifest."
 	failed=1
 else
-	printf '%s\n' "$manifest" | grep -E 'android:(icon|appCategory|isGame|allowBackup|targetSdkVersion|screenOrientation|resizeableActivity|configChanges)\(' | sed 's/^ *//; s|http://schemas.android.com/apk/res/android:||'
+	printf '%s\n' "$manifest" | grep -E 'android:(icon|appCategory|isGame|allowBackup|debuggable|targetSdkVersion|screenOrientation|resizeableActivity|configChanges)\(' | sed 's/^ *//; s|http://schemas.android.com/apk/res/android:||'
+	# Prints true, false or absent for android:debuggable in the manifest text on stdin.
+	debuggable_state() {
+		local line
+		line="$(grep -m1 -E 'android:debuggable\(' || true)"
+		if [ -z "$line" ]; then
+			echo absent
+		else
+			case "$line" in
+				*=true*|*0xffffffff*) echo true ;;
+				*) echo false ;;
+			esac
+		fi
+	}
 	# Prints the value of the first manifest attribute with this name.
 	manifest_value() {
 		printf '%s\n' "$manifest" | grep -m1 -E "android:$1\(" | sed 's/.*)=//; s/ (Raw:.*//'
@@ -159,6 +189,16 @@ else
 	expect_value resizeableActivity true "resizable"
 	expect_value appCategory 0 "game"
 	expect_value allowBackup false "no backup of saves"
+	debuggable="$(printf '%s
+' "$manifest" | debuggable_state)"
+	if [ "$debuggable" != "true" ]; then
+		echo "OK: debuggable is $debuggable (not debuggable)."
+	elif [ "$release" -eq 1 ]; then
+		echo "FAIL: the manifest has android:debuggable=true. A release APK must not be debuggable."
+		failed=1
+	else
+		echo "Note: this debug APK is debuggable, as expected. Anyone with USB access can read its files through run-as. A release APK must not be (use --release to check)."
+	fi
 	changes="$(manifest_value configChanges)"
 	if [ -n "$changes" ] && [ $(( changes & 0x1d80 )) -eq $(( 0x1d80 )) ]; then
 		echo "OK: configChanges is $changes, it includes 0x1d80 (orientation, screenLayout, screenSize, smallestScreenSize, density)."
@@ -272,7 +312,7 @@ if [ -n "$missing" ]; then
 	done <<< "$missing"
 fi
 echo
-echo "The About screen must list the same parts. It does not exist yet, so check it by hand once it does."
+echo "The About screen reads its Android credits from NOTICE, so it lists the same parts. Check it by eye on the phone."
 
 echo
 if [ "$failed" -ne 0 ]; then
