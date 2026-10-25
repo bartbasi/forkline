@@ -3,8 +3,9 @@
 extends "res://tests/base_test.gd"
 ## The real run segments and wave packs in data/segments/ (docs/ARCHITECTURE.md 2.9, 2.12;
 ## RULES 14.2, 14.3). Every file is listed, the files pass RunData.check, every stack of
-## segments that fit is a valid run map with a gate worth placing, every bottom segment
-## keeps its last row scenery, and every choice of packs keeps the new creature rule.
+## segments that fit is a valid run map with a gate worth placing and a Bakery spot, every
+## bottom segment keeps its last row scenery, every choice of packs keeps the new creature rule,
+## and only boss waves set their own strength.
 
 const SEGMENT_DIR: String = "res://data/segments/"
 const RUN_PATH: String = "res://data/runs/run.json"
@@ -23,6 +24,11 @@ const SPAWN_AIM: int = 80
 const GROUPS_AIM: int = 4
 ## Seeds assembled into whole runs.
 const SEEDS: int = 50
+## RULES 14.2: the build spots a Bakery spot has among its eight neighbors.
+const BAKERY_NEIGHBORS: int = 3
+## RULES 14.3 and docs/ARCHITECTURE.md 2.4, 2.9: a boss wave's own strength.
+const STRENGTH_MIN: int = 50
+const STRENGTH_MAX: int = 1000
 
 var catalog: Catalog = null
 var files: Dictionary = {}
@@ -237,6 +243,26 @@ func test_every_stack_has_a_gate_that_steers() -> void:
 		assert_true(steers >= 1, "%s / %s / %s: some gate changes a route" % stack)
 
 
+## RULES 14.2 and docs/ARCHITECTURE.md 2.9: every stack has a Bakery spot, a build spot with at
+## least 3 other build spots among its eight neighbors, so a Bakery there reaches 3 towers.
+func test_every_stack_has_a_bakery_spot() -> void:
+	var stacks: Array[Array] = _stacks()
+	assert_true(stacks.size() > 0, "some stacks")
+	for stack: Array in stacks:
+		var level: LevelData = _build(stack)
+		if level == null:
+			fail("%s / %s / %s does not build" % stack)
+			continue
+		var best: int = 0
+		for spot: Vector2i in level.spots:
+			var near: int = 0
+			for other: Vector2i in level.spots:
+				if other != spot and absi(other.x - spot.x) <= 1 and absi(other.y - spot.y) <= 1:
+					near += 1
+			best = maxi(best, near)
+		assert_true(best >= BAKERY_NEIGHBORS, "%s / %s / %s: the best Bakery spot reaches %d spots, needs %d" % [stack[0], stack[1], stack[2], best, BAKERY_NEIGHBORS])
+
+
 ## Every assembled run builds, as the roguelite engineer's test also checks, and its waves
 ## reach only entrances the map has.
 func test_runs_from_seeds_assemble() -> void:
@@ -330,6 +356,55 @@ func test_pack_waves_stay_readable() -> void:
 			var total: int = RunPacks.spawn_total(groups, catalog, none)
 			assert_true(total <= SPAWN_AIM, "%s wave %d spawns %d, RULES 12.5 aims for %d or fewer" % [pack["id"], w + 1, total, SPAWN_AIM])
 			assert_true(groups.size() <= GROUPS_AIM, "%s wave %d has %d groups" % [pack["id"], w + 1, groups.size()])
+
+
+## RULES 14.3 and docs/ARCHITECTURE.md 2.9: a band 6 pack's third wave, the boss wave, sets its
+## own strength, 50 to 1,000, and no other pack wave has one. Read from the file itself, so the
+## check holds whatever shape RunData gives its packs.
+func test_only_boss_waves_set_a_strength() -> void:
+	var raw: Variant = files.get("segments/packs.json", null)
+	if typeof(raw) != TYPE_DICTIONARY or typeof((raw as Dictionary).get("packs", null)) != TYPE_ARRAY:
+		fail("packs.json does not parse to an object with packs")
+		return
+	var boss_waves: int = 0
+	for pack: Variant in (raw as Dictionary)["packs"]:
+		var item: Dictionary = pack
+		var waves: Array = item["waves"]
+		for w: int in waves.size():
+			var wave: Dictionary = waves[w]
+			var label: String = "%s wave %d" % [item["id"], w + 1]
+			if int(item["band"]) == RunData.BANDS and w == waves.size() - 1:
+				boss_waves += 1
+				assert_true(wave.has("strength"), "%s, the boss wave, sets its strength" % label)
+				var value: Variant = wave.get("strength", 0)
+				assert_true(typeof(value) == TYPE_INT or (typeof(value) == TYPE_FLOAT and float(value) == floorf(float(value))), "%s: the strength is a whole number" % label)
+				assert_true(int(value) >= STRENGTH_MIN and int(value) <= STRENGTH_MAX, "%s: strength %s is %d to %d" % [label, value, STRENGTH_MIN, STRENGTH_MAX])
+			else:
+				assert_false(wave.has("strength"), "%s sets no strength; only boss waves do" % label)
+	assert_true(boss_waves >= 4, "the band 6 packs were found, got %d" % boss_waves)
+
+
+## Every assembled run's wave 18 takes its band 6 pack's boss wave strength, and waves 1 to 17
+## rise by run.json's step.
+func test_runs_take_the_boss_wave_strength_from_their_pack() -> void:
+	if data == null:
+		fail("the run files do not load")
+		return
+	for run_seed: int in SEEDS:
+		var plan: Dictionary = MapAssembler.plan(run_seed, data)
+		var level: LevelData = MapAssembler.assemble(run_seed, data, catalog)
+		if level == null or plan.is_empty():
+			fail("seed %d does not assemble" % run_seed)
+			continue
+		var boss_pack: StringName = (plan["packs"] as Array)[RunData.BANDS - 1]
+		var wanted: int = -1
+		for pack: Dictionary in data.packs_of(RunData.BANDS):
+			if pack["id"] == boss_pack:
+				wanted = int(((pack["waves"] as Array)[2] as Dictionary).get("strength", -1))
+		var last: int = level.waves.size() - 1
+		assert_eq(level.waves[last].strength, wanted, "seed %d: wave 18 has %s's boss wave strength" % [run_seed, boss_pack])
+		for w: int in last:
+			assert_eq(level.waves[w].strength, data.strength_start + data.strength_step * w, "seed %d wave %d strength" % [run_seed, w + 1])
 
 
 ## RULES 14.3: the boss comes alone at the start of the third wave of its pack, and each boss

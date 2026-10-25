@@ -230,8 +230,9 @@ func _read_plan(raw: Variant, catalog: Catalog, chk: DataCheck) -> void:
 	chk.integer(top, "format", "", FORMAT, FORMAT)
 	strength_start = chk.integer(top, "strength_start", "", 50, 1000, 1, 100)
 	strength_step = chk.integer(top, "strength_step", "", 0, 100)
-	if strength_start + strength_step * (BANDS * 3 - 1) > 1000:
-		chk.fail("strength_step", "wave %d's strength must be at most 1000" % (BANDS * 3))
+	# Waves 1 to 17 rise by the step. Wave 18 takes its pack's own strength (2.9).
+	if strength_start + strength_step * (BANDS * 3 - 2) > 1000:
+		chk.fail("strength_step", "wave %d's strength must be at most 1000" % (BANDS * 3 - 1))
 	start_gold = chk.integer(top, "start_gold", "", 0, 100000, 10)
 	gates = chk.integer(top, "gates", "", 0, catalog.rules.max_gates)
 	var tower_list: Array = chk.array(top, "towers", "", 1, 6)
@@ -312,3 +313,5 @@ func _read_weights(raw: Variant, chk: DataCheck) -> void:
 		sum += weight
 	if sum <= 0:
 		chk.fail("weights", "at least one weight must be above 0")
+	if weights.get(&"economy", 0) <= 0:
+		chk.fail("weights.economy", "must be above 0, so a draft is never empty")

@@ -422,7 +422,8 @@ func add_effects(effects: Array[Dictionary], risk: bool) -> StringName:
 			"add_gold":
 				gold = mini(gold + int(effect["amount"]) + int(effect["per_wave"]) * _waves_cleared, BIG)
 			"add_lives":
-				lives = mini(lives + int(effect["amount"]), MAX_LIVES)
+				# RULES 4.4: never above the starting lives, and a gain never lowers lives.
+				lives = maxi(lives, mini(lives + int(effect["amount"]), start_lives))
 	if not kept.is_empty():
 		card_effects.append_array(kept)
 		_effects_changed()

@@ -6,6 +6,7 @@ extends RefCounted
 ## RunData calls it. A pack is read into a plain Dictionary:
 ## {"id": StringName, "band": int, "boss": StringName, "waves": Array of {"groups": Array of
 ## {"enemy": String, "count": int, "entrance": int, "at_ms": int, "every_ms": int}}}.
+## A band 6 pack's third wave (the boss wave) also holds "strength": int. No other wave does.
 ## Group fields stay in the file's units (1 based entrance, milliseconds).
 
 ## Equal to RunData.BANDS (a test checks). RunPacks does not name RunData, so the two
@@ -14,6 +15,8 @@ const BANDS: int = 6
 const PACKS_MAX: int = 256
 const WAVES: int = 3
 const MIN_PER_BAND: int = 4
+const STRENGTH_MIN: int = 50
+const STRENGTH_MAX: int = 1000
 const SCAMP: StringName = &"scamp"
 const GROUP_KEYS: PackedStringArray = ["enemy", "count", "entrance", "at_ms", "every_ms"]
 
@@ -67,7 +70,8 @@ static func _read_pack(raw: Variant, path: String, catalog: Catalog, bands: Arra
 	var waves: Array[Dictionary] = []
 	var wave_list: Array = chk.array(item, "waves", path, WAVES, WAVES)
 	for w: int in wave_list.size():
-		waves.append(_read_wave(wave_list[w], "%s.waves[%d]" % [path, w], catalog, chk))
+		var boss_wave: bool = band == BANDS and w == WAVES - 1
+		waves.append(_read_wave(wave_list[w], "%s.waves[%d]" % [path, w], boss_wave, catalog, chk))
 	if id == &"" or band == 0:
 		return {}
 	var pack: Dictionary = {"id": id, "band": band, "boss": boss, "waves": waves}
@@ -77,9 +81,12 @@ static func _read_pack(raw: Variant, path: String, catalog: Catalog, bands: Arra
 	return pack
 
 
-static func _read_wave(raw: Variant, path: String, catalog: Catalog, chk: DataCheck) -> Dictionary:
+## boss_wave: this is a band 6 pack's third wave, which must carry a strength (50 to 1000).
+## Every other wave must not.
+static func _read_wave(raw: Variant, path: String, boss_wave: bool, catalog: Catalog, chk: DataCheck) -> Dictionary:
 	var groups: Array[Dictionary] = []
-	if not chk.object(raw, path, ["groups"]):
+	var required: PackedStringArray = ["groups", "strength"] if boss_wave else ["groups"]
+	if not chk.object(raw, path, required):
 		return {"groups": groups}
 	var wave: Dictionary = raw
 	var list: Array = chk.array(wave, "groups", path, 1, LevelData.MAX_GROUPS)
@@ -98,6 +105,8 @@ static func _read_wave(raw: Variant, path: String, catalog: Catalog, chk: DataCh
 			"at_ms": chk.integer(item, "at_ms", group_path, 0, 600000, 50),
 			"every_ms": chk.integer(item, "every_ms", group_path, 50, 60000, 50, 50),
 		})
+	if boss_wave:
+		return {"groups": groups, "strength": chk.integer(wave, "strength", path, STRENGTH_MIN, STRENGTH_MAX, 1, STRENGTH_MIN)}
 	return {"groups": groups}
 
 

@@ -84,7 +84,7 @@ func test_the_real_run_plan_is_the_one_in_the_contract() -> void:
 	assert_eq(data.gates, 1)
 	assert_eq(data.towers, [&"sling_post"])
 	assert_eq(data.rows, {"top": 4, "middle": 5, "bottom": 4})
-	assert_eq([data.spots_min, data.spots_max, data.sockets_min, data.sockets_max], [8, 12, 2, 5])
+	assert_eq([data.spots_min, data.spots_max, data.sockets_min, data.sockets_max], [11, 12, 2, 5])
 	assert_eq(data.bands[0], [&"scamp", &"pip"])
 	assert_eq(data.bands[1], [&"skitter", &"flitter", &"shellback"])
 	assert_eq(data.bands[2], [&"bubbler", &"puffball"])
@@ -94,9 +94,9 @@ func test_the_real_run_plan_is_the_one_in_the_contract() -> void:
 	assert_eq([data.weights[&"tower"], data.weights[&"perk"], data.weights[&"gate"], data.weights[&"economy"], data.weights[&"risk"]], [30, 25, 10, 20, 15])
 
 
-func test_wave_18_has_strength_270() -> void:
+func test_wave_17_has_strength_260() -> void:
 	var data: RunData = RunData.from_data(_files(), catalog)
-	assert_eq(data.strength_start + data.strength_step * 17, 270)
+	assert_eq(data.strength_start + data.strength_step * 16, 260)
 
 
 func test_the_real_cards_are_the_34_of_the_contract_in_order() -> void:
@@ -166,8 +166,8 @@ func test_card_words_follow_the_writing_rules() -> void:
 func test_risk_cards_name_a_reward_and_gate_the_next_wave_only() -> void:
 	var data: RunData = RunData.from_data(_files(), catalog)
 	var amounts: Dictionary = {
-		&"crowded_night": 100, &"thick_hides": 120, &"hurry_night": 100, &"gateless_night": 120, &"flock": 80,
-		&"moonlit_wager": 250, &"crasher_escort": 150, &"pip_parade": 100,
+		&"crowded_night": 100, &"thick_hides": 120, &"hurry_night": 60, &"gateless_night": 60, &"flock": 80,
+		&"moonlit_wager": 250, &"crasher_escort": 150, &"pip_parade": 120,
 	}
 	for id: StringName in amounts.keys():
 		var card: Dictionary = data.card(id)
@@ -177,6 +177,29 @@ func test_risk_cards_name_a_reward_and_gate_the_next_wave_only() -> void:
 				rewards.append(effect["amount"])
 		assert_eq(rewards, [amounts[id]], "reward of %s" % id)
 		assert_true(card["text"].contains(str(amounts[id])), "%s says its reward" % id)
+
+
+## The six cards TUNING_RUNS 3.3 changes, pinned word for word.
+func test_the_run_tuning_cards_are_as_set_in_g3() -> void:
+	var data: RunData = RunData.from_data(_files(), catalog)
+	assert_eq(data.card(&"tea_break")["text"], "Gain 5 lives, but never more than you started with.")
+	assert_eq(data.card(&"tea_break")["effects"][0]["amount"], 5)
+	var pebbles: Dictionary = data.card(&"sharp_pebbles")
+	assert_eq(pebbles["text"], "Sling Posts deal 1 more damage per hit.")
+	assert_eq(pebbles["effects"].size(), 1)
+	assert_eq([pebbles["effects"][0]["stat"], pebbles["effects"][0]["amount"]], ["damage", 1])
+	var hurry: Dictionary = data.card(&"hurry_night")
+	assert_eq(hurry["text"], "Next wave: creatures move 50% faster. Reward: 60 gold, more later.")
+	assert_eq([hurry["effects"][0]["type"], hurry["effects"][0]["pct"]], ["speed_pct", 150])
+	assert_eq(data.card(&"gateless_night")["text"], "Next wave: your gates stand open. Reward: 60 gold, more later.")
+	var parade: Dictionary = data.card(&"pip_parade")
+	assert_eq(parade["text"], "Next wave: 16 more Pips. Reward: 120 gold, more in later waves.")
+	var group: Dictionary = parade["effects"][0]
+	assert_eq([group["type"], group["enemy"], group["count"], group["entrance"], group["at_ms"], group["every_ms"], group["after_last"]], ["add_group", "pip", 16, 1, 1000, 300, false])
+	var volley: Dictionary = data.card(&"volley")
+	assert_eq(volley["text"], "Longbow Lofts hit 1 more target, but deal 25% less damage.")
+	assert_eq([volley["effects"][0]["stat"], volley["effects"][0]["amount"]], ["targets", 1])
+	assert_eq([volley["effects"][1]["type"], volley["effects"][1]["stat"], volley["effects"][1]["pct"]], ["tower_pct", "damage", 75])
 
 
 func test_every_real_card_is_accepted_by_a_battle() -> void:
@@ -249,3 +272,42 @@ func test_real_runs_start_with_the_real_pools() -> void:
 	if daily != null:
 		assert_eq(daily.card(&"gold_purse")["kind"], &"economy")
 		assert_eq(daily.drafts_owed(), 0)
+
+
+## TUNING_RUNS 1.2: each band 6 pack's boss wave sets its own strength, and no other wave does.
+func test_the_real_boss_waves_set_the_strengths_of_g3() -> void:
+	var data: RunData = RunData.from_data(_real_files(), catalog)
+	assert_not_null(data)
+	if data == null:
+		return
+	var want: Dictionary = {
+		&"b6_grumble_hill": 290, &"b6_grumble_march": 270, &"b6_iron_road": 150, &"b6_iron_gate": 150,
+		&"b6_moon_rise": 150, &"b6_moon_tide": 140, &"b6_tusk_charge": 200, &"b6_tusk_night": 180,
+	}
+	var seen: int = 0
+	for pack: Dictionary in data.packs:
+		for k: int in 3:
+			var wave: Dictionary = pack["waves"][k]
+			if pack["band"] == 6 and k == 2:
+				assert_eq(wave["strength"], want.get(pack["id"], -1), "boss wave of %s" % pack["id"])
+				seen += 1
+			else:
+				assert_false(wave.has("strength"), "%s wave %d has no strength" % [pack["id"], k + 1])
+	assert_eq(seen, want.size())
+
+
+## A real run's wave 18 takes the strength of the band 6 pack its seed picked.
+func test_a_real_runs_wave_18_takes_its_packs_strength() -> void:
+	var data: RunData = RunData.from_data(_real_files(), catalog)
+	assert_not_null(data)
+	if data == null:
+		return
+	for run_seed: int in [1, 2, 3, 12345, 20261023]:
+		var level: LevelData = MapAssembler.assemble(run_seed, data, catalog)
+		var picks: Dictionary = MapAssembler.plan(run_seed, data)
+		var pack: Dictionary = {}
+		for item: Dictionary in data.packs:
+			if item["id"] == picks["packs"][5]:
+				pack = item
+		assert_eq(level.waves[17].strength, pack["waves"][2]["strength"], "seed %d" % run_seed)
+		assert_eq(level.waves[16].strength, 260, "wave 17 keeps the step")

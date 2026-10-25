@@ -148,7 +148,7 @@ func test_run_plan_hostile() -> void:
 	_expect("start too high", func(f: Dictionary) -> void: f["runs/run.json"]["strength_start"] = 1001, "strength_start")
 	_expect("step too high", func(f: Dictionary) -> void: f["runs/run.json"]["strength_step"] = 101, "strength_step")
 	_expect("step negative", func(f: Dictionary) -> void: f["runs/run.json"]["strength_step"] = -1, "strength_step")
-	_expect("wave 18 over 1000", func(f: Dictionary) -> void: f["runs/run.json"]["strength_step"] = 60, "at most 1000")
+	_expect("wave 17 over 1000", func(f: Dictionary) -> void: f["runs/run.json"]["strength_step"] = 57, "at most 1000")
 	_expect("fraction", func(f: Dictionary) -> void: f["runs/run.json"]["strength_start"] = 100.5, "whole number")
 	_expect("string number", func(f: Dictionary) -> void: f["runs/run.json"]["strength_start"] = "100", "whole number")
 	_expect("huge number", func(f: Dictionary) -> void: f["runs/run.json"]["strength_start"] = 1e30, "whole number")
@@ -188,6 +188,17 @@ func test_run_plan_hostile() -> void:
 	_expect("weight too high", func(f: Dictionary) -> void: f["runs/run.json"]["weights"]["tower"] = 1001, "weights.tower")
 	_expect("weight negative", func(f: Dictionary) -> void: f["runs/run.json"]["weights"]["tower"] = -1, "weights.tower")
 	_expect("all weights zero", func(f: Dictionary) -> void: f["runs/run.json"]["weights"] = {"tower": 0, "perk": 0, "gate": 0, "economy": 0, "risk": 0}, "above 0")
+	_expect("economy weight zero", func(f: Dictionary) -> void: f["runs/run.json"]["weights"]["economy"] = 0, "weights.economy")
+
+
+## Wave 18 takes its pack's strength, so only wave 17 is held to 1,000: 100 + 56 * 16 is 996.
+func test_only_wave_17_is_limited_by_the_step() -> void:
+	var files: Dictionary = Fx.files_from_json()
+	files["runs/run.json"]["strength_step"] = 56
+	assert_eq(RunData.check(files, catalog), PackedStringArray())
+	files["runs/run.json"]["strength_step"] = 57
+	assert_true("
+".join(RunData.check(files, catalog)).contains("wave 17's strength must be at most 1000"))
 
 
 func test_one_weight_above_zero_is_enough() -> void:

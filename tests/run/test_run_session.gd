@@ -743,9 +743,18 @@ func test_picking_gold_lives_and_gates() -> void:
 	data = RunData.from_data(extra, catalog)
 	assert_not_null(data)
 	var tea: RunSession = _after_wave_one([&"tea_break"] as Array[StringName])
-	var lives: int = tea.battle.lives
+	var start_lives: int = tea.battle.start_lives
+	tea.battle.lives = start_lives   # the test player is rich and has far more lives than a real run
 	assert_eq(tea.pick(&"tea_break"), Battle.DONE)
-	assert_eq(tea.battle.lives, lives + 5)
+	assert_eq(tea.battle.lives, start_lives, "Tea Break never lifts lives above the start")
+	var hurt: RunSession = _after_wave_one([&"tea_break"] as Array[StringName])
+	hurt.battle.lives = start_lives - 3
+	assert_eq(hurt.pick(&"tea_break"), Battle.DONE)
+	assert_eq(hurt.battle.lives, start_lives, "it repairs lost lives up to the start")
+	var half: RunSession = _after_wave_one([&"tea_break"] as Array[StringName])
+	half.battle.lives = start_lives - 10
+	assert_eq(half.pick(&"tea_break"), Battle.DONE)
+	assert_eq(half.battle.lives, start_lives - 5, "and gives the full 5 when that stays under the start")
 	var gate: RunSession = _after_wave_one([&"spare_gate", &"gold_purse"] as Array[StringName])
 	var in_hand: int = gate.battle.gates_in_hand
 	assert_eq(gate.pick(&"spare_gate"), Battle.DONE)

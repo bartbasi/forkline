@@ -322,15 +322,49 @@ func test_instant_cards_rules_14_5() -> void:
 	var gold: int = b.gold
 	assert_eq(b.add_effects(_effects([{"type": "add_gold", "amount": 100, "per_wave": 10}]), false), Battle.DONE)
 	assert_eq(b.gold, gold + 110, "100 plus 10 for the one wave cleared")
-	var lives: int = b.lives
+	b.lives = b.start_lives - 10
 	b.add_effects(_effects([{"type": "add_lives", "amount": 5}]), false)
-	assert_eq(b.lives, lives + 5)
+	assert_eq(b.lives, b.start_lives - 5)
 	b.add_effects(_effects([{"type": "add_gates", "count": 1}]), false)
 	b.add_effects(_effects([{"type": "add_gates", "count": 1}]), false)
 	b.add_effects(_effects([{"type": "add_gates", "count": 1}]), false)
 	assert_eq(b.gates_in_hand, catalog.rules.max_gates, "never more than max_gates")
 	assert_eq(b.card_effects.size(), 0, "instant effects are not kept")
 	assert_not_null(Fx.restored(b), "the gained gates save")
+
+
+func _tea_break(b: Battle, lives: int) -> int:
+	b.lives = lives
+	assert_eq(b.add_effects(_effects([{"type": "add_lives", "amount": 5}]), false), Battle.DONE)
+	return b.lives
+
+
+func test_tea_break_never_lifts_lives_above_the_start_rules_4_4() -> void:
+	var b: Battle = _run_battle()
+	assert_eq(b.start_lives, 20)
+	assert_eq(_tea_break(b, 20), 20, "at full lives it does nothing")
+	assert_eq(_tea_break(b, 18), 20, "18 gives 20, not 23")
+	assert_eq(_tea_break(b, 15), 20, "15 gives 20")
+	assert_eq(_tea_break(b, 10), 15, "10 gives the full 5")
+	b.lives = 15
+	b.add_effects(_effects([{"type": "add_lives", "amount": 0}]), false)
+	assert_eq(b.lives, 15, "0 adds nothing")
+	var relaxed: Battle = Battle.create(_level(Fx.LINE_GRID, [{"groups": [Fx.group("scamp", 2, 0, 500)]}], {"towers": ["sling_post"]}), catalog, true, [])
+	assert_eq(relaxed.start_lives, 40)
+	assert_eq(_tea_break(relaxed, 40), 40, "Relaxed caps at 40")
+	assert_eq(_tea_break(relaxed, 38), 40)
+	assert_eq(_tea_break(relaxed, 30), 35)
+
+
+func test_a_restored_battle_above_its_start_keeps_its_lives_contract_2_8() -> void:
+	# An older build let cards bank lives. Such a save loads as it was, and a gain never lowers it.
+	var b: Battle = _run_battle()
+	b.lives = 25
+	var copy: Battle = Fx.restored(b)
+	assert_not_null(copy, "lives above the start are not refused")
+	assert_eq([copy.lives, copy.start_lives], [25, 20], "nor clamped")
+	assert_eq(Fx.snapshot(copy), Fx.snapshot(b))
+	assert_eq(_tea_break(copy, 25), 25, "Tea Break does not lower them")
 
 
 func test_add_effects_refusals_contract_2_8() -> void:

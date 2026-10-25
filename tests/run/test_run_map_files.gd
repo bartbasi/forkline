@@ -227,6 +227,13 @@ func test_a_bottom_last_row_may_hold_scenery_only_when_the_run_is_13_rows() -> v
 
 # ---- packs ----
 
+func test_boss_wave_strength_limits_are_inclusive() -> void:
+	for value: int in [50, 1000]:
+		var files: Dictionary = Fx.files_from_json()
+		_pack(files, "band6_pack0")["waves"][2]["strength"] = value
+		assert_eq(RunData.check(files, catalog), PackedStringArray(), "strength %d" % value)
+
+
 func test_packs_hostile() -> void:
 	_expect("file missing", func(f: Dictionary) -> void: f.erase("segments/packs.json"), "packs.json: is missing")
 	_expect("not an object", func(f: Dictionary) -> void: f["segments/packs.json"] = [], "packs.json")
@@ -248,6 +255,16 @@ func test_packs_hostile() -> void:
 	_expect("two waves", func(f: Dictionary) -> void: _pack(f, "band2_pack1")["waves"].pop_back(), "waves")
 	_expect("four waves", func(f: Dictionary) -> void: _pack(f, "band2_pack1")["waves"].append(_pack(f, "band2_pack1")["waves"][0].duplicate(true)), "waves")
 	_expect("wave strength", func(f: Dictionary) -> void: _pack(f, "band2_pack1")["waves"][0]["strength"] = 100, "unknown key strength")
+	_expect("strength on a band 2 third wave", func(f: Dictionary) -> void: _pack(f, "band2_pack1")["waves"][2]["strength"] = 100, "unknown key strength")
+	_expect("strength on a band 5 third wave", func(f: Dictionary) -> void: _pack(f, "band5_pack0")["waves"][2]["strength"] = 150, "unknown key strength")
+	_expect("strength on a band 6 first wave", func(f: Dictionary) -> void: _pack(f, "band6_pack0")["waves"][0]["strength"] = 150, "waves[0]: unknown key strength")
+	_expect("strength on a band 6 second wave", func(f: Dictionary) -> void: _pack(f, "band6_pack0")["waves"][1]["strength"] = 150, "waves[1]: unknown key strength")
+	_expect("band 6 boss wave without strength", func(f: Dictionary) -> void: _pack(f, "band6_pack0")["waves"][2].erase("strength"), "waves[2].strength: is missing")
+	_expect("boss strength 49", func(f: Dictionary) -> void: _pack(f, "band6_pack0")["waves"][2]["strength"] = 49, "waves[2].strength")
+	_expect("boss strength 1001", func(f: Dictionary) -> void: _pack(f, "band6_pack0")["waves"][2]["strength"] = 1001, "waves[2].strength")
+	_expect("boss strength a fraction", func(f: Dictionary) -> void: _pack(f, "band6_pack0")["waves"][2]["strength"] = 150.5, "whole number")
+	_expect("boss strength as text", func(f: Dictionary) -> void: _pack(f, "band6_pack0")["waves"][2]["strength"] = "150", "whole number")
+	_expect("boss strength huge", func(f: Dictionary) -> void: _pack(f, "band6_pack0")["waves"][2]["strength"] = 1e30, "whole number")
 	_expect("wave not an object", func(f: Dictionary) -> void: _pack(f, "band2_pack1")["waves"][0] = [], "waves[0]")
 	_expect("wave without groups", func(f: Dictionary) -> void: _pack(f, "band2_pack1")["waves"][0]["groups"] = [], "groups")
 	_expect("nine groups", func(f: Dictionary) -> void: _nine_groups(f), "groups")

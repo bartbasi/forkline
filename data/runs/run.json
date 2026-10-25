@@ -1,6 +1,6 @@
 {"format": 1, "strength_start": 100, "strength_step": 10,
  "start_gold": 300, "gates": 1, "towers": ["sling_post"],
- "rows": {"top": 4, "middle": 5, "bottom": 4}, "spots": [8, 12], "sockets": [2, 5],
+ "rows": {"top": 4, "middle": 5, "bottom": 4}, "spots": [11, 12], "sockets": [2, 5],
  "bands": [["scamp", "pip"], ["skitter", "flitter", "shellback"], ["bubbler", "puffball"],
            ["mender", "dusk_moth"], ["gatecrasher"], []],
  "weights": {"tower": 30, "perk": 25, "gate": 10, "economy": 20, "risk": 15}}

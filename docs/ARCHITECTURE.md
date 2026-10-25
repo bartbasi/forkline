@@ -1,6 +1,6 @@
 # Forkline: Architecture
 
-Owner: architect. Status: revised for phase 7, and brought up to the built sim (S1), the run code (R1, R2), the saves (S2), the run segments (L4), the Twist and run screens (U2) and the rules alignment (G1), 2026-10-24.
+Owner: architect. Status: revised for phase 7, and brought up to the built sim (S1), the run code (R1, R2), the saves (S2), the run segments (L4), the Twist and run screens (U2), the rules alignment (G1) and the run tuning (G3), 2026-10-25.
 
 This is the contract every agent builds against: folders and owners, ids and data files, every public class with its methods and data shapes, routing, saves, resume, orientation, outbound links, the performance budget, the tests and the build plans for phase 5 (section 11) and phase 7 (section 13). Do not invent a public method that another area must call. If you need a change here, put it in your report for the DM.
 
@@ -350,7 +350,7 @@ Which creatures an effect reaches: a Twist's creature effects reach every creatu
 | `gates_stay` | none | card | Each time a wave starts, every placed gate becomes fixed (RULES 14.6) | 14.6 |
 | `add_gates` | count | card, instant | Gain gates, never more than `max_gates` placed and in hand together | 14.5, 14.6 |
 | `add_gold` | amount, per_wave | card, instant | Gain amount plus per_wave for each wave cleared so far | 14.5 |
-| `add_lives` | amount | card, instant | Gain lives | 14.5 |
+| `add_lives` | amount | card, instant | Gain lives, never above the battle's starting lives (`start_lives`). A gain never lowers lives. | 4.4, 14.5 |
 
 - Order: a Twist's start effects come before Relaxed (RULES 11). Tower stats: the data, then every `tower_add`, then every `tower_pct`, then Bakery boosts on top (RULES 8.7). Creatures: the data, then strength, then effects, each step rounded by its own rule.
 - Floors after card effects (no ceilings, so Volley gives a Triple Bow 4 targets): price at least 10, reach at least 1, reload at least 50 ms, damage at least 1 on a tower that deals damage, splash at least 0, targets at least 1, a slow from 1 to 90 percent on a stat block that has a slow (a card never adds a slow to one that has none), boosts at least 0.
@@ -403,10 +403,12 @@ Segments, one file each, data/segments/<id>.json:
 - Valid stacks: every stack of a top, a middle that fits under it and a bottom that fits under that middle, assembled as in 3.4, passes `LevelData.check` and has its spots and sockets within run.json's `spots` and `sockets`. So every pick MapAssembler can make is valid. tests/levels/ checks every stack. `RunData.check` checks everything else in this list at load.
 - data/segments/index.json lists every segment file: `{"format": 1, "segments": ["top_twin", "mid_split"]}`, 1 to 256 ids, no repeats. Its order is the order MapAssembler picks from. The game loads only listed files, and tests/levels/ checks that every file in the folder is listed.
 
+The Bakery spot (RULES 14.2): **every stack has a build spot with at least 3 other build spots among its eight neighbors**, so a Bakery there reaches 3 towers. tests/levels/ checks every stack. Like the 13 row rule (2.4), this is a level design rule, not a load check, so `RunData.check` does not change.
+
 Wave packs, data/segments/packs.json (RULES 14.3): `{"format": 1, "packs": [{"id": "band1_scamps", "band": 1, "boss": "", "waves": []}]}`.
 
 - 1 to 256 packs, ids unique. Keys exactly `id`, `band` (1 to 6), `boss` and `waves`. Its order is the order MapAssembler picks from.
-- `waves`: exactly 3 waves in the level wave shape of 2.4, without `strength`. Entrances are 1 or 2; entrance 2 means entrance 1 on a map with one entrance.
+- `waves`: exactly 3 waves in the level wave shape of 2.4. A band 6 pack's third wave, its boss wave, has a `strength` (50 to 1,000), required there and allowed on no other pack wave (RULES 14.3). Entrances are 1 or 2; entrance 2 means entrance 1 on a map with one entrance.
 - Creatures: a band b pack uses only the creatures that bands 1 to b add (run.json `bands`, 2.10), never a boss except its own, and never `puff` as a group. Band 1 packs' first wave holds only `scamp` (RULES 14.3).
 - Bands 1 to 5: `boss` is `""`. Band 6: `boss` is a boss id, and that boss comes only in the pack's third wave, as one group of count 1, with any escort.
 - Each band has at least 4 packs, and each boss in enemies.json has at least one band 6 pack.
@@ -419,7 +421,7 @@ Wave packs, data/segments/packs.json (RULES 14.3): `{"format": 1, "packs": [{"id
 ```json
 {"format": 1, "strength_start": 100, "strength_step": 10,
  "start_gold": 300, "gates": 1, "towers": ["sling_post"],
- "rows": {"top": 4, "middle": 5, "bottom": 4}, "spots": [8, 12], "sockets": [2, 5],
+ "rows": {"top": 4, "middle": 5, "bottom": 4}, "spots": [11, 12], "sockets": [2, 5],
  "bands": [["scamp", "pip"], ["skitter", "flitter", "shellback"], ["bubbler", "puffball"],
            ["mender", "dusk_moth"], ["gatecrasher"], []],
  "weights": {"tower": 30, "perk": 25, "gate": 10, "economy": 20, "risk": 15}}
@@ -429,14 +431,14 @@ Values from RULES 14.1 to 14.4. Every key is required, and unknown keys are prob
 
 | Key | Limits | Meaning |
 |---|---|---|
-| strength_start, strength_step | 50 to 1,000; 0 to 100; wave 18's strength at most 1,000 | Wave w has strength `strength_start + strength_step * (w - 1)` |
+| strength_start, strength_step | 50 to 1,000; 0 to 100; wave 17's strength at most 1,000 | Waves 1 to 17: wave w has strength `strength_start + strength_step * (w - 1)`. Wave 18 has its band 6 pack's boss wave strength (2.9). |
 | start_gold | 0 to 100,000, a multiple of 10 | Normal starting gold |
 | gates | 0 to `max_gates` | Gates at the start |
 | towers | 1 to 6 tower ids, no repeats | The towers a run starts with |
 | rows | exactly `top`, `middle`, `bottom`, each 1 to 11, summing to 8 to 13 | Segment heights (2.9) |
 | spots, sockets | `[lo, hi]`: spots 1 <= lo <= hi <= 24; sockets 0 <= lo <= hi <= 8 | What an assembled map must hold (RULES 14.2) |
 | bands | exactly 6 lists of creature ids; no boss, no `puff`; each creature in at most one list | The creatures each band adds (RULES 14.3). Band 6 adds none: it uses every earlier one, plus its boss. |
-| weights | exactly `tower`, `perk`, `gate`, `economy`, `risk`, each 0 to 1,000, at least one above 0 | Draft weights (RULES 14.4) |
+| weights | exactly `tower`, `perk`, `gate`, `economy`, `risk`, each 0 to 1,000; `economy` at least 1 | Draft weights (RULES 14.4). Economy is never 0, and every pool holds an economy card that is not `once` (3.4), so a draft is never empty. |
 
 ### 2.11 Cards: data/cards/cards.json (roguelite-engineer, phase 7)
 
@@ -445,12 +447,15 @@ Values from RULES 14.1 to 14.4. Every key is required, and unknown keys are prob
   {"id": "spare_gate", "kind": "gate", "name": "Spare Gate", "text": "Gain 1 gate, up to 3.",
    "once": false, "unlock": {}, "effects": [{"type": "add_gates", "count": 1}]},
   {"id": "sharp_pebbles", "kind": "perk", "tower": "sling_post", "name": "Sharp Pebbles",
-   "text": "Sling Posts deal 2 more damage per hit.", "once": true, "unlock": {},
-   "effects": [{"type": "tower_add", "tower": "sling_post", "stat": "damage", "amount": 2}]},
-  {"id": "pip_parade", "kind": "risk", "name": "Pip Parade", "text": "Next wave: 24 more Pips. Reward: 100 gold.",
+   "text": "Sling Posts deal 1 more damage per hit.", "once": true, "unlock": {},
+   "effects": [{"type": "tower_add", "tower": "sling_post", "stat": "damage", "amount": 1}]},
+  {"id": "tea_break", "kind": "economy", "name": "Tea Break", "text": "Gain 5 lives, but never more than you started with.",
+   "once": false, "unlock": {}, "effects": [{"type": "add_lives", "amount": 5}]},
+  {"id": "pip_parade", "kind": "risk", "name": "Pip Parade",
+   "text": "Next wave: 16 more Pips. Reward: 120 gold, more in later waves.",
    "once": false, "unlock": {"counter": "stars", "at": 72},
-   "effects": [{"type": "add_group", "enemy": "pip", "count": 24, "entrance": 1, "at_ms": 1000, "every_ms": 300, "after_last": false},
-               {"type": "reward_gold", "amount": 100}]}
+   "effects": [{"type": "add_group", "enemy": "pip", "count": 16, "entrance": 1, "at_ms": 1000, "every_ms": 300, "after_last": false},
+               {"type": "reward_gold", "amount": 120}]}
 ]}
 ```
 
@@ -470,7 +475,7 @@ Every card of RULES 14.5 and 14.6 as data. `name` is the RULES name; `text` is t
 | id | kind, tower | once | unlock | effects |
 |---|---|---|---|---|
 | `tower_pumpkin_catapult`, `tower_lullaby_bell`, `tower_longbow_loft`, `tower_firework_tower`, `tower_bakery` | tower, that tower | true | `{}` | `add_tower` |
-| `sharp_pebbles` | perk, `sling_post` | true | `{}` | `tower_add` damage 2 |
+| `sharp_pebbles` | perk, `sling_post` | true | `{}` | `tower_add` damage 1 |
 | `wide_splash` | perk, `pumpkin_catapult` | true | `{}` | `tower_add` splash 25 |
 | `deep_lullaby` | perk, `lullaby_bell` | true | `{}` | `tower_add` slow_pct 10 |
 | `steady_aim` | perk, `longbow_loft` | true | `{}` | `tower_pct` reload_ms 80 |
@@ -484,13 +489,13 @@ Every card of RULES 14.5 and 14.6 as data. `name` is the RULES name; `text` is t
 | `tea_break` | economy | false | `{}` | `add_lives` 5 |
 | `crowded_night` | risk | false | `{}` | `count_pct` 150 (flyers false, last_wave false); `reward_gold` 100 |
 | `thick_hides` | risk | false | `{}` | `health_pct` 150; `reward_gold` 120 |
-| `hurry_night` | risk | false | `{}` | `speed_pct` 125; `reward_gold` 100 |
-| `gateless_night` | risk | false | `{}` | `gates_open`; `reward_gold` 120 |
+| `hurry_night` | risk | false | `{}` | `speed_pct` 150; `reward_gold` 60 |
+| `gateless_night` | risk | false | `{}` | `gates_open`; `reward_gold` 60 |
 | `flock` | risk | false | `{}` | `add_group` flitter, 8, entrance 1, at_ms 2000, every_ms 400, after_last true; `reward_gold` 80 |
 | `twin_pebbles` | perk, `sling_post` | true | `best_run_wave` 6 | `tower_add` targets 1; `tower_add` damage -2 |
 | `heavy_pumpkins` | perk, `pumpkin_catapult` | true | `best_run_wave` 12 | `tower_add` damage 10; `tower_add` reload_ms 500 |
 | `frost_chime` | perk, `lullaby_bell` | true | `dailies_finished` 1 | `tower_hits_air`; `tower_add` reach -50 |
-| `volley` | perk, `longbow_loft` | true | `runs_won` 1 | `tower_add` targets 1; `tower_pct` damage 60 |
+| `volley` | perk, `longbow_loft` | true | `runs_won` 1 | `tower_add` targets 1; `tower_pct` damage 75 |
 | `long_fuse` | perk, `firework_tower` | true | `runs_won_normal` 1 | `tower_add` reach 100; `tower_add` reload_ms 500 |
 | `spice_rack` | perk, `bakery` | true | `stars` 24 | `tower_add` boost_damage 2; `tower_add` boost_pct -10 |
 | `piggy_bank` | economy | true | `stars` 36 | `interest` pct 10, max 50 |
@@ -498,7 +503,7 @@ Every card of RULES 14.5 and 14.6 as data. `name` is the RULES name; `text` is t
 | `iron_gate` | gate | true | `twists_cleared` 1 | `add_gates` 2; `gates_stay` |
 | `moonlit_wager` | risk | false | `stars` 60 | `health_pct` 200; `reward_gold` 250 |
 | `crasher_escort` | risk | false | `risky_wins` 1 | `add_group` gatecrasher, 2, entrance 1, at_ms 0, every_ms 3000, after_last false; `reward_gold` 150 |
-| `pip_parade` | risk | false | `stars` 72 | `add_group` pip, 24, entrance 1, at_ms 1000, every_ms 300, after_last false; `reward_gold` 100 |
+| `pip_parade` | risk | false | `stars` 72 | `add_group` pip, 16, entrance 1, at_ms 1000, every_ms 300, after_last false; `reward_gold` 120 |
 
 That is the 22 base cards and the 12 unlockable ones. Counters (RULES 14.6): a run or daily "reaches" wave N when wave N starts, so `best_run_wave` is the highest wave number started in any run or daily.
 
@@ -944,7 +949,7 @@ Building a run, `MapAssembler.assemble()`:
 1. Boss, generator `"boss"` 0: over the bosses that have a band 6 pack, in enemies.json order, `randi_range(0, n - 1)`.
 2. Map, generator `"map"` 0: a top segment by `randi_range(0, n - 1)` over every top in index order; then a middle the same way over the middles that fit under it; then a bottom over the bottoms that fit under that middle (2.9).
 3. Packs, generator `"pack"` b for each band b from 1 to 6: `randi_range(0, n - 1)` over that band's packs in packs.json order; for band 6, only the packs naming the boss.
-4. Waves: band b's pack gives waves 3b - 2, 3b - 1 and 3b, in its order. Every wave carries its own `strength`: wave w gets `strength_start + strength_step * (w - 1)`. On a map with one entrance, entrance 2 becomes entrance 1.
+4. Waves: band b's pack gives waves 3b - 2, 3b - 1 and 3b, in its order. Every wave carries its own `strength`: waves 1 to 17 get `strength_start + strength_step * (w - 1)`, and wave 18 gets its band 6 pack's boss wave strength (2.9). On a map with one entrance, entrance 2 becomes entrance 1.
 5. The level: `{"format": 1, "id": "run", "name": "Run", "grid": <the top, middle and bottom rows in order>, "start_gold", "gates" and "towers" from run.json, "strength": <strength_start>, "star3": {"kind": "no_lives_lost"}, "waves": <the 18 waves>}`, with no hint and no Twist, through `LevelData.from_data`. The level's `strength` is `strength_start`, though every wave sets its own. Runs have no stars: `star3` is there only because the level shape needs one, and nothing shows it or the name. A map whose build spots or gate sockets fall outside run.json's `spots` and `sockets` gives null too (2.9). A null result is a data bug: `RunSession.start` returns null, and the App shows the damaged message of 2.12.
 
 Drafts (RULES 14.4):
@@ -963,7 +968,7 @@ Drafts (RULES 14.4):
   2. Otherwise the types with an eligible card not yet offered, in the order tower, perk, gate, economy, risk, leaving out any type of weight 0: `r = randi_range(1, the sum of their weights)`, and the type is the first whose running sum of weights reaches r. After a risk card is offered, risk is left out for the rest of the draft.
   3. The card: `randi_range(0, n - 1)` over that type's eligible cards not yet offered, in cards.json order.
   4. When no type has a card left, the draft offers fewer than 3.
-- A pool must hold at least one economy card that is not `once`. Economy cards are always eligible, so while run.json gives economy a weight above 0 (it gives 20), a draft is never empty. `RunSession.start` returns null and `RunSession.from_data` refuses a save whose pool lacks one. The real pools hold `gold_purse` and `tea_break`.
+- A pool must hold at least one economy card that is not `once`. Economy cards are always eligible, and run.json's economy weight is at least 1 (2.10), so a draft is never empty. `RunSession.start` returns null and `RunSession.from_data` refuses a save whose pool lacks one. The real pools hold `gold_purse` and `tea_break`.
 - Offers are worked out again whenever asked and are not saved. Nothing a player can do in a build phase changes eligibility before the pick, so a restored run shows the same offers.
 - `pick(card_id)`: only a card in `offers()`. It calls `battle.add_effects(effects, risk)`, with `risk` true for a risk card, and when that returns `Battle.DONE` it appends the id to `picks`. It returns `Battle.DONE`, `&"not_offered"`, or the battle's refusal.
 - The pool is fixed when the run starts and is saved with it: the App passes `RunData.pool(progress.unlock_counters())` for a normal run and `RunData.card_ids()` for the daily (RULES 15).
@@ -1066,8 +1071,8 @@ static func shown_streak(streak: int, last_day: String, today: String) -> int   
 - The shapes RunData returns. Each getter returns a copy; `packs` and `cards` are the held arrays, read only.
   - Card: `{"id": StringName, "kind": StringName, "tower": StringName (&"" for none), "name": String, "text": String, "once": bool, "unlock": {} or {"counter": String, "at": int}, "effects": Array[Dictionary]}`, the effects as checked plain data (`Modifiers.normalize_all`).
   - Segment: `{"id": StringName, "kind": StringName, "grid": PackedStringArray, "top_ports": Array[int], "bottom_ports": Array[int], "spots": int, "sockets": int}`. Ports are columns (2.9). A top segment's `top_ports` and a bottom segment's `bottom_ports` are empty.
-  - Pack: `{"id": StringName, "band": int, "boss": StringName (&"" in bands 1 to 5), "waves": Array}`, 3 waves, each `{"groups": Array}` of `{"enemy": String, "count": int, "entrance": int (1 or 2), "at_ms": int, "every_ms": int}`, in the file's units.
-- `MapAssembler.build()` returns null when data or the catalog is missing, a segment is unknown or of the wrong kind, `pack_ids` is not one known pack per band in band order, the level fails `LevelData.check`, or its build spots or gate sockets fall outside run.json's `spots` and `sockets`. It does not check that the segments fit (2.9): pick them with `segments_under()`.
+  - Pack: `{"id": StringName, "band": int, "boss": StringName (&"" in bands 1 to 5), "waves": Array}`, 3 waves, each `{"groups": Array}` of `{"enemy": String, "count": int, "entrance": int (1 or 2), "at_ms": int, "every_ms": int}`, in the file's units. A band 6 pack's third wave, the boss wave, also holds `"strength": int` (2.9).
+- `MapAssembler.build()` returns null when data or the catalog is missing, a segment is unknown or of the wrong kind, `pack_ids` is not one known pack per band in band order, the band 6 pack's boss wave has no `strength`, the level fails `LevelData.check`, or its build spots or gate sockets fall outside run.json's `spots` and `sockets`. It does not check that the segments fit (2.9): pick them with `segments_under()`.
 - `RunPacks.spawn_total()`: `count_pct` scales the given groups, and an `add_group` group comes at its card's count (2.8). This is the count 2.9's spawn bound limits.
 - RunSegments (src/run/run_segments.gd) is internal to src/run/.
 - `RunSession.result()`: `won` is true once the battle is WON; `waves` the waves cleared (`battle.result()["waves_cleared"]`); `lives` the lives left, at least 0; `reached` the highest wave number started (`battle.waves_started`); `risks` the risk cards picked. The App uses it for an abandoned run too, which counts as lost at its current wave (RULES 14.7).
@@ -1510,7 +1515,7 @@ Ceilings are far above anything a real player reaches. Counters saturate at thei
 | phase | `build` or `wave` |
 | waves | waves started 0 to the level's wave count; running waves in start order, at most `max_waves_running`; each start tick 0 to `tick` and not before the one before it |
 | gold | 0 to 1,000,000,000 |
-| lives | 1 to 1,000,000 |
+| lives | 1 to 1,000,000, and `start_lives` the same. Lives may be above `start_lives` (a game saved before the cap of 2.8): load keeps them. |
 | gates | each on a socket, at most one per socket; `gates_added` 0 to `max_gates`; placed and in hand add up to the gates given (the level's, or the Twist's `set_gates`) plus `gates_added`, at most `max_gates` in all; every fixed cell of the Twist holds a fixed gate, and any other gate is fixed only under `gates_stay`; a gate is broken only in `wave`; in `build` the closed set does not seal |
 | gates_open | false in `build` |
 | towers | at most the spot count; each on its own spot; a tower the battle offers (the level's, plus `add_tower`, less `ban_tower`); tier 1 to 3; spec matching the tier and inside any cap; a reload timer from 0 to its `reload_ms * 100`, with card effects (3.1) |
@@ -1800,10 +1805,17 @@ Settled on 2026-10-24:
 3. **The game designer's answers (G1).** RULES.md now matches this contract: Bubble Night's bubbles come back as a Bubbler's do (RULES 13); in portrait a build phase starts with the preview folded when it does not fit under the map (9.1); the star lines in Pause, "Normal only" on Relaxed, and the warnings (10.6); "Upgrade no towers." and the new hints of 1-2 and 1-3 (10.3, 12.4); no risk card once wave 17 has started (14.4); "reach wave N" means wave N starts (14.6); a 13 row map's bottom row is scenery only (3.1, 14.2). The G1 note at the top of RULES.md lists the approved wording that changed, for the DM to tell Bart.
 4. **The plain mixed recipe and the checks for every region:** RULES 12.6.
 
+Settled on 2026-10-25:
+
+5. **Run targets.** Answered by G3: the bars for runs are RULES 14.8, and the bar for the daily is at the end of RULES 15.
+
 Open, with who answers and by when:
 
-- **Run targets.** Game designer, by the run tuning (G3 in section 13): the win rate normal runs need on Normal from the bots, and whether "every daily seed for the 400 days after the report is won by at least one bot strategy" is the right bar for the daily. The first run report (B2) gives the numbers to decide from.
 - **The coin glint.** DM: FUN_REVIEW_R1 item 8 calls the coin glint optional. Section 13 includes it in the render work; drop it there if Bart's approval did not cover it.
+
+Suggestions, for the DM to decide. They are not part of the contract unless the DM takes them in:
+
+- **A repeatable economy card in the base pool, checked on load** (architect, 2026-10-25). `RunData.check` could require a base card (`unlock` `{}`) of kind `economy` that is not `once`. Today a cards.json without one still loads, and a normal run whose unlocks add no such card cannot start: its pool fails the pool rule of 3.4, so `RunSession.start` returns null. Only tests/run/test_real_data.gd guards against this now, by pinning `gold_purse` and `tea_break`.
 
 ## 13. Phase 7 build plan
 
@@ -1858,11 +1870,13 @@ From wave 5 the work is the rest of the two loops. The DM starts each step when 
 | Step | Agent | Builds | Depends on | Done when |
 |---|---|---|---|---|
 | **B3** | balance-analyst | The pass over regions 1 to 3 and every Twist so far, which also confirms G2 | L3 | the pass report |
-| **G3** | game-designer | Run tuning from B2: the run targets of section 12 in RULES 14, and changes to cards, the run plan, packs and segments for their owners. Two questions are open from the level designer's quick runs: a run lasts about 14 minutes at 1x, against RULES 14.1's 15 to 20; and the final boss, at strength 270, looks like a wall, while gold piles up unspent late in a run. | B2 | RULES.md and a list of changes |
-| **R3, L5** | roguelite-engineer, level-designer | G3's changes to data/cards/ and data/runs/ (roguelite) and data/segments/ (level) | G3 | tests/run/, tests/levels/ |
+| **G3** | game-designer (done 2026-10-25) | Run tuning from B2: the run targets of section 12 in RULES 14, and changes to cards, the run plan, packs and segments for their owners (docs/design/TUNING_RUNS.md). The two questions from the level designer's quick runs are settled: the final boss and the late gold by G3 (commit 3f202fb: each boss wave sets its own strength, and lives never rise above the start), and the run length by Bart on 2026-10-25 (RULES 14.1). | B2 | RULES.md and a list of changes |
+| **S3** | sim-engineer (done 2026-10-25) | The lives cap of G3 (TUNING_RUNS 3.2): `add_lives` never lifts lives above `start_lives`, and a saved battle above it loads unchanged (2.8, 5.6) | G3 | tests/sim/ |
+| **R3** | roguelite-engineer (done 2026-10-25) | G3's changes to data/cards/ and data/runs/, and in src/run/ the boss wave strength and the wave 17 limit (2.9, 2.10, 3.4) | G3 | tests/run/ |
+| **L5** | level-designer (in progress) | G3's changes to data/segments/ | G3 | tests/levels/ |
 | **G4** | game-designer | Region 3 tuning from B3 | B3 | as G2 |
 | **L6** | level-designer | Region 3's level changes, then region 4, r4_l1 to r4_l6 with their Twists and tests/levels/ | G4 | tests/levels/ |
-| **B4** | balance-analyst | The pass over all 24 levels and every Twist, and the second run and daily report | L6, R3, L5 | both reports |
+| **B4** | balance-analyst | The pass over all 24 levels and every Twist, and the second run and daily report | L6, S3, R3, L5 | both reports |
 | **G5** | game-designer | Region 4 and the last run tuning | B4 | as G2 and G3 |
 | **L7, R4** | their owners | G5's changes | G5 | their tests |
 | **B5** | balance-analyst | The final confirmation of every check below, and the benchmark's largest wave across all levels, Twists and run packs with the largest risk card, written as a saved game for the phone (9.4) | L7, R4 | the report, and the saved game file |

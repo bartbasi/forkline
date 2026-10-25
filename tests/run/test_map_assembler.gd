@@ -42,7 +42,7 @@ func test_picks_are_pinned_for_fixed_seeds() -> void:
 
 
 func test_levels_are_pinned_for_fixed_seeds() -> void:
-	var expected: Dictionary = {1: 4173454138, 12345: 3268487736, 20261023: 2190065356}
+	var expected: Dictionary = {1: 4131946903, 12345: 3260186289, 20261023: 2150929963}
 	for run_seed: int in expected.keys():
 		var level: LevelData = MapAssembler.assemble(run_seed, data, catalog)
 		assert_eq(_text(level).hash(), expected[run_seed], "level of seed %d" % run_seed)
@@ -163,10 +163,11 @@ func test_the_level_is_the_run_map_of_the_contract() -> void:
 func test_the_waves_come_from_the_packs_with_rising_strength() -> void:
 	var level: LevelData = MapAssembler.assemble(12345, data, catalog)
 	var picks: Dictionary = MapAssembler.plan(12345, data)
-	for w: int in 18:
+	for w: int in 17:
 		assert_eq(level.waves[w].strength, 100 + 10 * w, "strength of wave %d" % (w + 1))
 	assert_eq(level.waves[0].strength, 100)
-	assert_eq(level.waves[17].strength, 270)
+	assert_eq(level.waves[16].strength, 260)
+	assert_eq(level.waves[17].strength, 150 + 10 * 5, "wave 18 takes band6_pack5's own strength")
 	for band: int in 6:
 		var pack: Dictionary = {}
 		for item: Dictionary in data.packs:
@@ -182,6 +183,27 @@ func test_the_waves_come_from_the_packs_with_rising_strength() -> void:
 				assert_eq(wave.groups[g].count, groups[g]["count"])
 				assert_eq(wave.groups[g].at_tick * 50, groups[g]["at_ms"])
 				assert_eq(wave.groups[g].every_ticks * 50, groups[g]["every_ms"])
+
+
+func test_wave_18_takes_the_strength_of_the_picked_boss_pack() -> void:
+	var seen: Dictionary = {}
+	for run_seed: int in 40:
+		var level: LevelData = MapAssembler.assemble(run_seed, data, catalog)
+		var pack_id: StringName = MapAssembler.plan(run_seed, data)["packs"][5]
+		var want: int = 150 + 10 * int(String(pack_id).trim_prefix("band6_pack"))
+		assert_eq(level.waves[17].strength, want, "seed %d, %s" % [run_seed, pack_id])
+		assert_eq(level.waves[16].strength, 260, "seed %d: wave 17 keeps the step" % run_seed)
+		seen[level.waves[17].strength] = true
+	assert_true(seen.size() > 1, "different packs give different boss strengths")
+
+
+func test_build_refuses_a_boss_wave_without_a_strength() -> void:
+	var packs: Array[StringName] = [&"band1_pack0", &"band2_pack0", &"band3_pack0", &"band4_pack0", &"band5_pack0", &"band6_pack0"]
+	assert_not_null(MapAssembler.build(data, catalog, &"top_one", &"mid_split", &"bot_home", packs))
+	for pack: Dictionary in data.packs:
+		if pack["id"] == &"band6_pack0":
+			(pack["waves"][2] as Dictionary).erase("strength")
+	assert_null(MapAssembler.build(data, catalog, &"top_one", &"mid_split", &"bot_home", packs))
 
 
 func test_entrance_two_means_entrance_one_on_a_one_entrance_map() -> void:

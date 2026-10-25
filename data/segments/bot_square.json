@@ -1,6 +1,6 @@
 {"format": 1, "id": "bot_square", "kind": "bottom", "grid": [
   "...#...",
-  ".o.#o..",
-  "..oB...",
+  "...#oo.",
+  "..oBoo.",
   "......."
 ]}

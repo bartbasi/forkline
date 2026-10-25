@@ -104,7 +104,11 @@ static func packs() -> Dictionary:
 				else:
 					groups.append(group(met[(i + k) % met.size()], count, entrance))
 				groups.append(group(met[(i * 2 + k + 1) % met.size()], count, 3 - entrance, 4000))
-				waves.append({"groups": groups})
+				if band == 6 and k == 2:
+					# The boss wave sets its own strength (2.9): 150, 160, ... by pack.
+					waves.append({"groups": groups, "strength": 150 + 10 * i})
+				else:
+					waves.append({"groups": groups})
 			list.append({"id": "band%d_pack%d" % [band, i], "band": band, "boss": boss, "waves": waves})
 	return {"format": 1, "packs": list}
 

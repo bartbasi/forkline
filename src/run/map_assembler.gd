@@ -99,8 +99,15 @@ static func build(data: RunData, catalog: Catalog, top_id: StringName, middle_id
 					"at_ms": int(group["at_ms"]), "every_ms": int(group["every_ms"]),
 				})
 			var wave_number: int = b * WAVES_PER_BAND + k + 1
+			# Waves 1 to 17 rise by the step. Wave 18, the boss wave, takes its pack's own strength.
+			var strength: int = data.strength_start + data.strength_step * (wave_number - 1)
+			if wave_number == RunData.BANDS * WAVES_PER_BAND:
+				var boss_wave: Dictionary = pack_waves[k]
+				if not boss_wave.has("strength"):
+					return null
+				strength = int(boss_wave["strength"])
 			waves.append({
-				"strength": data.strength_start + data.strength_step * (wave_number - 1),
+				"strength": strength,
 				"groups": groups,
 			})
 	var tower_ids: Array = []
