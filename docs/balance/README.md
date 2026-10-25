@@ -59,6 +59,51 @@ stops the run with exit code 2.
 Two more tools: `benchmark.gd` times each tick, and `run.gd mode=det` plays the same things twice
 (and once with a save and load in the middle of a wave) and checks the results match.
 
+## Runs and the daily (task B2)
+
+Reports: `runs-<date>.md`. Raw numbers: `raw/<date>-b2/`. The run bots drive `RunSession` (ARCHITECTURE 3.3) and
+choose cards as well as towers. They are in `run_bot.gd`, and the runner is `runs.gd`.
+
+A **run strategy** has three parts. A pick style: `towers` (a tower card first, then a perk, a spare gate, an economy
+card, a risk card last), `economy` (economy first, but a tower card while the run has fewer than 2 kinds of tower), `risk`
+(a risk card whenever one is offered) or `random` (any offered card). A build style: `wide` (new towers first, up to 4 plus
+0.7 per wave started) or `tall` (upgrades first, 2 plus 1 per 4 waves). Early calls, off or on (from wave 4, when 6 or fewer
+creatures are on the map). Together that is 16 named strategies (`towers_wide`, `towers_wide_early`, and so on). All of
+them place gates on the socket that puts the most build spots within 2.5 tiles of the walking route, buy during waves as
+gold comes in, and sell one tower only to make room for a tower type they have never built. Within a kind, the card is
+chosen by the bot's own generator, seeded from the run seed and the strategy id. A tower is chosen by the lowest count over
+weight (Sling Post 1.5, Catapult 1.0, Longbow 1.0, Firework 0.7, Bell 0.8 up to 2, Bakery 0.8 up to 1, each weight
+changed by 0.7 to 1.3 times per bot). Spots are ranked by the road they see, as in the plain recipe (RULES 12.6).
+
+A **random strategy** (`mode=search` and the extra tries of `mode=daily`) takes a random order of the five card kinds, a
+random pace (`base` 2 to 6 towers plus `rate` 0.1 to 1.0 per wave) and a random early call habit. They are seeded from the
+run seed, so the same seed always tries the same strategies in the same order.
+
+Modes of `runs.gd`:
+
+- `rates`: the 16 named strategies on run seeds `first` to `first + count - 1`, with `pool=base` (no unlocks: the 22 base
+  cards) or `pool=all` (every card), and `relaxed=0` or `1`. Run `i` has the seed `i * 2654435761 mod 2^32`.
+- `search`: `n` random strategies on each run seed. A seed is "winnable" when one of them wins.
+- `daily`: day `n` is 2026-10-25 plus `n` days, with the seed YYYYMMDD, Normal, every card. The 16 named strategies play it,
+  and a day none wins gets up to `extra` random strategies.
+- `det`: for 50 seeds and 50 days, the map and waves built twice; the same play twice; a play saved and loaded again (through
+  JSON text, the way a saved game is read) in the middle of a wave; and a play saved and loaded with a draft open, which
+  must show the same offers. All must end in equal battle and run state. A second process must give the same chain hash.
+- `risk`: one strategy plays seeds with a saved battle before each wave. Each saved wave is then played again with each
+  risk card on it, on the same towers, and the peak creatures, lives lost and gold gained are recorded.
+- `static`: the stacks (each top, middle and bottom that fit), and the creatures each pack wave spawns with each risk card.
+- `cardvalue`: a random-picking strategy plays seeds; before each pick the state is saved, each of the 3 offered cards is taken in
+  turn, and the run is played on to its end by the same strategy. A card's gain is its result less the average of the 3 offered.
+- `deep`: `days=2026-11-11,... n=400` plays `n` random strategies on each named day (the days that were left unwon).
+- `boss=ironshell` on `rates` and `daily` plays only the seeds (days) whose run has that boss (used to play Ironshell again after a
+  stat change).
+- `bakery_min=1`: a bot builds a Bakery that reaches only one other spot (the default is 2, as in the plain recipe).
+- `tweak=strength_step:8,strength_start:100,start_gold:300,gates:1,tea_break:5` changes those `run.json` numbers, or the lives Tea
+  Break gives, in memory only.
+
+`run_runs.sh` is the job list and its seeds. `runs_summary.gd dir=PATH` prints the report's tables from the raw folder (`part=det|rates|search|length|waves|boss|maps|towers|cards|daily|risk|cardvalue|whatif|ironshell|lives`). Jobs added by hand are in `extra_jobs.txt` of the raw folder.
+Length at 1x is the wave time plus 15 s for each build phase, the same rule as for levels (RULES 12.5).
+
 ## Files
 
 - `tools/balance/bot.gd`: strategies, the generator and mutator, the plain recipe, the player.
@@ -70,6 +115,7 @@ Two more tools: `benchmark.gd` times each tick, and `run.gd mode=det` plays the 
 - `tools/balance/summary.gd`: turns the raw JSON into the report's markdown tables. `pass=1` prints the tables of
   a `run_pass.sh` run (plain, solo, search, spread, Twist, determinism and benchmark files, and the what-if
   files of `run_whatif_b1.sh`). Without it, the old region 1 tables.
+- `tools/balance/run_bot.gd`, `runs.gd`, `runs_summary.gd`, `run_runs.sh`: the run and daily bots, runner, tables and job list (above).
 - `tools/balance/run_region1.sh`, `run_whatif.sh`, `run_stats.sh`: the exact job lists and seeds.
 - `tools/balance/run_pass.sh` and `run_whatif_b1.sh`: the job lists of the B1 pass (2026-10-24, raw folder
   `raw/2026-10-24-b1/`) and its star 3 what-ifs (other rules tried with `tweak=star3:...`, and a level file with
