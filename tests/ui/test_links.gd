@@ -78,8 +78,24 @@ func test_the_feedback_draft_has_the_subject_and_the_details() -> void:
 	var body: String = url.get_slice("&body=", 1).uri_decode()
 	assert_true(body.contains("Forkline 0.1"))
 	assert_true(body.contains("SM-F946B, Android 16"))
+
+
+func test_the_real_draft_opens() -> void:
+	var url: String = Links.feedback_url(Links.version(), Links.device_text())
+	assert_true(Links.is_ours(url))
 	Links.open(url)
-	assert_eq(recorder.urls.size(), 1)
+	assert_eq(recorder.urls, [url] as Array[String])
+
+
+func test_a_draft_with_an_added_header_or_changed_subject_is_refused() -> void:
+	var url: String = Links.feedback_url(Links.version(), Links.device_text())
+	Links.open(url + "&cc=evil@example.com")
+	Links.open(url.replace("subject=", "cc=evil%40example.com&subject="))
+	Links.open(url.replace("subject=Forkline", "subject=Other"))
+	Links.open("mailto:bartbasi@gmail.com?subject=hello")
+	Links.open("mailto:bartbasi@gmail.com?")
+	Links.open(Links.feedback_url("9.9.9", "Some other phone"))
+	assert_eq(recorder.urls.size(), 0)
 
 
 func test_a_strange_phone_name_cannot_add_a_recipient_or_header() -> void:
@@ -90,7 +106,6 @@ func test_a_strange_phone_name_cannot_add_a_recipient_or_header() -> void:
 	assert_false(url.contains("\n"))
 	var body: String = url.get_slice("&body=", 1).uri_decode()
 	assert_true(body.contains("X&cc=evil@example.com?bcc=a#b=c"))
-	assert_true(Links.is_ours(url))
 
 
 func test_send_feedback_uses_the_project_version() -> void:

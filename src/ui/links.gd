@@ -28,11 +28,12 @@ static func open(url: String) -> void:
 	var _result: Error = OS.shell_open(url)
 
 
-## True for the two web addresses and for a feedback draft to our own address.
+## True for the two web addresses and for exactly the feedback draft this app
+## builds right now. A draft with anything added or changed is refused.
 static func is_ours(url: String) -> bool:
 	if url == COFFEE_URL or url == SOURCE_URL:
 		return true
-	return url.begins_with("mailto:" + FEEDBACK_EMAIL + "?")
+	return url == feedback_url(version(), device_text())
 
 
 static func open_coffee() -> void:
