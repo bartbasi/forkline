@@ -203,6 +203,8 @@ static func from_data(raw: Variant, saved_battle: Battle, run_data: RunData) -> 
 		chk.fail("picks", "more picks than cleared waves")
 	if chk.ok() and not _has_repeatable_economy(pool_ids, run_data):
 		chk.fail("pool", "holds no economy card that can be taken again")
+	if chk.ok():
+		_check_effects(pick_ids, saved_battle, run_data, chk)
 	if not chk.ok():
 		return null
 	var session: RunSession = new()
@@ -259,6 +261,55 @@ static func _read_picks(value: Variant, pool_ids: Array[StringName], run_data: R
 		else:
 			out.append(id)
 	return out
+
+
+## Ties the battle's card effects to the picks (5.6). The kept effects must be exactly those
+## the picks give, in pick order. Risk cards are matched in pick order too: the waiting one
+## is the last risk card picked, and each running wave's card is an earlier risk pick, a
+## later wave never taking an earlier card. Nothing else may carry card effects.
+static func _check_effects(pick_ids: Array[StringName], saved_battle: Battle, run_data: RunData, chk: DataCheck) -> void:
+	var kept: Array[Dictionary] = []
+	var risks: Array[Array] = []
+	for id: StringName in pick_ids:
+		var card_data: Dictionary = run_data.card(id)
+		var effects: Array[Dictionary] = []
+		for effect: Dictionary in card_data["effects"]:
+			effects.append(effect)
+		var clean: Array[Dictionary] = Modifiers.normalize_all(effects)
+		if card_data["kind"] == &"risk":
+			risks.append(clean)
+			continue
+		for effect: Dictionary in clean:
+			if not Modifiers.INSTANT.has(String(effect["type"])):
+				kept.append(effect)
+	if not _same(kept, saved_battle.card_effects):
+		chk.fail("picks", "the battle's card effects are not the picks' effects")
+		return
+	var usable: int = risks.size()
+	if not saved_battle.risk_waiting.is_empty():
+		# Picked in a build phase, before the wave it waits for, and before the boss wave.
+		if risks.is_empty() or saved_battle.phase != Battle.Phase.BUILD or saved_battle.waves_started >= RISK_CUTOFF:
+			chk.fail("risk", "no risk card was picked that could be waiting")
+			return
+		usable -= 1
+		if not _same(risks[usable], saved_battle.risk_waiting):
+			chk.fail("risk", "is not the last risk card picked")
+			return
+	var next: int = 0
+	var taken: Array = saved_battle.to_data()["wave_risk"]
+	for item: Dictionary in taken:
+		var found: bool = false
+		while next < usable and not found:
+			found = _same(risks[next], item["effects"])
+			next += 1
+		if not found:
+			chk.fail("risk", "a running wave took a risk card that was not picked")
+			return
+
+
+## True when two lists of effects are equal in every key and value (both are normalized).
+static func _same(a: Array, b: Array) -> bool:
+	return a == b
 
 
 static func _pool_ok(pool_ids: Array[StringName], data: RunData) -> bool:

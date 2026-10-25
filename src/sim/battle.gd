@@ -16,8 +16,16 @@ const DONE: StringName = &"done"                       # a command was carried o
 
 const PHASE_NAMES: PackedStringArray = ["build", "wave", "won", "lost"]
 const AIM_NAMES: PackedStringArray = ["first", "last", "strong"]
+## Load ceilings against tampered saves (contract 5.6). MAX_ENEMIES also holds the live
+## creatures plus every creature still to come from releases. Play stays far below it:
+## one wave spawns at most 120 counting Puffs, at most 2 waves run at once, a release
+## holds at most 4, and boss summons add a few dozen while a boss lives.
 const MAX_ENEMIES: int = 4000
 const MAX_RELEASES: int = 1000
+## Creatures that summon, live or still to come from releases. Play has at most 2: one
+## boss per level or run, two under Double Trouble, and nothing releases a boss. 8 leaves
+## room for a bigger boss wave and still stops a save from loading a summoning swarm.
+const MAX_SUMMONERS: int = 8
 const MAX_LIVES: int = 1000000
 const ID_CEILING: int = 2147483648                     # 2^31
 const BIG: int = 1000000000
@@ -1703,12 +1711,15 @@ func _load(data: Variant, stats: Catalog, chk: DataCheck) -> bool:
 	if not chk.ok():
 		return false
 	_refresh_dist()
-	if phase == Phase.BUILD and map.seals(closed_cells()):
+	# In a wave the closed set is the unbroken gates, or none under gates_open. It only
+	# ever opens from a build phase's set, which never seals, so play never fails this.
+	if map.seals(closed_cells()):
 		chk.fail("gates", "seal every road")
 	_load_towers(top["towers"], chk)
 	_next_id = chk.integer(top, "next_id", "", 0, ID_CEILING)
 	_load_enemies(top["enemies"], chk)
 	_load_releases(top["releases"], chk)
+	_check_crowd(chk)
 	_load_record(top["record"], chk)
 	if not chk.ok():
 		return false
@@ -1985,6 +1996,26 @@ func _load_releases(data: Variant, chk: DataCheck) -> void:
 		if not chk.ok():
 			return
 		_releases.append(release)
+
+
+## Each creature and release can be in range while together they would freeze the game,
+## so the crowd as a whole has a ceiling too (contract 5.6).
+func _check_crowd(chk: DataCheck) -> void:
+	if not chk.ok():
+		return
+	var crowd: int = enemies.size()
+	var summoners: int = 0
+	for enemy: EnemyState in enemies:
+		if not catalog.enemy(enemy.type).summon.is_empty():
+			summoners += 1
+	for release: Release in _releases:
+		crowd += release.left
+		if not catalog.enemy(release.enemy).summon.is_empty():
+			summoners += release.left
+	if crowd > MAX_ENEMIES:
+		chk.fail("releases", "live creatures and creatures still to come pass %d" % MAX_ENEMIES)
+	if summoners > MAX_SUMMONERS:
+		chk.fail("enemies", "more than %d creatures summon" % MAX_SUMMONERS)
 
 
 func _load_record(data: Variant, chk: DataCheck) -> void:

@@ -281,8 +281,32 @@ func test_hostile_picks_are_refused() -> void:
 	for name: String in cases:
 		_assert_refused(_with_run(base, {"picks": cases[name]}), "picks %s" % name)
 	# Three cleared waves allow three picks, and a card that is not once may come again.
-	var three: Dictionary = _with_run(base, {"picks": ["gold_purse", "gold_purse", "spare_gate"]})
-	assert_eq(_load_written(three).size(), 1, "three picks after three cleared waves")
+	# The picks are real, so the battle's card effects match them (5.6).
+	var three: RunSession = _three_picks_with_a_repeat()
+	assert_not_null(three, "a run picks a card that is not once twice in three picks")
+	if three == null:
+		return
+	assert_eq(int(three.battle.to_data()["record"]["waves_cleared"]), 3, "three waves cleared")
+	assert_eq(three.picks.size(), 3)
+	assert_eq(_load_written(Fx.through_json(Fx.saved_run(three).to_data())).size(), 1, "three picks after three cleared waves")
+
+
+## A run whose three picks, after three cleared waves, take a card that is not once
+## twice. Tries seeds in order, so it always finds the same run.
+func _three_picks_with_a_repeat() -> RunSession:
+	var choose: Callable = func(s: RunSession, offers: Array[StringName]) -> StringName:
+		for id: StringName in offers:
+			if s.picks.has(id) and not s.card(id)["once"]:
+				return id
+		return &"gold_purse" if offers.has(&"gold_purse") else &""
+	for run_seed: int in range(1, 200):
+		var s: RunSession = Fx.run_with(game, run_seed, choose, func(at: RunSession) -> bool: return at.picks.size() == 3)
+		if s == null:
+			continue
+		for id: StringName in s.picks:
+			if s.picks.count(id) > 1:
+				return s
+	return null
 
 
 func test_hostile_run_shapes_are_refused() -> void:

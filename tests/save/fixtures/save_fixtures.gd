@@ -122,6 +122,39 @@ static func player(seed_value: int) -> RefCounted:
 	return p
 
 
+## A run on every card, played by a seeded rich player until check(session) is true. In
+## an open draft choose(session, offers) picks first; when it returns &"" the player
+## picks. Null when the run ends or a pick is refused first. Card effects come only from
+## real picks, so the saved run's picks match its battle (5.6).
+static func run_with(game_data: GameData, run_seed: int, choose: Callable, check: Callable) -> RunSession:
+	var s: RunSession = RunSession.start(run_seed, "", false, game_data.run.card_ids(), game_data.run, game_data.catalog)
+	var p: RefCounted = player(run_seed)
+	for guard: int in 200000:
+		if check.call(s):
+			return s
+		if s.draft_open():
+			var id: StringName = choose.call(s, s.offers())
+			if id != &"":
+				if s.pick(id) != Battle.DONE:
+					return null
+				continue
+		if not p.advance(s):
+			return null
+	return null
+
+
+## A run that has just picked card_id in its first draft, in the build phase after
+## wave 1. Tries seeds in order, so it always finds the same run. Null when none offers it.
+static func run_after_pick(game_data: GameData, card_id: StringName) -> RunSession:
+	for run_seed: int in range(1, 400):
+		var s: RunSession = run_with(game_data, run_seed,
+			func(_s: RunSession, _offers: Array[StringName]) -> StringName: return &"",
+			func(at: RunSession) -> bool: return at.draft_open())
+		if s != null and s.offers().has(card_id) and s.pick(card_id) == Battle.DONE:
+			return s
+	return null
+
+
 ## The saved game of a run or daily.
 static func saved_run(session_now: RunSession) -> SavedGame:
 	var game_save: SavedGame = saved(SavedGame.DAILY if session_now.daily else SavedGame.RUN, session_now.battle)

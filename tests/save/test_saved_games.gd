@@ -316,8 +316,11 @@ func test_a_campaign_game_holds_no_cards_and_a_run_no_twist_rules_13_and_14() ->
 	assert_eq(battle.add_effects([{"type": "bounty_pct", "pct": 200}] as Array[Dictionary], false), Battle.DONE)
 	var as_level: Dictionary = JSON.parse_string(JSON.stringify(Fx.saved(SavedGame.LEVEL, battle).to_data()))
 	assert_null(SavedGame.from_data(as_level, game), "a campaign level with a card")
-	var run: RunSession = Fx.session(game, 21)
-	assert_eq(run.battle.add_effects([{"type": "bounty_pct", "pct": 200}] as Array[Dictionary], false), Battle.DONE)
+	var run: RunSession = Fx.run_after_pick(game, &"fat_bounties")
+	assert_not_null(run, "a run picks Fat Bounties")
+	if run == null:
+		return
+	assert_false(run.battle.card_effects.is_empty(), "the run keeps a card")
 	var as_run: Dictionary = Fx.through_json(Fx.saved_run(run).to_data())
 	assert_not_null(SavedGame.from_data(as_run, game), "a run takes cards")
 	var twisted: Dictionary = as_run.duplicate(true)
@@ -325,36 +328,51 @@ func test_a_campaign_game_holds_no_cards_and_a_run_no_twist_rules_13_and_14() ->
 	assert_null(SavedGame.from_data(twisted, game), "a run has no Twist")
 
 
-## A battle after a card or risk card the campaign never offers: 1-1, or a run's battle
-## when run is given.
-func _after_card(effects: Array[Dictionary], risk: bool, run: RunSession = null) -> Battle:
-	var battle: Battle = Battle.create(game.levels[&"r1_l1"], game.catalog, false, []) if run == null else run.battle
-	battle.place_tower(battle.level.spots[0], battle.level.towers[0])
-	assert_eq(battle.add_effects(effects, risk), Battle.DONE, str(effects))
+## Starts the next wave and plays 40 ticks of it.
+func _into_wave(battle: Battle) -> void:
 	battle.start_next_wave()
 	for i: int in 40:
 		battle.step()
 	assert_eq(battle.phase, Battle.Phase.WAVE)
+
+
+## 1-1 after the effects of a card the campaign never offers.
+func _after_card(card_id: StringName) -> Battle:
+	var card: Dictionary = game.run.card(card_id)
+	var effects: Array[Dictionary] = []
+	for effect: Dictionary in card["effects"]:
+		effects.append(effect)
+	var battle: Battle = Battle.create(game.levels[&"r1_l1"], game.catalog, false, [])
+	battle.place_tower(battle.level.spots[0], battle.level.towers[0])
+	assert_eq(battle.add_effects(effects, card["kind"] == &"risk"), Battle.DONE, String(card_id))
+	_into_wave(battle)
 	return battle
 
 
 func test_a_campaign_game_holds_nothing_only_cards_give_contract_2_8() -> void:
 	# Only risk cards make a wave take a risk card or open every gate, and only cards add
-	# gates. Each of these loads as a run and is refused as a campaign level.
+	# gates. Each of these loads as a run that picked the card and is refused as a
+	# campaign level.
 	var cases: Array = [
-		["a wave that took a risk card", [{"type": "reward_gold", "amount": 50}] as Array[Dictionary], true, "wave_risk"],
-		["gates standing open", [{"type": "gates_open"}] as Array[Dictionary], true, "gates_open"],
-		["gates added by a card", [{"type": "add_gates", "count": 1}] as Array[Dictionary], false, "gates_added"],
+		["a wave that took a risk card", &"thick_hides", "wave_risk"],
+		["gates standing open", &"gateless_night", "gates_open"],
+		["gates added by a card", &"spare_gate", "gates_added"],
 	]
 	for item: Array in cases:
-		var run: RunSession = Fx.session(game, 31)
-		_after_card(item[1], item[2], run)
+		var run: RunSession = Fx.run_after_pick(game, item[1])
+		assert_not_null(run, "a run picks %s" % item[1])
+		if run == null:
+			continue
+		assert_eq(run.start_next_wave(), Battle.DONE, "%s: the next wave starts" % item[0])
+		_into_wave(run.battle)
 		var as_run: Dictionary = Fx.through_json(Fx.saved_run(run).to_data())
+		var in_run: Dictionary = as_run["battle"]
+		var key: String = item[2]
+		assert_true(in_run[key] is Array and not (in_run[key] as Array).is_empty() or in_run[key] is bool and in_run[key] or in_run[key] is float and in_run[key] > 0, "%s shows in the run's %s" % [item[0], key])
 		assert_not_null(SavedGame.from_data(as_run, game), "%s loads as a run" % item[0])
-		var battle: Battle = _after_card(item[1], item[2])
+		var battle: Battle = _after_card(item[1])
 		var as_level: Dictionary = JSON.parse_string(JSON.stringify(Fx.saved(SavedGame.LEVEL, battle).to_data()))
 		var inner: Dictionary = as_level["battle"]
-		var key: String = item[3]
 		assert_true(inner[key] is Array and not (inner[key] as Array).is_empty() or inner[key] is bool and inner[key] or inner[key] is float and inner[key] > 0, "%s shows in %s" % [item[0], key])
 		assert_true((inner["effects"] as Array).is_empty() and (inner["risk"] as Array).is_empty(), "%s keeps no card" % item[0])
 		assert_null(SavedGame.from_data(as_level, game), "%s is refused as a campaign level" % item[0])

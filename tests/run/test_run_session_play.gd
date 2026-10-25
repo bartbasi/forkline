@@ -261,6 +261,21 @@ func _good() -> Array:
 	return [run_data, loaded]
 
 
+## Like _good(), but the pool holds only Gold Purse, an instant card, so the three picks keep
+## no card effect and the picks can be changed freely without breaking the tie to the battle.
+func _good_instant() -> Array:
+	var data: RunData = Fx.run_data()
+	var only: Array[StringName] = [&"gold_purse"]
+	var s: RunSession = RunSession.start(12, "", false, only, data, catalog)
+	var p: RefCounted = _player(12)
+	assert_true(_advance_until(p, s, func(x: RunSession) -> bool: return x.draft_open() and x.battle.waves_started == 4))
+	assert_true(s.battle.card_effects.is_empty())
+	var run_data: Variant = JSON.parse_string(JSON.stringify(s.to_data()))
+	var loaded: Battle = Battle.from_data(JSON.parse_string(JSON.stringify(s.battle.to_data())), catalog)
+	assert_eq((run_data as Dictionary)["picks"].size(), 3)
+	return [run_data, loaded]
+
+
 func _refused(label: String, mutate: Callable) -> void:
 	var good: Array = _good()
 	var raw: Variant = good[0]
@@ -335,7 +350,7 @@ func test_hostile_pools_give_null() -> void:
 
 
 func test_a_saved_pool_needs_an_economy_card_that_can_be_taken_again() -> void:
-	var good: Array = _good()
+	var good: Array = _good_instant()
 	# Cards that are not economy cards, or economy cards that are taken only once.
 	for bad: Array in [["tower_bakery"], ["sharp_pebbles", "spare_gate"], ["piggy_bank"], ["piggy_bank", "spare_gate"], ["piggy_bank", "tower_bakery", "crowded_night"]]:
 		var raw: Dictionary = (good[0] as Dictionary).duplicate(true)
@@ -362,7 +377,7 @@ func test_hostile_picks_give_null() -> void:
 	_refused("more picks than cleared waves", func(r: Dictionary) -> Variant: r["picks"] = _repeat("gold_purse", 5); return null)
 	_refused("18 picks", func(r: Dictionary) -> Variant: r["picks"] = _repeat("gold_purse", 18); return null)
 	_refused("a card the pool lacks", func(r: Dictionary) -> Variant: r["pool"] = ["gold_purse", "spare_gate"]; r["picks"] = ["gold_purse", "tower_bakery"]; return null)
-	var good: Array = _good()
+	var good: Array = _good_instant()
 	var again: Dictionary = (good[0] as Dictionary).duplicate(true)
 	again["picks"] = ["gold_purse", "gold_purse", "gold_purse"]
 	assert_not_null(RunSession.from_data(again, good[1], Fx.run_data()), "a card that can be taken again, taken again")

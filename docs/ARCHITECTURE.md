@@ -1,6 +1,6 @@
 # Forkline: Architecture
 
-Owner: architect. Status: revised for phase 7, and brought up to the built sim (S1), the run code (R1, R2), the saves (S2), the run segments (L4), the Twist and run screens (U2), the rules alignment (G1) and the run tuning (G3), 2026-10-25.
+Owner: architect. Status: revised for phase 7, and brought up to the built sim (S1), the run code (R1, R2), the saves (S2), the run segments (L4), the Twist and run screens (U2), the rules alignment (G1), the run tuning (G3) and the security fixes (S4, R4), 2026-10-25.
 
 This is the contract every agent builds against: folders and owners, ids and data files, every public class with its methods and data shapes, routing, saves, resume, orientation, outbound links, the performance budget, the tests and the build plans for phase 5 (section 11) and phase 7 (section 13). Do not invent a public method that another area must call. If you need a change here, put it in your report for the DM.
 
@@ -970,7 +970,7 @@ Drafts (RULES 14.4):
   4. When no type has a card left, the draft offers fewer than 3.
 - A pool must hold at least one economy card that is not `once`. Economy cards are always eligible, and run.json's economy weight is at least 1 (2.10), so a draft is never empty. `RunSession.start` returns null and `RunSession.from_data` refuses a save whose pool lacks one. The real pools hold `gold_purse` and `tea_break`.
 - Offers are worked out again whenever asked and are not saved. Nothing a player can do in a build phase changes eligibility before the pick, so a restored run shows the same offers.
-- `pick(card_id)`: only a card in `offers()`. It calls `battle.add_effects(effects, risk)`, with `risk` true for a risk card, and when that returns `Battle.DONE` it appends the id to `picks`. It returns `Battle.DONE`, `&"not_offered"`, or the battle's refusal.
+- `pick(card_id)`: only a card in `offers()`. It calls `battle.add_effects(effects, risk)`, with `risk` true for a risk card, and when that returns `Battle.DONE` it appends the id to `picks`. It returns `Battle.DONE`, `&"not_offered"`, or the battle's refusal. `RunSession.from_data` also ties the battle to the picks (5.6).
 - The pool is fixed when the run starts and is saved with it: the App passes `RunData.pool(progress.unlock_counters())` for a normal run and `RunData.card_ids()` for the daily (RULES 15).
 
 ```gdscript
@@ -1379,6 +1379,7 @@ Nodes are road cells (`#`, `G`, `1` to `4`, `B`). Edges join orthogonal neighbor
 
 - A closed set seals when any entrance has distance -1. `place_gate` and `move_gate` refuse such a set with `&"would_seal"` and change nothing (RULES 7.4).
 - In BUILD no creature is on the map, and gates never close during a wave, so checking the entrances is enough.
+- A saved battle is refused when its closed set seals, in a build phase or a wave (5.6). During a wave the closed set only opens, so play never fails this.
 - Level files and assembled run maps must have an open route from every entrance with no gates, and with only the fixed gates closed (2.3).
 
 ### 4.5 Gate breakers (RULES 7.7)
@@ -1516,14 +1517,14 @@ Ceilings are far above anything a real player reaches. Counters saturate at thei
 | waves | waves started 0 to the level's wave count; running waves in start order, at most `max_waves_running`; each start tick 0 to `tick` and not before the one before it |
 | gold | 0 to 1,000,000,000 |
 | lives | 1 to 1,000,000, and `start_lives` the same. Lives may be above `start_lives` (a game saved before the cap of 2.8): load keeps them. |
-| gates | each on a socket, at most one per socket; `gates_added` 0 to `max_gates`; placed and in hand add up to the gates given (the level's, or the Twist's `set_gates`) plus `gates_added`, at most `max_gates` in all; every fixed cell of the Twist holds a fixed gate, and any other gate is fixed only under `gates_stay`; a gate is broken only in `wave`; in `build` the closed set does not seal |
+| gates | each on a socket, at most one per socket; `gates_added` 0 to `max_gates`; placed and in hand add up to the gates given (the level's, or the Twist's `set_gates`) plus `gates_added`, at most `max_gates` in all; every fixed cell of the Twist holds a fixed gate, and any other gate is fixed only under `gates_stay`; a gate is broken only in `wave`; the closed set does not seal, in `build` and in `wave`: in a wave, that is the unbroken gates, and none while `gates_open` |
 | gates_open | false in `build` |
 | towers | at most the spot count; each on its own spot; a tower the battle offers (the level's, plus `add_tower`, less `ban_tower`); tier 1 to 3; spec matching the tier and inside any cap; a reload timer from 0 to its `reload_ms * 100`, with card effects (3.1) |
-| creatures | at most 4,000; ids 0 to 2^31, unique and below the next id; known types; health 1 to max health, max health 1 to 1,000,000,000; walkers on joined road cells with progress 0 to UNIT; flyers inside the map; every timer inside its data range, `heal_at` included; `ups` at most the creature's number of speed up steps; `released` true only for a creature with a health release |
-| releases | at most 1,000; each a known creature of a running wave, 1 to 200 still to come, the next one due within one gap, starting as a creature would (walkers on joined road cells, flyers inside the map) |
+| creatures | at most 4,000; ids 0 to 2^31, unique and below the next id; known types; health 1 to max health, max health 1 to 1,000,000,000; walkers on joined road cells with progress 0 to UNIT; flyers inside the map; every timer inside its data range, `heal_at` included; `ups` at most the creature's number of speed up steps; `released` true only for a creature with a health release; at most 8 creatures that summon (`MAX_SUMMONERS`), counting summoning creatures still to come from releases |
+| releases | at most 1,000; each a known creature of a running wave, 1 to 200 still to come, the next one due within one gap, starting as a creature would (walkers on joined road cells, flyers inside the map); live creatures plus every creature still to come from releases at most 4,000 (`MAX_ENEMIES`) |
 | every number | whole, finite and in range, then converted to int |
 
-`RunSession.from_data` (phase 7) checks the run the same way, all or nothing: exact keys and `format` 1; a seed from 0 to 2^32 - 1; `day` either `""` or a day key whose `daily_seed()` is the seed, and then a battle that is not Relaxed; a pool of 1 to 256 known card ids with no repeats, holding at least one economy card that is not `once` (3.4); picks of 0 to 17 card ids from the pool, a `once` card at most once, and no more picks than the battle has cleared waves among waves 1 to 17. `SavedGame.from_data` checks that a campaign level's battle holds that level's Twist effects when `twist` is true and none otherwise, with no kept card effects, no waiting risk card, no `wave_risk` entry, `gates_added` 0 and `gates_open` false, because only cards and risk cards give those; that a run or daily battle holds no Twist; and that a daily battle is not Relaxed. It also checks that a campaign level's `run` is null, and that a run or daily has a `run` object. `RunSession.from_data` checks that object around the battle saved with it. Mode `daily` needs a day and mode `run` needs none, so neither can pass as the other. With no run data (`game.run` null), every saved run and daily is refused.
+`RunSession.from_data` (phase 7) checks the run the same way, all or nothing: exact keys and `format` 1; a seed from 0 to 2^32 - 1; `day` either `""` or a day key whose `daily_seed()` is the seed, and then a battle that is not Relaxed; a pool of 1 to 256 known card ids with no repeats, holding at least one economy card that is not `once` (3.4); picks of 0 to 17 card ids from the pool, a `once` card at most once, and no more picks than the battle has cleared waves among waves 1 to 17. The battle's card effects must come from the picks. `RunSession.from_data` rebuilds the kept card effects from the picks, in pick order, from the card data (`Modifiers.normalize_all` of each non-risk card's effects, less the instant types), and refuses a run whose battle's `effects` differ in any key, value or order. A waiting risk card (`risk`) must be the effects of the last risk card picked, and the battle must be in `build` with fewer than 17 waves started. Each `wave_risk` entry must equal the effects of an earlier risk pick, matched in pick order, each pick used at most once, and never the pick still waiting. A save that breaks any of this is refused the same way as any other bad run. A saved campaign level is still matched to the bundled level only by its id. `SavedGame.from_data` checks that a campaign level's battle holds that level's Twist effects when `twist` is true and none otherwise, with no kept card effects, no waiting risk card, no `wave_risk` entry, `gates_added` 0 and `gates_open` false, because only cards and risk cards give those; that a run or daily battle holds no Twist; and that a daily battle is not Relaxed. It also checks that a campaign level's `run` is null, and that a run or daily has a `run` object. `RunSession.from_data` checks that object around the battle saved with it. Mode `daily` needs a day and mode `run` needs none, so neither can pass as the other. With no run data (`game.run` null), every saved run and daily is refused.
 
 ## 6. Resume after the app is killed (brief 3.10)
 
@@ -1637,7 +1638,7 @@ export_presets.cfg (release-engineer):
 - `screen/immersive_mode=true` and `screen/edge_to_edge=false` (the defaults). The UI uses the safe area. QA checks the cover screen's camera cutout and the inner screen's taskbar inset.
 - `screen/support_small`, `support_normal`, `support_large` and `support_xlarge` all true.
 - `gradle_build/target_sdk` and `min_sdk` empty (36 and 24).
-- `user_data_backup/allow=false` and `package/retain_data_on_uninstall=false`, so saves stay on the phone and go with an uninstall.
+- `user_data_backup/allow=false` and `package/retain_data_on_uninstall=false`. The app never sends saves anywhere, and they go with an uninstall. Cloud and adb backup are off, but some phones can still move app files in a device to device transfer [7] (security review N5).
 - No permissions.
 - The APK check (scripts/check_apk.sh) confirms: `targetSdkVersion` 36, `screenOrientation` 1, `resizeableActivity` true, `appCategory` game, `configChanges` including 0x1d80 (orientation, screenLayout, screenSize, smallestScreenSize, density), no `uses-permission`, `assets/LICENSE`, `assets/NOTICE` and `assets/src/theme/fonts/OFL.txt` inside, and every file under data/ inside.
 
@@ -1649,7 +1650,7 @@ export_presets.cfg (release-engineer):
 4. Prepare your app for the resizability and orientation changes in Android 17 (2026-02-13): https://developer.android.com/blog/posts/prepare-your-app-for-the-resizability-and-orientation-changes-in-android-17
 5. Google Play target API level requirements: https://developer.android.com/google/play/requirements/target-sdk
 6. Support large screen resizability for games: https://developer.android.com/games/develop/multiplatform/support-large-screen-resizability
-7. The application element, `appCategory` and `isGame`: https://developer.android.com/guide/topics/manifest/application-element
+7. The application element, `appCategory`, `isGame` and `allowBackup` (checked again 2026-10-25): https://developer.android.com/guide/topics/manifest/application-element
 8. Fold5 stable One UI 8: https://www.sammobile.com/news/galaxy-z-fold-5-flip-5-get-stable-one-ui-8-update/
 9. Fold5 stable One UI 8.5: https://www.sammobile.com/news/galaxy-z-fold-5-flip-5-get-stable-one-ui-8-5-update
 10. Samsung Galaxy Z Fold 5 screens: https://en.wikipedia.org/wiki/Samsung_Galaxy_Z_Fold_5
@@ -1667,7 +1668,7 @@ const FEEDBACK_EMAIL: String = "bartbasi@gmail.com"
 ## Who opens a link. Empty means the phone (OS.shell_open). Tests put a recorder here.
 static var opener: Callable = Callable()
 static func open(url: String) -> void                  # only when is_ours(url): the opener if set, else OS.shell_open; a failure shows nothing
-static func is_ours(url: String) -> bool               # COFFEE_URL, SOURCE_URL, or a draft starting "mailto:bartbasi@gmail.com?"
+static func is_ours(url: String) -> bool               # COFFEE_URL, SOURCE_URL, or exactly feedback_url(version(), device_text())
 static func open_coffee() -> void                      # open(COFFEE_URL)
 static func open_source() -> void                      # open(SOURCE_URL)
 static func send_feedback() -> void                    # open(feedback_url(version(), device_text()))
@@ -1677,7 +1678,7 @@ static func feedback_url(version: String, device: String) -> String
 ```
 
 - Each address is a constant written once. Nothing is ever added to the coffee or source address. The feedback address is a constant too; only the subject and body of the draft carry the version and device.
-- `open()` refuses every address for which `is_ours()` is false, so no other address can ever leave the app, whoever calls it.
+- `is_ours()` accepts the two web addresses and exactly the draft `feedback_url(version(), device_text())` builds, so a draft with anything added or changed is refused (security review N2, commit 279500b). `open()` refuses every address for which `is_ours()` is false, so no other address can ever leave the app, whoever calls it.
 - `feedback_url` returns `"mailto:%s?subject=%s&body=%s" % [FEEDBACK_EMAIL, subject.uri_encode(), body.uri_encode()]`, with subject `"Forkline feedback (version %s)" % version` and body `"\n\n\nSent from Forkline %s on %s" % [version, device]`, so the player writes above that line. `uri_encode` turns `&`, `?`, `#`, `=` and line breaks into escapes, so a strange model name cannot add a recipient or a header. The player sees and can edit everything before sending; the app sends nothing.
 - Phone model: `OS.get_model_name()` (Build.MODEL, for example SM-F946B). Android version: `OS.get_version_alias()`, which on Android gives the marketing version plus the SDK and build; `OS.get_version()` gives only the SDK number and build.
 - The coffee tap rules (look, deadzone, one hand-off per tap, coming back) are the playbook's section 5, applied by the ui-engineer.
@@ -1873,13 +1874,15 @@ From wave 5 the work is the rest of the two loops. The DM starts each step when 
 | **G3** | game-designer (done 2026-10-25) | Run tuning from B2: the run targets of section 12 in RULES 14, and changes to cards, the run plan, packs and segments for their owners (docs/design/TUNING_RUNS.md). The two questions from the level designer's quick runs are settled: the final boss and the late gold by G3 (commit 3f202fb: each boss wave sets its own strength, and lives never rise above the start), and the run length by Bart on 2026-10-25 (RULES 14.1). | B2 | RULES.md and a list of changes |
 | **S3** | sim-engineer (done 2026-10-25) | The lives cap of G3 (TUNING_RUNS 3.2): `add_lives` never lifts lives above `start_lives`, and a saved battle above it loads unchanged (2.8, 5.6) | G3 | tests/sim/ |
 | **R3** | roguelite-engineer (done 2026-10-25) | G3's changes to data/cards/ and data/runs/, and in src/run/ the boss wave strength and the wave 17 limit (2.9, 2.10, 3.4) | G3 | tests/run/ |
-| **L5** | level-designer (in progress) | G3's changes to data/segments/ | G3 | tests/levels/ |
+| **L5** | level-designer (done 2026-10-25) | G3's changes to data/segments/ (commit fdbfec7; the differences from the plan are in TUNING_RUNS 3.4a) | G3 | tests/levels/ |
+| **S4** | sim-engineer (done 2026-10-25) | Findings L1 and L2 of the security review (docs/reviews/security-2026-10-25.md) in `Battle.from_data`: live creatures plus creatures still to come from releases at most 4,000, at most 8 creatures that summon, and the seal check in a wave too (4.4, 5.6) | the security review | tests/save/: the review's two tampered saves are refused, and real play at its worst moments still loads |
+| **R4** | roguelite-engineer (done 2026-10-25) | Finding N1 of the security review: `RunSession.from_data` ties the battle's kept card effects, its waiting risk card and each running wave's risk card to the picks (5.6) | the security review | tests/run/: the review's repro and each mismatch are refused, and real run and daily saves at every point load and play on the same |
 | **G4** | game-designer | Region 3 tuning from B3 | B3 | as G2 |
 | **L6** | level-designer | Region 3's level changes, then region 4, r4_l1 to r4_l6 with their Twists and tests/levels/ | G4 | tests/levels/ |
 | **B4** | balance-analyst | The pass over all 24 levels and every Twist, and the second run and daily report | L6, S3, R3, L5 | both reports |
 | **G5** | game-designer | Region 4 and the last run tuning | B4 | as G2 and G3 |
-| **L7, R4** | their owners | G5's changes | G5 | their tests |
-| **B5** | balance-analyst | The final confirmation of every check below, and the benchmark's largest wave across all levels, Twists and run packs with the largest risk card, written as a saved game for the phone (9.4) | L7, R4 | the report, and the saved game file |
+| **L7, R5** | their owners | G5's changes | G5 | their tests |
+| **B5** | balance-analyst | The final confirmation of every check below, and the benchmark's largest wave across all levels, Twists and run packs with the largest risk card, written as a saved game for the phone (9.4) | L7, R5 | the report, and the saved game file |
 | **V2** | render-engineer | The Fold5 measurement of that wave at 3x on both screens and while folding (9.2, 9.4). If the sim's 99th percentile tick is over 2 ms, the sim engineer speeds up the sim first (9.2). | B5 | the numbers within 9.2, in its report |
 
 Phase 7 is done when:
