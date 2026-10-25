@@ -47,7 +47,7 @@
    "text": "Wave clear bonuses are 50% bigger for the rest of the run.",
    "once": true, "unlock": {}, "effects": [{"type": "clear_bonus_pct", "pct": 150}]},
   {"id": "fair_trade", "kind": "economy", "name": "Fair Trade",
-   "text": "Selling a tower refunds 90% of what you paid.",
+   "text": "Selling refunds 90% instead of 70%.",
    "once": true, "unlock": {}, "effects": [{"type": "refund_pct", "pct": 90}]},
   {"id": "tea_break", "kind": "economy", "name": "Tea Break", "text": "Gain 5 lives, but never more than you started with.",
    "once": false, "unlock": {}, "effects": [{"type": "add_lives", "amount": 5}]},
