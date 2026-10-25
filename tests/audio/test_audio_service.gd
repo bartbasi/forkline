@@ -352,3 +352,14 @@ func test_warnings_still_play_when_voices_are_full() -> void:
 	assert_eq(service.voice_count(&"break_started"), 1)
 	assert_eq(service.voice_count(&"sped_up"), 1)
 	assert_true(service.voice_count() <= AudioService.VOICES)
+
+
+func test_releasing_playback_lets_go_of_every_stream() -> void:
+	# At exit a player still holding a stream leaks the stream and its playback.
+	service.set_music(&"menu")
+	service.play_events(_events(&"built", 1))
+	service._release_playback()
+	assert_null(service._music.stream)
+	for player: AudioStreamPlayer in service._voices:
+		assert_null(player.stream)
+	assert_false(service.is_music_playing())

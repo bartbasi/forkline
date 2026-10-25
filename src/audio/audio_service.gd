@@ -24,6 +24,8 @@ const MAX_SAME: int = 3
 const MUSIC_DB: float = -12.0
 const FADE_IN_SECONDS: float = 0.8
 const FADE_OUT_SECONDS: float = 0.35
+## Time the audio thread needs to drop stopped playbacks when the service leaves the tree.
+const PLAYBACK_DROP_MS: int = 200
 
 ## Event kind (architecture 3.1) to sound id. Every kind has a sound.
 ## break_started and sped_up warn the player, so they are heard. released and
@@ -145,6 +147,8 @@ func _init() -> void:
 
 func _ready() -> void:
 	set_process(false)
+	# tree_exiting fires before the players below leave the tree.
+	tree_exiting.connect(_release_playback)
 	# Music picked before the node joined the tree starts now.
 	_music_playing = &""
 	if _enabled and _music_wanted != &"":
@@ -163,6 +167,30 @@ func _process(_delta: float) -> void:
 		set_process(false)
 		return
 	_start_music()
+
+
+## Stops every player and lets go of its stream, so no playback outlives the
+## service. The audio thread drops a stopped playback on its next mix, so when
+## something was playing this waits a moment for that mix. Otherwise a playing
+## player at exit leaks its stream and playback.
+func _release_playback() -> void:
+	# A quit during the first seconds must not tear the engine down under the
+	# worker threads that are still building sounds.
+	if _bank != null:
+		_bank.wait()
+	_kill_tween()
+	var was_playing: bool = false
+	for player: AudioStreamPlayer in _voices:
+		was_playing = was_playing or player.stream != null
+		player.stop()
+		player.stream = null
+	if _music != null:
+		was_playing = was_playing or _music.stream != null
+		_music.stop()
+		_music.stream = null
+	_music_playing = &""
+	if was_playing:
+		OS.delay_msec(PLAYBACK_DROP_MS)
 
 
 ## Turns every sound and the music on or off (the Settings toggle). Off stops
