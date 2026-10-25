@@ -13,8 +13,20 @@ const FORBIDDEN: PackedStringArray = [
 	"WebRTCMultiplayerPeer", "WebRTCDataChannel", "ENetConnection",
 	"ENetMultiplayerPeer", "ENetPacketPeer", "MultiplayerPeer", "JavaScriptBridge",
 	"str_to_var", "bytes_to_var", "bytes_to_var_with_objects", "get_var",
-	"ConfigFile",
+	"ConfigFile", "dict_to_inst", "base64_to_variant", "UPNP", "UPNPDevice",
+	"resolve_hostname", "resolve_hostname_addresses", "resolve_hostname_queue_item",
+	"JavaClassWrapper", "JNISingleton",
 ]
+## Calls the game itself must never make. Tests and tools may load scenes and
+## run Godot, so these are checked only in the game's own folders.
+const GAME_FORBIDDEN: PackedStringArray = [
+	"ResourceLoader", "OS\\.execute", "OS\\.execute_with_pipe", "OS\\.create_process",
+	"OS\\.create_instance", "Engine\\.get_singleton",
+]
+## The game's own folders.
+const GAME_DIRS: PackedStringArray = ["res://src/", "res://scenes/"]
+## Files scanned: scripts, shaders, and scenes and resources, which can hold scripts.
+const SCANNED: PackedStringArray = ["gd", "gdshader", "tscn", "tres"]
 ## The only file allowed to call OS.shell_open (docs/ARCHITECTURE.md section 8).
 const LINKS_FILE: String = "res://src/ui/links.gd"
 const SKIPPED_DIRS: PackedStringArray = [".godot", ".git", ".claude", "android", "build", "docs"]
@@ -30,6 +42,24 @@ func test_no_network_code_or_unsafe_loaders() -> void:
 			var found: RegExMatch = regex.search(lines[i])
 			if found != null:
 				fail("%s:%d uses %s" % [path, i + 1, found.get_string(1)])
+
+
+func test_the_game_never_loads_resources_or_runs_programs() -> void:
+	# A bare load( call, but not preload(), which only takes paths written in the
+	# code, and not a method of our own such as SaveStore.load_daily.
+	var regex: RegEx = RegEx.create_from_string(
+		"(\\b(?:" + "|".join(GAME_FORBIDDEN) + ")\\b|(?<![\\w.])load\\s*\\()")
+	var checked: int = 0
+	for path: String in _scripts():
+		if not (path.begins_with(GAME_DIRS[0]) or path.begins_with(GAME_DIRS[1])):
+			continue
+		checked += 1
+		var lines: PackedStringArray = FileAccess.get_file_as_string(path).split("\n")
+		for i: int in lines.size():
+			var found: RegExMatch = regex.search(lines[i])
+			if found != null:
+				fail("%s:%d uses %s" % [path, i + 1, found.get_string(1)])
+	assert_true(checked > 50, "the game's own files were scanned")
 
 
 func test_only_the_links_file_opens_addresses() -> void:
@@ -53,5 +83,5 @@ func _collect(dir_path: String, out: PackedStringArray) -> void:
 			continue
 		_collect(sub_path, out)
 	for file_name: String in DirAccess.get_files_at(dir_path):
-		if file_name.get_extension() == "gd":
+		if SCANNED.has(file_name.get_extension()):
 			out.append(dir_path.path_join(file_name))

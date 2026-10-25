@@ -7,7 +7,7 @@ Every visual, effect, sound and piece of music in Forkline is made in code. This
 | File | What it is | License | Source | Notes |
 |---|---|---|---|---|
 | LICENSE | GNU General Public License, version 3 | (the license itself) | gnu.org, official text | Unmodified. MD5 `1ebbd3e34237af26da5dc08a4e440464`, checked by tests/project/test_project_rules.gd. |
-| src/theme/fonts/Outfit[wght].ttf | Outfit font, variable weight, used everywhere (Bart, hard stop A) | SIL Open Font License 1.1 | Copied unmodified from the slice copy below | MD5 `e31a3aa5fce3366bcadb8e9027f26178`, checked by tests/theme/test_ui_theme.gd. Ships in the game. |
+| src/theme/fonts/Outfit[wght].ttf | Outfit font, variable weight, used everywhere (Bart, hard stop A) | SIL Open Font License 1.1 | Copied unmodified from SumUp's src/design/fonts/, originally from the Outfit project (Google Fonts). Playbook approved default. | MD5 `e31a3aa5fce3366bcadb8e9027f26178`, checked by tests/theme/test_ui_theme.gd. Ships in the game. |
 | src/theme/fonts/OFL.txt | The font's license | (the license itself) | Same source, unmodified | MD5 `fc7bcc2f3d37195db3ea982ccfecd531`. Ships in the APK next to the font and is readable in About. |
 
 ## Made in code

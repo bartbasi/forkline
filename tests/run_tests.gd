@@ -39,6 +39,9 @@ class ErrorCatcher extends Logger:
 
 
 var _catcher: ErrorCatcher = ErrorCatcher.new()
+## Addresses a test tried to open with no recorder of its own. Every test starts
+## with this guard as the opener, so nothing real ever opens.
+var _stray_opens: PackedStringArray = PackedStringArray()
 
 
 func _initialize() -> void:
@@ -115,12 +118,21 @@ func _test_method_names(script: GDScript) -> PackedStringArray:
 func _run_test(script: GDScript, method_name: String) -> PackedStringArray:
 	var test: BaseTest = script.new()
 	_catcher.take()
+	_stray_opens.clear()
+	Links.opener = _guard_open
 	test.before_each()
 	test.call(method_name)
 	test.after_each()
+	Links.opener = Callable()
 	var problems: PackedStringArray = test.failures.duplicate()
 	problems.append_array(_catcher.take())
+	for url: String in _stray_opens:
+		problems.append("opened %s with no recorder of its own" % url)
 	return problems
+
+
+func _guard_open(url: String) -> void:
+	_stray_opens.append(url)
 
 
 func _print_failure(path: String, method_name: String, problems: PackedStringArray) -> void:
