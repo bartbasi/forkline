@@ -1,9 +1,11 @@
 # Forkline. Copyright 2026 Play, Inc.
 # Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.
 class_name StatRow
-extends HBoxContainer
+extends BoxContainer
 ## One line of numbers. Either a name and a value, or a name with a number
-## before and after an upgrade with an arrow drawn between them (RULES 9.5).
+## before and after an upgrade with an arrow drawn between them (RULES 9.5). A stacked change
+## row puts the name on its own line and lets the after text wrap, for words too long to sit
+## beside the name in a narrow card ("Walkers and flyers").
 
 var name_label: Label
 var value_label: Label
@@ -27,7 +29,7 @@ static func pair(label_text: String, value_text: String, name_variation: StringN
 	return row
 
 
-static func change(label_text: String, before_text: String, after_text: String, name_variation: StringName = &"SoftLabel", value_variation: StringName = &"Label", tint: Color = Palette.TEXT_LIGHT, font_size: int = UiTheme.FONT_SMALL) -> StatRow:
+static func change(label_text: String, before_text: String, after_text: String, name_variation: StringName = &"SoftLabel", value_variation: StringName = &"Label", tint: Color = Palette.TEXT_LIGHT, font_size: int = UiTheme.FONT_SMALL, stacked: bool = false) -> StatRow:
 	var row: StatRow = StatRow.new()
 	row.name_label = UiKit.label(label_text, name_variation)
 	row.name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -49,6 +51,19 @@ static func change(label_text: String, before_text: String, after_text: String, 
 	row.after_label.add_theme_font_override(&"font", UiTheme.font(UiTheme.WEIGHT_BOLD))
 	for l: Label in [row.name_label, row.before_label, row.after_label]:
 		l.add_theme_font_size_override(&"font_size", font_size)
+	if stacked:
+		row.vertical = true
+		row.after_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.after_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		var values: HBoxContainer = HBoxContainer.new()
+		values.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		values.add_theme_constant_override(&"separation", 8)
+		values.add_child(row.before_label)
+		values.add_child(row.arrow)
+		values.add_child(row.after_label)
+		row.add_child(row.name_label)
+		row.add_child(values)
+		return row
 	row.add_child(row.name_label)
 	row.add_child(row.before_label)
 	row.add_child(row.arrow)

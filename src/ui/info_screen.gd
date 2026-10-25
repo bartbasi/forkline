@@ -66,7 +66,7 @@ func _sections(rules: Dictionary) -> Array[Dictionary]:
 	var waves_at_once: String = _waves_sentence(rules)
 	var run_stars: String = _count(rules, "run_stars", "enough")
 	var runs_built: bool = bool(rules.get("runs_built", true))
-	return [
+	var sections: Array[Dictionary] = [
 		{"title": "The goal", "art": &"walk", "text": [
 			"Night creatures walk down the roads toward your village. Every creature that gets through costs lives.",
 			"Lose all your lives and the level is lost. Beat every wave and you win."]},
@@ -85,6 +85,9 @@ func _sections(rules: Dictionary) -> Array[Dictionary]:
 		{"title": "Upgrades", "art": &"tiers", "text": [
 			"Every tower has three tiers. At tier 3 you pick one of two paths. The choice is permanent for that tower. Selling it is the only way to choose again.",
 			"An upgrade shows its cost and the numbers before and after, so you can decide first."]},
+		{"title": "Targeting", "text": [
+			"Every tower that attacks has a targeting mode: First, Last or Strong. It starts on First. You can change it at any time, even in the middle of a wave, and it stays through upgrades.",
+			"First picks the creature nearest the village. Last picks the one farthest from it. Strong picks the one with the highest maximum health. Only creatures in range, and of a kind the tower can hit, count. A tower picks again every time it fires."]},
 		{"title": "Creatures", "art": &"creatures", "text": [
 			"Creatures differ in speed, health and armor. Some fly, some wear a bubble that stops one hit, some burst into smaller ones, some heal the others, and some break gates.",
 			"The last pictures are the bosses. Each region ends with one.",
@@ -105,9 +108,34 @@ func _sections(rules: Dictionary) -> Array[Dictionary]:
 		{"title": "Relaxed", "text": [
 			"Relaxed gives you more lives and more gold to start. Nothing else changes.",
 			"A Relaxed win earns one star, which is enough to keep going. The other stars need Normal. Normal is always the default."]},
+		{"title": "Twists", "text": [
+			"Once you have 3 stars on a level, its Twist opens. A Twist is the same map and the same waves with one rule changed.",
+			"A Twist has no stars of its own. A win on Normal or Relaxed clears it. The level card and Pause show its name and its rule."]},
 		{"title": "More ways to play", "text": [
 			"Roguelite is one run of many waves. After each wave you pick a card. Daily is one run a day, the same for everyone, and always Normal.",
 			_runs_sentence(runs_built, run_stars)]},
+	]
+	if runs_built:
+		sections.append_array(_run_sections())
+	return sections
+
+
+## How a run and the daily go (RULES 14, 15). Shown once the run mode is built.
+func _run_sections() -> Array[Dictionary]:
+	return [
+		{"title": "How a run goes", "text": [
+			"A run has 18 waves. The last one is a boss wave. You start with one kind of tower and 1 gate. Other towers and more gates come from cards.",
+			"After each of waves 1 to 17 you pick 1 card from 3. The draft opens in the next build phase. You cannot skip it, and the next wave cannot start until you pick. If you call waves early, the drafts wait and come one after another.",
+			"A run is won when the last wave has started, no wave is still on the map, and you have lives left. It is lost when your lives reach 0. A boss that gets through costs 20 lives.",
+			"You can leave a run at any time and come back to the exact moment you left. Abandoning it counts as a loss at its current wave. A run carries nothing over except progress toward new cards."]},
+		{"title": "Cards", "text": [
+			"Cards come in five kinds. Tower cards add a tower to your run. Tower perks change a tower you already have. Extra gate cards give you a gate, up to 3. Economy cards help with gold and lives. Risk cards change the next wave and pay a reward.",
+			"A risk card changes only the next wave that starts. Its gold is paid with that wave's clear bonus, and nothing is paid if the run ends before then. A draft has at most one risk card, and none while another waits. None come once wave 17 has started, so the boss wave is never changed.",
+			"Playing unlocks new cards for later runs. Each one is a sidegrade: it changes how something works and carries a cost."]},
+		{"title": "The daily", "text": [
+			"The daily is built like a run, but it comes from the phone's date. Everyone with the same version of the game gets the same run on the same date, with no network. It is always Normal and uses every card.",
+			"You can try as often as you like. Each finished try is compared with the day's best. A win beats a loss. Between wins, more lives left is better. Between losses, more waves cleared is better. A tie keeps the earlier result.",
+			"Your streak counts days in a row on which you finished a daily. It shows while the last day counted is today or yesterday. A daily belongs to the date it started, even if it ends after midnight. The best result and the streak stay on your phone."]},
 	]
 
 

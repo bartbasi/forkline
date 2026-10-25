@@ -24,8 +24,9 @@ var menu_button: TapButton
 
 ## `result` is RunSession.result(). `relaxed` is the run's difficulty. A daily passes its `day`
 ## key with the day's `best` ({} for none) and the shown `streak`, both as they stand after this
-## run was recorded.
-func _init(game: GameData, result: Dictionary, is_relaxed: bool = false, day: String = "", best: Dictionary = {}, streak: int = 0) -> void:
+## run was recorded. `today` is the phone's day key: when it is not the run's day (a daily that
+## ended after midnight), the best is called "Best that day". Empty means the same day.
+func _init(game: GameData, result: Dictionary, is_relaxed: bool = false, day: String = "", best: Dictionary = {}, streak: int = 0, today: String = "") -> void:
 	won = bool(result.get("won", false))
 	daily = not day.is_empty()
 	relaxed = is_relaxed
@@ -39,7 +40,8 @@ func _init(game: GameData, result: Dictionary, is_relaxed: bool = false, day: St
 	lives_label = UiKit.label("Lives left: %d" % int(result.get("lives", 0)))
 	body.add_child(lives_label)
 	if daily:
-		best_label = UiKit.label("Best today: %s" % RunCard.best_text(best), &"Label")
+		var when: String = "today" if today.is_empty() or today == day else "that day"
+		best_label = UiKit.label("Best %s: %s" % [when, RunCard.best_text(best)], &"Label")
 		body.add_child(best_label)
 		streak_label = UiKit.label(RunCard.streak_text(streak), &"Label")
 		body.add_child(streak_label)

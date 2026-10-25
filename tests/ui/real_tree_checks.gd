@@ -308,7 +308,7 @@ func _battle_panels() -> void:
 	for pair: Array in [[COVER, true], [INNER, false]]:
 		var size: Vector2 = pair[0]
 		var wide: bool = pair[1]
-		for state: String in ["hud", "build", "build six", "tower 1", "paths", "path picked", "tier 3", "creature", "preview", "strip", "preview boss", "strip many", "hud wave", "boss creature"]:
+		for state: String in ["hud", "build", "build six", "tower 1", "paths", "path picked", "tier 3", "paths bell", "paths firework", "creature", "preview", "strip", "preview boss", "strip many", "hud wave", "boss creature"]:
 			var host: Array = _panel_host(size, wide)
 			var vp: SubViewport = host[0]
 			var column: VBoxContainer = host[1]
@@ -330,8 +330,14 @@ func _battle_panels() -> void:
 					build.set_wide(wide)
 					build.show_spot(cell)
 					panel = build
-				"tower 1", "paths", "path picked", "tier 3":
-					b.place_tower(cell, &"pumpkin_catapult")
+				"tower 1", "paths", "path picked", "tier 3", "paths bell", "paths firework":
+					var built: StringName = &"pumpkin_catapult"
+					if state == "paths bell" or state == "paths firework":
+						# The widest rows: "Walkers and flyers" and "0.75 tiles to none".
+						b = BattleFixtures.all_towers_battle(&"r1_l6")
+						b.gold = 900
+						built = &"lullaby_bell" if state == "paths bell" else &"firework_tower"
+					b.place_tower(cell, built)
 					if state != "tower 1":
 						b.upgrade_tower(cell)
 					if state == "tier 3":
@@ -404,7 +410,7 @@ func _battle_panels() -> void:
 			# Nothing may lie outside the screen: every visible control, at any depth. The one
 			# exception is the two tall tier 3 states in the narrow side panel, which stacks
 			# the path cards and scrolls (the side column is a scroll area).
-			var scrolls: bool = not wide and (state == "paths" or state == "path picked")
+			var scrolls: bool = not wide and (state == "paths" or state == "path picked" or state == "paths bell" or state == "paths firework")
 			var screen: Rect2 = Rect2(Vector2.ZERO, size)
 			for node: Node in column.find_children("*", "Control", true, false):
 				if scrolls:

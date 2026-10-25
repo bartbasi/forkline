@@ -10,7 +10,7 @@ extends PageFrame
 signal license_requested(kind: StringName)
 
 const WHAT_IT_IS: String = "Forkline is a tower defense game. You build towers and place gates on forking roads to steer night creatures away from your village."
-const OFFLINE: String = "Forkline works fully offline. It collects no data, has no ads or accounts and asks for no permissions. The Buy me a coffee button only opens a web page in your phone's browser, and the app itself sends nothing."
+const OFFLINE: String = "Forkline works fully offline. It collects no data, has no ads or accounts and asks for no permissions. Three buttons hand a fixed address to another app on your phone: Buy me a coffee and the source code link open a web page in your browser, and Send feedback opens a message in your email app. The app itself sends nothing."
 const SUPPORTING: String = "Forkline is free, with no ads and no tracking, and it always will be. If you'd like to support more games like it, you can buy me a coffee. Never expected, always appreciated."
 const LICENSES: String = "Forkline is free software: you can share and change it under the GNU General Public License, version 3, with additional terms. Any copy keeps the attribution above, and changed versions are marked as changed. Forkline comes with no warranty."
 const FEEDBACK_ASK: String = "I'd love to hear what you think: what you enjoyed, where you got stuck, and what you'd like to see next."

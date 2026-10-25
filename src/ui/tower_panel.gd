@@ -127,6 +127,9 @@ func confirm_path() -> void:
 func sell() -> void:
 	if battle == null or not _open:
 		return
+	if _selling_off():
+		finish(&"no_selling")
+		return
 	if not sell_armed:
 		sell_armed = true
 		armed_at_msec = Time.get_ticks_msec()
@@ -236,7 +239,7 @@ func _stats(numbers: Dictionary, type: TowerType) -> Control:
 	grid.add_theme_constant_override(&"v_separation", 6)
 	var rows: Array[PackedStringArray] = BattleText.tower_rows(numbers, type.kind)
 	rows.append(PackedStringArray(["Total spent", str(int(numbers["spent"]))]))
-	if wide:
+	if wide and not _selling_off():
 		# The narrow side panel leaves it out: the Sell button right below shows the same number.
 		rows.append(PackedStringArray(["Sell value", str(int(numbers["sell"]))]))
 	for row: PackedStringArray in rows:
@@ -267,6 +270,11 @@ func _upgrade_section(tower: TowerState, type: TowerType, numbers: Dictionary, o
 	box.add_theme_constant_override(&"separation", 10)
 	if options.is_empty():
 		box.add_child(UiKit.label("Fully upgraded.", &"SoftLabel"))
+		return box
+	if _at_cap(options):
+		var cap_label: Label = UiKit.label("At the tier cap. This level stops towers at tier %d." % tower.tier, &"SoftLabel")
+		cap_label.name = "CapLabel"
+		box.add_child(cap_label)
 		return box
 	var got_pct: int = int(numbers.get("got_pct", 0))
 	if tower.tier == 1:
@@ -351,7 +359,8 @@ func _path_card(type: TowerType, option: Dictionary, got_pct: int) -> TapRow:
 	card.body.add_child(top)
 	card.body.add_child(UiKit.label(type.spec_info(spec), &"CardMutedLabel"))
 	for change: Dictionary in BattleText.change_rows(option["before"], option["after"], type.kind, got_pct):
-		card.body.add_child(StatRow.change(change["label"], change["before"], change["after"], &"CardMutedLabel", &"CardLabel", Palette.TEXT_DARK, 36))
+		# "Affects" holds whole words, too long for the narrow card beside its name.
+		card.body.add_child(StatRow.change(change["label"], change["before"], change["after"], &"CardMutedLabel", &"CardLabel", Palette.TEXT_DARK, 36, change["label"] == "Affects"))
 	var cost_line: Label = UiKit.label(_cost_text(option), &"CardLabel")
 	cost_labels[spec] = cost_line
 	card.body.add_child(cost_line)
@@ -362,6 +371,14 @@ func _path_card(type: TowerType, option: Dictionary, got_pct: int) -> TapRow:
 func _sell_section(tower: TowerState) -> Control:
 	var box: VBoxContainer = VBoxContainer.new()
 	box.add_theme_constant_override(&"separation", 8)
+	sell_button = null
+	refund_label = null
+	if _selling_off():
+		# The No Selling Twist: say so once, with no value and no button.
+		var off: Label = UiKit.label(BattleText.refusal(&"no_selling"), &"SoftLabel")
+		off.name = "NoSellLabel"
+		box.add_child(off)
+		return box
 	var refund: int = battle.sell_value(cell)
 	refund_label = UiKit.label(BattleText.refund_text(tower.spent_now, tower.spent_before, battle.catalog.rules.refund_pct), &"SoftLabel")
 	box.add_child(refund_label)
@@ -372,6 +389,19 @@ func _sell_section(tower: TowerState) -> Control:
 	sell_button.tapped.connect(sell)
 	box.add_child(sell_button)
 	return box
+
+
+## True under the No Selling Twist. Battle refuses the sale too; the panel just does not offer it.
+func _selling_off() -> bool:
+	return Modifiers.has_type(battle.twist_effects, "no_selling")
+
+
+## True when every upgrade is refused for the level's tier cap (a Twist).
+func _at_cap(options: Array[Dictionary]) -> bool:
+	for option: Dictionary in options:
+		if option["refusal"] != &"tier_cap":
+			return false
+	return not options.is_empty()
 
 
 func _lock_if_refused(button: TapButton, refusal: StringName) -> void:

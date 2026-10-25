@@ -466,6 +466,16 @@ func test_a_lost_daily_records_the_best_the_streak_and_the_count() -> void:
 	assert_eq(_saved_on_disk().size(), 0)
 
 
+func test_a_daily_finished_after_midnight_says_best_that_day() -> void:
+	var made: App = _app()
+	var screen: BattleScreen = _start_daily(made)
+	assert_eq(screen.run.day, "2026-10-24")
+	made.date_source = func() -> Dictionary: return DAY_2
+	_lose(screen)
+	var panel: RunEndPanel = made.top_modal() as RunEndPanel
+	assert_eq(panel.best_label.text, "Best that day: Lost with 0 of 18 waves cleared.")
+
+
 func test_the_daily_keeps_the_better_try_of_the_day() -> void:
 	var made: App = _app()
 	_lose(_start_daily(made))

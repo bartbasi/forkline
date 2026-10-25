@@ -1197,7 +1197,8 @@ func tap_socket(cell: Vector2i) -> void:
 	if draft_is_open():
 		return
 	close_context()
-	if battle.level.gates == 0 and battle.gates.is_empty():
+	if battle.gates_in_hand == 0 and battle.gates.is_empty():
+		# No gates at all: a level with none, or the No Gates Twist. A socket tap says nothing.
 		return
 	var result: StringName
 	var warn: bool = false

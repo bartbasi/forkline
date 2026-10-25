@@ -914,11 +914,12 @@ func _show_run_end(pending: Dictionary) -> void:
 	var day: String = String(pending.get("day", ""))
 	var best: Dictionary = {}
 	var streak: int = 0
+	var now: String = ""
 	if daily:
 		best = _best_for(day)
-		var now: String = today()
+		now = today()
 		streak = _shown_streak(now if not now.is_empty() else day)
-	var panel: RunEndPanel = RunEndPanel.new(game, outcome, relaxed, day, best, streak)
+	var panel: RunEndPanel = RunEndPanel.new(game, outcome, relaxed, day, best, streak, now)
 	panel.retry_requested.connect(_run_retry.bind(daily, relaxed))
 	panel.menu_requested.connect(_run_menu)
 	open_modal(panel)

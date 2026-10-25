@@ -254,13 +254,18 @@ static func change_rows(before: Dictionary, after: Dictionary, kind: StringName,
 	_change(out, "Splash", _tiles_or_none(int(before.get("splash", 0))), _tiles_or_none(int(after.get("splash", 0))))
 	_change(out, "Slow", _percent_or_none(int(before.get("slow_pct", 0))), _percent_or_none(int(after.get("slow_pct", 0))))
 	_change(out, "Linger", _seconds_or_none(int(before.get("slow_ms", 0))), _seconds_or_none(int(after.get("slow_ms", 0))))
-	_change(out, "Hits", hits_short(before), hits_short(after))
+	if kind == &"slow":
+		# The same label and words as the tapped tower's row (RULES 9.3).
+		_change(out, "Affects", hits_text(before), hits_text(after))
+	else:
+		_change(out, "Hits", hits_short(before), hits_short(after))
 	_change(out, "Armor", "Blunts" if not bool(before.get("pierce", false)) else "Ignored", "Blunts" if not bool(after.get("pierce", false)) else "Ignored")
 	return out
 
 
+## A splash of 0 is "none" (RULES 5.7), never "0 tiles".
 static func _tiles_or_none(hundredths: int) -> String:
-	return tiles_text(hundredths)
+	return tiles_text(hundredths) if hundredths > 0 else "none"
 
 
 static func _percent_or_none(pct: int) -> String:

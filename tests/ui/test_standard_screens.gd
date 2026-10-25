@@ -107,7 +107,7 @@ func test_about_sections_come_in_the_playbook_order_with_its_words() -> void:
 		var at: int = texts.find(title)
 		assert_true(at > last, "section %s missing or out of order" % title)
 		last = at
-	assert_true(texts.has("Forkline works fully offline. It collects no data, has no ads or accounts and asks for no permissions. The Buy me a coffee button only opens a web page in your phone's browser, and the app itself sends nothing."))
+	assert_true(texts.has("Forkline works fully offline. It collects no data, has no ads or accounts and asks for no permissions. Three buttons hand a fixed address to another app on your phone: Buy me a coffee and the source code link open a web page in your browser, and Send feedback opens a message in your email app. The app itself sends nothing."))
 	assert_true(texts.has("Forkline is free, with no ads and no tracking, and it always will be. If you'd like to support more games like it, you can buy me a coffee. Never expected, always appreciated."))
 	assert_true(texts.has("Forkline is free software: you can share and change it under the GNU General Public License, version 3, with additional terms. Any copy keeps the attribution above, and changed versions are marked as changed. Forkline comes with no warranty."))
 	# The coffee button sits in Supporting, before the Licenses section.
