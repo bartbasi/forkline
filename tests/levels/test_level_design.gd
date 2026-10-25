@@ -9,8 +9,8 @@ const Files: GDScript = preload("res://tests/levels/fixtures/level_files.gd")
 ## RULES 12.3 and 12.4, one row per level in play order:
 ## gates, sockets, waves, strength, Normal starting gold, star 3 kind and value,
 ## and the kind of cell the hint highlights ("none" for a level with no hint).
-## 3-2's star 3 is "Have at most 6 towers", not RULES 12.4's starting target of 7: at 7 the
-## level designer's bot searches found Sling Posts alone earning all three stars (2026-10-24).
+## 3-2's star 3 is "Have at most 6 towers" (at 7 Sling Posts alone earned all three stars), and
+## 2-2's is "Use no gates" (TUNING_R2.md, 2026-10-24).
 const PLAN: Dictionary = {
 	"r1_l1": {"gates": 0, "sockets": 0, "waves": 8, "strength": 100, "gold": 200, "star3": ["tier_at_most", 1], "highlight": "spot"},
 	"r1_l2": {"gates": 1, "sockets": 2, "waves": 8, "strength": 100, "gold": 250, "star3": ["tier_at_most", 1], "highlight": "socket"},
@@ -19,7 +19,7 @@ const PLAN: Dictionary = {
 	"r1_l5": {"gates": 1, "sockets": 3, "waves": 10, "strength": 100, "gold": 300, "star3": ["tier_at_most", 2], "highlight": "spot"},
 	"r1_l6": {"gates": 1, "sockets": 3, "waves": 10, "strength": 100, "gold": 350, "star3": ["gates_at_most", 0], "highlight": "spot"},
 	"r2_l1": {"gates": 1, "sockets": 3, "waves": 10, "strength": 130, "gold": 350, "star3": ["early_calls_at_least", 6], "highlight": "call"},
-	"r2_l2": {"gates": 1, "sockets": 3, "waves": 10, "strength": 135, "gold": 400, "star3": ["towers_at_most", 6], "highlight": "spot"},
+	"r2_l2": {"gates": 1, "sockets": 3, "waves": 10, "strength": 135, "gold": 400, "star3": ["gates_at_most", 0], "highlight": "spot"},
 	"r2_l3": {"gates": 1, "sockets": 3, "waves": 10, "strength": 140, "gold": 400, "star3": ["tier_at_most", 2], "highlight": "spot"},
 	"r2_l4": {"gates": 2, "sockets": 4, "waves": 11, "strength": 145, "gold": 450, "star3": ["gates_at_most", 1], "highlight": "socket"},
 	"r2_l5": {"gates": 2, "sockets": 4, "waves": 11, "strength": 150, "gold": 450, "star3": ["tower_ban", "longbow_loft"], "highlight": "spot"},
@@ -30,6 +30,12 @@ const PLAN: Dictionary = {
 	"r3_l4": {"gates": 2, "sockets": 5, "waves": 12, "strength": 185, "gold": 600, "star3": ["tower_ban", "sling_post"], "highlight": "spot"},
 	"r3_l5": {"gates": 3, "sockets": 6, "waves": 12, "strength": 190, "gold": 600, "star3": ["tier_at_most", 2], "highlight": "none"},
 	"r3_l6": {"gates": 3, "sockets": 6, "waves": 12, "strength": 200, "gold": 650, "star3": ["no_lives_lost", 0], "highlight": "spot"},
+	"r4_l1": {"gates": 2, "sockets": 5, "waves": 12, "strength": 210, "gold": 650, "star3": ["towers_at_most", 6], "highlight": "spot"},
+	"r4_l2": {"gates": 2, "sockets": 5, "waves": 12, "strength": 220, "gold": 700, "star3": ["tower_ban", "pumpkin_catapult"], "highlight": "spot"},
+	"r4_l3": {"gates": 3, "sockets": 6, "waves": 12, "strength": 230, "gold": 700, "star3": ["gates_whole", 0], "highlight": "socket"},
+	"r4_l4": {"gates": 3, "sockets": 6, "waves": 12, "strength": 240, "gold": 750, "star3": ["kinds_at_most", 3], "highlight": "none"},
+	"r4_l5": {"gates": 3, "sockets": 6, "waves": 12, "strength": 250, "gold": 750, "star3": ["early_calls_at_least", 6], "highlight": "none"},
+	"r4_l6": {"gates": 3, "sockets": 6, "waves": 12, "strength": 260, "gold": 800, "star3": ["no_lives_lost", 0], "highlight": "spot"},
 }
 
 ## docs/ARCHITECTURE.md 2.8 and RULES 13: each level's Twist as effects. The level designer picks
@@ -54,6 +60,12 @@ const TWISTS: Dictionary = {
 	"r3_l4": [{"type": "count_pct", "pct": 200, "flyers": true, "last_wave": false}],
 	"r3_l5": [{"type": "tier_cap", "tier": 2}],
 	"r3_l6": [{"type": "count_pct", "pct": 200, "flyers": false, "last_wave": true}],
+	"r4_l1": [{"type": "start_gold_pct", "pct": 50}],
+	"r4_l2": [{"type": "ban_tower", "tower": "longbow_loft"}],
+	"r4_l3": [{"type": "break_ms", "enemy": "gatecrasher", "ms": 2000}],
+	"r4_l4": [{"type": "no_selling"}],
+	"r4_l5": [{"type": "set_lives", "lives": 5}],
+	"r4_l6": [{"type": "count_pct", "pct": 200, "flyers": false, "last_wave": true}],
 }
 
 ## RULES 12.2: the towers each level brings.
@@ -62,6 +74,7 @@ const NEW_TOWERS: Dictionary = {
 	"r2_l2": ["lullaby_bell"],
 	"r2_l3": ["longbow_loft"],
 	"r3_l1": ["firework_tower"],
+	"r4_l1": ["bakery"],
 }
 
 ## RULES 12.2 and 12.3: the creature each level brings and its first wave, 1 based.
@@ -77,12 +90,15 @@ const NEW_CREATURES: Dictionary = {
 	"r3_l2": ["puffball", 2],
 	"r3_l4": ["dusk_moth", 3],
 	"r3_l6": ["moon_moth", 12],
+	"r4_l2": ["mender", 2],
+	"r4_l3": ["gatecrasher", 3],
+	"r4_l6": ["old_tusk", 12],
 }
 
 ## RULES 3.1 and 3.4: map rows and build spots per region, and entrances per region (12.3).
 const REGION_ROWS: Dictionary = {"lantern_hill": [8, 11], "millbrook": [10, 13], "willow_fen": [10, 13], "moonspire_keep": [10, 13]}
 const REGION_SPOTS: Dictionary = {"lantern_hill": [5, 7], "millbrook": [7, 9], "willow_fen": [8, 10], "moonspire_keep": [9, 11]}
-const REGION_ENTRANCES: Dictionary = {"lantern_hill": [1, 1], "millbrook": [1, 2], "willow_fen": [1, 2]}
+const REGION_ENTRANCES: Dictionary = {"lantern_hill": [1, 1], "millbrook": [1, 2], "willow_fen": [1, 2], "moonspire_keep": [2, 3]}
 
 ## RULES 12.5: a new creature's first wave holds 3 to 5 of it. A boss comes alone.
 const FIRST_WAVE_COUNT: Array[int] = [3, 5]
@@ -419,6 +435,20 @@ func test_hint_highlights_the_planned_kind_of_cell() -> void:
 		assert_eq(level.kind_at(level.hint_cell), kinds[planned], "%s: the hint cell %s is a %s" % [id, level.hint_cell, planned])
 
 
+## Contract 7.4: the Paused strip and messages never cover the highlighted cell. On the Fold5 cover
+## they reach up into map row 9 (measured by tests/ui/real_tree_checks.gd on 2026-10-24, when 4-6
+## first glowed on row 9), so a highlighted cell sits in rows 0 to 8. tests/ui/ checks the real layout.
+const HIGHLIGHT_LAST_ROW: int = 8
+
+
+func test_a_highlighted_cell_sits_above_the_paused_strip() -> void:
+	for id: String in order:
+		var level: LevelData = _level(id)
+		if level == null or level.hint_cell.y < 0:
+			continue
+		assert_true(level.hint_cell.y <= HIGHLIGHT_LAST_ROW, "%s: the highlighted cell %s is in rows 0 to %d" % [id, level.hint_cell, HIGHLIGHT_LAST_ROW])
+
+
 ## RULES 9.6: a first tower built on a highlighted spot touches the road the creatures walk
 ## with no gate placed. Every tower that attacks or slows reaches, at tier 1, some cell of an
 ## entrance's open route. (Level 2-2 once glowed on a spot that saw road only with a gate on.)
@@ -565,33 +595,88 @@ func _row_is_free(level: LevelData, row: int) -> bool:
 ## wave): wave 1 comes only from entrance A, and the first wave from entrance B comes from B
 ## alone and brings no creature the player has not met.
 func test_a_second_entrance_comes_in_gently() -> void:
+	_new_entrance_comes_in_gently(1, "B")
+
+
+## The first map with a third entrance (4-4) brings it in the same way: wave 1 uses only
+## entrances A and B, and the first wave from entrance C comes from C alone and brings no
+## creature the player has not met.
+func test_a_third_entrance_comes_in_gently() -> void:
+	_new_entrance_comes_in_gently(2, "C")
+
+
+## `index` is the entrance, 0 based. Checks the first level in play order that has it.
+func _new_entrance_comes_in_gently(index: int, letter: String) -> void:
 	var seen: Array[StringName] = []
 	for id: String in order:
 		var level: LevelData = _level(id)
 		if level == null:
 			continue
-		if level.entrances.size() < 2:
+		if level.entrances.size() <= index:
 			for wave: WaveData in level.waves:
 				for group: WaveGroup in wave.groups:
 					if not seen.has(group.enemy):
 						seen.append(group.enemy)
 			continue
 		for group: WaveGroup in level.waves[0].groups:
-			assert_eq(group.entrance, 0, "%s wave 1 comes only from entrance A" % id)
+			assert_true(group.entrance < index, "%s wave 1 does not use entrance %s" % [id, letter])
 		for i: int in level.waves.size():
 			var wave: WaveData = level.waves[i]
-			var from_b: bool = false
+			var from_new: bool = false
 			for group: WaveGroup in wave.groups:
-				if group.entrance == 1:
-					from_b = true
-			if not from_b:
+				if group.entrance == index:
+					from_new = true
+			if not from_new:
 				for group: WaveGroup in wave.groups:
 					if not seen.has(group.enemy):
 						seen.append(group.enemy)
 				continue
 			for group: WaveGroup in wave.groups:
-				assert_eq(group.entrance, 1, "%s wave %d, the first from entrance B, comes from B alone" % [id, i + 1])
-				assert_true(seen.has(group.enemy), "%s wave %d, the first from entrance B, brings nothing new (%s)" % [id, i + 1, group.enemy])
+				assert_eq(group.entrance, index, "%s wave %d, the first from entrance %s, comes from %s alone" % [id, i + 1, letter, letter])
+				assert_true(seen.has(group.enemy), "%s wave %d, the first from entrance %s, brings nothing new (%s)" % [id, i + 1, letter, group.enemy])
 			return
-		fail("%s has two entrances but no wave uses entrance B" % id)
+		fail("%s has entrance %s but no wave uses it" % [id, letter])
 		return
+
+
+## RULES 10.3 "Use every gate and keep them whole" (4-3). The star must ask the player to guard a
+## gate: every placement of all the level's gates that seals nothing puts at least one gate on the
+## dashed line (the route with no gates placed, RULES 7.7) of every entrance a gate breaker comes
+## from. Otherwise the gates could sit off the breakers' way and the star would ask nothing.
+func test_gates_whole_always_puts_a_gate_on_the_dashed_line() -> void:
+	var checked: int = 0
+	for id: String in order:
+		var level: LevelData = _level(id)
+		if level == null or level.star3.get("kind", &"") != &"gates_whole":
+			continue
+		checked += 1
+		var breaker_entrances: Array[int] = []
+		for wave: WaveData in level.waves:
+			for group: WaveGroup in wave.groups:
+				var enemy: EnemyType = catalog.enemy(group.enemy)
+				if enemy != null and enemy.break_ms > 0 and not breaker_entrances.has(group.entrance):
+					breaker_entrances.append(group.entrance)
+		assert_false(breaker_entrances.is_empty(), "%s: a gate breaker comes" % id)
+		var map: RoadMap = RoadMap.new(level)
+		var none: Array[Vector2i] = []
+		var dist: PackedInt32Array = map.distances(none)
+		var sets: Array[Array] = []
+		_gate_sets(level.sockets, level.gates, 0, [], sets)
+		var full: int = 0
+		for placed: Array in sets:
+			if placed.size() != level.gates:
+				continue
+			var closed: Array[Vector2i] = []
+			closed.assign(placed)
+			if map.seals(closed):
+				continue
+			full += 1
+			for entrance: int in breaker_entrances:
+				var dashed: Array[Vector2i] = map.route(level.entrances[entrance], dist)
+				var on_line: bool = false
+				for cell: Vector2i in closed:
+					if dashed.has(cell):
+						on_line = true
+				assert_true(on_line, "%s: gates %s keep off the dashed line from entrance %d" % [id, closed, entrance + 1])
+		assert_true(full >= 1, "%s: all its gates can be placed" % id)
+	assert_true(checked >= 1, "some level asks to keep every gate whole, so the rule is exercised")

@@ -20,7 +20,7 @@
   "gates": 1,
   "strength": 135,
   "towers": ["sling_post", "pumpkin_catapult", "lullaby_bell"],
-  "star3": {"kind": "towers_at_most", "value": 6},
+  "star3": {"kind": "gates_at_most", "value": 0},
   "hint": {"text": "Bells make walkers drowsy. Slow crowds are easy Catapult targets.", "cell": [4, 7]},
   "waves": [
     {"strength": 100, "groups": [{"enemy": "scamp", "count": 6, "entrance": 1, "at_ms": 0, "every_ms": 1500}]},

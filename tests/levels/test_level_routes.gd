@@ -3,8 +3,8 @@
 extends "res://tests/base_test.gd"
 ## Routes on the real maps (RULES 3.3, 7; docs/ARCHITECTURE.md 2.3, 4). Every entrance
 ## reaches the base with no gates placed, and the walker route with no gate and with
-## each single gate is pinned, from entrance A and on two entrance maps from entrance B,
-## so a map edit that changes a route is noticed.
+## each single gate is pinned, from entrance A, from entrance B on maps with two or more
+## entrances, and from entrance C on maps with three, so a map edit that changes a route is noticed.
 
 const Files: GDScript = preload("res://tests/levels/fixtures/level_files.gd")
 
@@ -130,6 +130,58 @@ const ROUTES: Dictionary = {
 		["1,7", 15, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 2,6 3,6 4,6 5,6 5,7 5,8 5,9 5,10 5,11"],
 		["5,7", 15, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 1,7 1,8 1,9 1,10 2,10 3,10 4,10 5,10 5,11"],
 	],
+	"r4_l1": [
+		["none", 12, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 1,7 1,8 1,9 2,9 3,9 3,10"],
+		["1,3", 16, "1,0 1,1 1,2 2,2 3,2 4,2 5,2 5,3 5,4 5,5 5,6 5,7 5,8 5,9 4,9 3,9 3,10"],
+		["5,3", 12, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 1,7 1,8 1,9 2,9 3,9 3,10"],
+		["3,6", 12, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 1,7 1,8 1,9 2,9 3,9 3,10"],
+		["1,7", 16, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 2,6 3,6 4,6 5,6 5,7 5,8 5,9 4,9 3,9 3,10"],
+		["5,7", 12, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 1,7 1,8 1,9 2,9 3,9 3,10"],
+	],
+	"r4_l2": [
+		["none", 12, "5,0 5,1 5,2 5,3 4,3 3,3 3,4 3,5 3,6 3,7 3,8 3,9 3,10"],
+		["2,3", 12, "5,0 5,1 5,2 5,3 4,3 3,3 3,4 3,5 3,6 3,7 3,8 3,9 3,10"],
+		["1,4", 12, "5,0 5,1 5,2 5,3 4,3 3,3 3,4 3,5 3,6 3,7 3,8 3,9 3,10"],
+		["3,4", 16, "5,0 5,1 5,2 5,3 4,3 3,3 2,3 1,3 1,4 1,5 1,6 2,6 3,6 3,7 3,8 3,9 3,10"],
+		["3,7", 16, "5,0 5,1 5,2 5,3 4,3 3,3 3,4 3,5 3,6 4,6 5,6 5,7 5,8 5,9 4,9 3,9 3,10"],
+		["5,7", 12, "5,0 5,1 5,2 5,3 4,3 3,3 3,4 3,5 3,6 3,7 3,8 3,9 3,10"],
+	],
+	"r4_l3": [
+		["none", 11, "3,0 3,1 3,2 3,3 3,4 3,5 3,6 3,7 3,8 3,9 3,10 3,11"],
+		["1,3", 11, "3,0 3,1 3,2 3,3 3,4 3,5 3,6 3,7 3,8 3,9 3,10 3,11"],
+		["3,3", 15, "3,0 3,1 3,2 2,2 1,2 1,3 1,4 2,4 3,4 3,5 3,6 3,7 3,8 3,9 3,10 3,11"],
+		["3,5", 15, "3,0 3,1 3,2 3,3 3,4 4,4 5,4 5,5 5,6 5,7 4,7 3,7 3,8 3,9 3,10 3,11"],
+		["1,8", 11, "3,0 3,1 3,2 3,3 3,4 3,5 3,6 3,7 3,8 3,9 3,10 3,11"],
+		["3,8", 15, "3,0 3,1 3,2 3,3 3,4 3,5 3,6 3,7 2,7 1,7 1,8 1,9 1,10 2,10 3,10 3,11"],
+		["3,9", 15, "3,0 3,1 3,2 3,3 3,4 3,5 3,6 3,7 2,7 1,7 1,8 1,9 1,10 2,10 3,10 3,11"],
+	],
+	"r4_l4": [
+		["none", 13, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 1,7 1,8 1,9 2,9 3,9 3,10 3,11"],
+		["1,4", 13, "1,0 1,1 1,2 1,3 2,3 3,3 3,4 3,5 3,6 3,7 3,8 3,9 3,10 3,11"],
+		["3,4", 13, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 1,7 1,8 1,9 2,9 3,9 3,10 3,11"],
+		["5,4", 13, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 1,7 1,8 1,9 2,9 3,9 3,10 3,11"],
+		["1,7", 13, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 2,6 3,6 3,7 3,8 3,9 3,10 3,11"],
+		["3,7", 13, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 1,7 1,8 1,9 2,9 3,9 3,10 3,11"],
+		["5,7", 13, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 1,7 1,8 1,9 2,9 3,9 3,10 3,11"],
+	],
+	"r4_l5": [
+		["none", 14, "0,11 1,11 2,11 3,11 3,10 3,9 3,8 3,7 3,6 3,5 3,4 3,3 3,2 3,1 3,0"],
+		["3,3", 18, "0,11 1,11 2,11 3,11 3,10 3,9 3,8 3,7 3,6 3,5 4,5 5,5 5,4 5,3 5,2 4,2 3,2 3,1 3,0"],
+		["5,3", 14, "0,11 1,11 2,11 3,11 3,10 3,9 3,8 3,7 3,6 3,5 3,4 3,3 3,2 3,1 3,0"],
+		["1,6", 14, "0,11 1,11 2,11 3,11 3,10 3,9 3,8 3,7 3,6 3,5 3,4 3,3 3,2 3,1 3,0"],
+		["3,7", 18, "0,11 1,11 2,11 3,11 3,10 3,9 3,8 2,8 1,8 1,7 1,6 1,5 2,5 3,5 3,4 3,3 3,2 3,1 3,0"],
+		["3,9", 18, "0,11 1,11 2,11 3,11 4,11 5,11 5,10 5,9 5,8 4,8 3,8 3,7 3,6 3,5 3,4 3,3 3,2 3,1 3,0"],
+		["5,10", 14, "0,11 1,11 2,11 3,11 3,10 3,9 3,8 3,7 3,6 3,5 3,4 3,3 3,2 3,1 3,0"],
+	],
+	"r4_l6": [
+		["none", 14, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 1,7 1,8 1,9 1,10 2,10 3,10 3,9 3,8"],
+		["3,3", 14, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 1,7 1,8 1,9 1,10 2,10 3,10 3,9 3,8"],
+		["1,4", 18, "1,0 1,1 1,2 1,3 2,3 3,3 4,3 5,3 5,4 5,5 5,6 5,7 5,8 5,9 5,10 4,10 3,10 3,9 3,8"],
+		["5,4", 14, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 1,7 1,8 1,9 1,10 2,10 3,10 3,9 3,8"],
+		["1,8", 18, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 2,6 3,6 4,6 5,6 5,7 5,8 5,9 5,10 4,10 3,10 3,9 3,8"],
+		["5,8", 14, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 1,7 1,8 1,9 1,10 2,10 3,10 3,9 3,8"],
+		["2,10", 18, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 2,6 3,6 4,6 5,6 5,7 5,8 5,9 5,10 4,10 3,10 3,9 3,8"],
+	],
 }
 
 ## Per level with a second entrance: the same rows for the walker route from entrance 2 (B).
@@ -174,6 +226,71 @@ const ROUTES_B: Dictionary = {
 		["5,5", 19, "5,0 5,1 5,2 5,3 5,4 4,4 3,4 2,4 1,4 1,5 1,6 1,7 1,8 1,9 1,10 2,10 3,10 4,10 5,10 5,11"],
 		["1,7", 11, "5,0 5,1 5,2 5,3 5,4 5,5 5,6 5,7 5,8 5,9 5,10 5,11"],
 		["5,7", 19, "5,0 5,1 5,2 5,3 5,4 5,5 5,6 4,6 3,6 2,6 1,6 1,7 1,8 1,9 1,10 2,10 3,10 4,10 5,10 5,11"],
+	],
+	"r4_l1": [
+		["none", 12, "5,0 5,1 5,2 5,3 5,4 5,5 5,6 5,7 5,8 5,9 4,9 3,9 3,10"],
+		["1,3", 12, "5,0 5,1 5,2 5,3 5,4 5,5 5,6 5,7 5,8 5,9 4,9 3,9 3,10"],
+		["5,3", 16, "5,0 5,1 5,2 4,2 3,2 2,2 1,2 1,3 1,4 1,5 1,6 1,7 1,8 1,9 2,9 3,9 3,10"],
+		["3,6", 12, "5,0 5,1 5,2 5,3 5,4 5,5 5,6 5,7 5,8 5,9 4,9 3,9 3,10"],
+		["1,7", 12, "5,0 5,1 5,2 5,3 5,4 5,5 5,6 5,7 5,8 5,9 4,9 3,9 3,10"],
+		["5,7", 16, "5,0 5,1 5,2 5,3 5,4 5,5 5,6 4,6 3,6 2,6 1,6 1,7 1,8 1,9 2,9 3,9 3,10"],
+	],
+	"r4_l2": [
+		["none", 12, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 2,6 3,6 3,7 3,8 3,9 3,10"],
+		["2,3", 12, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 2,6 3,6 3,7 3,8 3,9 3,10"],
+		["1,4", 12, "1,0 1,1 1,2 1,3 2,3 3,3 3,4 3,5 3,6 3,7 3,8 3,9 3,10"],
+		["3,4", 12, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 2,6 3,6 3,7 3,8 3,9 3,10"],
+		["3,7", 16, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 2,6 3,6 4,6 5,6 5,7 5,8 5,9 4,9 3,9 3,10"],
+		["5,7", 12, "1,0 1,1 1,2 1,3 1,4 1,5 1,6 2,6 3,6 3,7 3,8 3,9 3,10"],
+	],
+	"r4_l3": [
+		["none", 10, "6,4 5,4 5,5 5,6 5,7 4,7 3,7 3,8 3,9 3,10 3,11"],
+		["1,3", 10, "6,4 5,4 5,5 5,6 5,7 4,7 3,7 3,8 3,9 3,10 3,11"],
+		["3,3", 10, "6,4 5,4 5,5 5,6 5,7 4,7 3,7 3,8 3,9 3,10 3,11"],
+		["3,5", 10, "6,4 5,4 5,5 5,6 5,7 4,7 3,7 3,8 3,9 3,10 3,11"],
+		["1,8", 10, "6,4 5,4 5,5 5,6 5,7 4,7 3,7 3,8 3,9 3,10 3,11"],
+		["3,8", 14, "6,4 5,4 5,5 5,6 5,7 4,7 3,7 2,7 1,7 1,8 1,9 1,10 2,10 3,10 3,11"],
+		["3,9", 14, "6,4 5,4 5,5 5,6 5,7 4,7 3,7 2,7 1,7 1,8 1,9 1,10 2,10 3,10 3,11"],
+	],
+	"r4_l4": [
+		["none", 11, "3,0 3,1 3,2 3,3 3,4 3,5 3,6 3,7 3,8 3,9 3,10 3,11"],
+		["1,4", 11, "3,0 3,1 3,2 3,3 3,4 3,5 3,6 3,7 3,8 3,9 3,10 3,11"],
+		["3,4", 15, "3,0 3,1 3,2 3,3 2,3 1,3 1,4 1,5 1,6 1,7 1,8 1,9 2,9 3,9 3,10 3,11"],
+		["5,4", 11, "3,0 3,1 3,2 3,3 3,4 3,5 3,6 3,7 3,8 3,9 3,10 3,11"],
+		["1,7", 11, "3,0 3,1 3,2 3,3 3,4 3,5 3,6 3,7 3,8 3,9 3,10 3,11"],
+		["3,7", 15, "3,0 3,1 3,2 3,3 3,4 3,5 3,6 2,6 1,6 1,7 1,8 1,9 2,9 3,9 3,10 3,11"],
+		["5,7", 11, "3,0 3,1 3,2 3,3 3,4 3,5 3,6 3,7 3,8 3,9 3,10 3,11"],
+	],
+	"r4_l5": [
+		["none", 11, "6,8 5,8 4,8 3,8 3,7 3,6 3,5 3,4 3,3 3,2 3,1 3,0"],
+		["3,3", 15, "6,8 5,8 4,8 3,8 3,7 3,6 3,5 4,5 5,5 5,4 5,3 5,2 4,2 3,2 3,1 3,0"],
+		["5,3", 11, "6,8 5,8 4,8 3,8 3,7 3,6 3,5 3,4 3,3 3,2 3,1 3,0"],
+		["1,6", 11, "6,8 5,8 4,8 3,8 3,7 3,6 3,5 3,4 3,3 3,2 3,1 3,0"],
+		["3,7", 15, "6,8 5,8 4,8 3,8 2,8 1,8 1,7 1,6 1,5 2,5 3,5 3,4 3,3 3,2 3,1 3,0"],
+		["3,9", 11, "6,8 5,8 4,8 3,8 3,7 3,6 3,5 3,4 3,3 3,2 3,1 3,0"],
+		["5,10", 11, "6,8 5,8 4,8 3,8 3,7 3,6 3,5 3,4 3,3 3,2 3,1 3,0"],
+	],
+	"r4_l6": [
+		["none", 14, "5,0 5,1 5,2 5,3 5,4 5,5 5,6 5,7 5,8 5,9 5,10 4,10 3,10 3,9 3,8"],
+		["3,3", 14, "5,0 5,1 5,2 5,3 5,4 5,5 5,6 5,7 5,8 5,9 5,10 4,10 3,10 3,9 3,8"],
+		["1,4", 14, "5,0 5,1 5,2 5,3 5,4 5,5 5,6 5,7 5,8 5,9 5,10 4,10 3,10 3,9 3,8"],
+		["5,4", 18, "5,0 5,1 5,2 5,3 4,3 3,3 2,3 1,3 1,4 1,5 1,6 1,7 1,8 1,9 1,10 2,10 3,10 3,9 3,8"],
+		["1,8", 14, "5,0 5,1 5,2 5,3 5,4 5,5 5,6 5,7 5,8 5,9 5,10 4,10 3,10 3,9 3,8"],
+		["5,8", 18, "5,0 5,1 5,2 5,3 5,4 5,5 5,6 4,6 3,6 2,6 1,6 1,7 1,8 1,9 1,10 2,10 3,10 3,9 3,8"],
+		["2,10", 14, "5,0 5,1 5,2 5,3 5,4 5,5 5,6 5,7 5,8 5,9 5,10 4,10 3,10 3,9 3,8"],
+	],
+}
+
+## Per level with a third entrance: the same rows for the walker route from entrance 3 (C).
+const ROUTES_C: Dictionary = {
+	"r4_l4": [
+		["none", 13, "5,0 5,1 5,2 5,3 5,4 5,5 5,6 5,7 5,8 5,9 4,9 3,9 3,10 3,11"],
+		["1,4", 13, "5,0 5,1 5,2 5,3 5,4 5,5 5,6 5,7 5,8 5,9 4,9 3,9 3,10 3,11"],
+		["3,4", 13, "5,0 5,1 5,2 5,3 5,4 5,5 5,6 5,7 5,8 5,9 4,9 3,9 3,10 3,11"],
+		["5,4", 13, "5,0 5,1 5,2 5,3 4,3 3,3 3,4 3,5 3,6 3,7 3,8 3,9 3,10 3,11"],
+		["1,7", 13, "5,0 5,1 5,2 5,3 5,4 5,5 5,6 5,7 5,8 5,9 4,9 3,9 3,10 3,11"],
+		["3,7", 13, "5,0 5,1 5,2 5,3 5,4 5,5 5,6 5,7 5,8 5,9 4,9 3,9 3,10 3,11"],
+		["5,7", 13, "5,0 5,1 5,2 5,3 5,4 5,5 5,6 4,6 3,6 3,7 3,8 3,9 3,10 3,11"],
 	],
 }
 
@@ -266,20 +383,38 @@ func test_battle_route_lines_show_the_same_routes() -> void:
 
 
 func test_every_two_entrance_level_pins_entrance_b() -> void:
-	var expected: Array[String] = []
-	for level: LevelData in _levels():
-		if level.entrances.size() >= 2:
-			expected.append(String(level.id))
-	var ids: Array = ROUTES_B.keys()
-	ids.sort()
-	assert_eq(PackedStringArray(ids), PackedStringArray(expected), "levels with pinned entrance B routes")
+	_check_pinned_levels(2, ROUTES_B, "B")
+
+
+func test_every_three_entrance_level_pins_entrance_c() -> void:
+	_check_pinned_levels(3, ROUTES_C, "C")
 
 
 func test_entrance_b_routes_match_the_pinned_lines() -> void:
+	_check_pinned_routes(2, ROUTES_B, "B")
+
+
+func test_entrance_c_routes_match_the_pinned_lines() -> void:
+	_check_pinned_routes(3, ROUTES_C, "C")
+
+
+## The levels with at least `entrances` entrances are exactly the ones in `table`.
+func _check_pinned_levels(entrances: int, table: Dictionary, letter: String) -> void:
+	var expected: Array[String] = []
 	for level: LevelData in _levels():
-		if level.entrances.size() < 2:
+		if level.entrances.size() >= entrances:
+			expected.append(String(level.id))
+	var ids: Array = table.keys()
+	ids.sort()
+	assert_eq(PackedStringArray(ids), PackedStringArray(expected), "levels with pinned entrance %s routes" % letter)
+
+
+## The walker routes from entrance number `entrances` match `table`, with no gate and with each socket.
+func _check_pinned_routes(entrances: int, table: Dictionary, letter: String) -> void:
+	for level: LevelData in _levels():
+		if level.entrances.size() < entrances:
 			continue
-		var pinned: Array = ROUTES_B.get(String(level.id), [])
+		var pinned: Array = table.get(String(level.id), [])
 		var map: RoadMap = RoadMap.new(level)
 		var expected_gates: Array[String] = ["none"]
 		for socket: Vector2i in level.sockets:
@@ -287,16 +422,16 @@ func test_entrance_b_routes_match_the_pinned_lines() -> void:
 		var pinned_gates: Array[String] = []
 		for row: Array in pinned:
 			pinned_gates.append(str(row[0]))
-		assert_eq(pinned_gates, expected_gates, "%s: entrance B rows are no gate, then each socket in cell order" % level.id)
+		assert_eq(pinned_gates, expected_gates, "%s: entrance %s rows are no gate, then each socket in cell order" % [level.id, letter])
 		for row: Array in pinned:
 			var closed: Array[Vector2i] = []
 			var gate: String = str(row[0])
 			if gate != "none":
 				var parts: PackedStringArray = gate.split(",")
 				closed.append(Vector2i(int(parts[0]), int(parts[1])))
-			var path: Array[Vector2i] = map.route(level.entrances[1], map.distances(closed))
-			assert_eq(path.size() - 1, int(row[1]), "%s: entrance B steps with gate %s" % [level.id, gate])
-			assert_eq(Files.cells_text(path), str(row[2]), "%s: entrance B route with gate %s" % [level.id, gate])
+			var path: Array[Vector2i] = map.route(level.entrances[entrances - 1], map.distances(closed))
+			assert_eq(path.size() - 1, int(row[1]), "%s: entrance %s steps with gate %s" % [level.id, letter, gate])
+			assert_eq(Files.cells_text(path), str(row[2]), "%s: entrance %s route with gate %s" % [level.id, letter, gate])
 
 
 func test_every_gate_level_has_a_socket_that_changes_the_route() -> void:
