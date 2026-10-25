@@ -83,6 +83,7 @@ Autoload and input map entries in project.godot are added by the DM during integ
   - A third star of "no tower above tier 1" reads "Upgrade no towers." on cards and screens.
   - Speed resets to 1x after Continue.
   - The fun review's after-playtest list (docs/design/FUN_REVIEW_R1.md) goes ahead, except item 7 (a "packed" mark in the wave preview), which Bart was not asked about and which goes beyond brief 3.5.
+- 2026-10-25: Bart chose the run length: RULES 14.1 becomes "about 12 to 16 minutes at 1x, about 15 to 20 of real play with card picks". Runs stay as tuned (docs/design/TUNING_RUNS.md).
 
 ## Rules for every session and agent
 
