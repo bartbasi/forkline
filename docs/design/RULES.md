@@ -23,6 +23,8 @@ Phase 7 alignment, 2026-10-24 (task G1), after hard stop B and the contract revi
 
 Region 2 tuning, 2026-10-24 (task G2), after the region 2 balance report. The plan and its evidence are in docs/design/TUNING_R2.md. Changed numbers: Ironshell's armor 6 to 10 (6.3) and its card line (6.6), with the 5.10 Ironshell columns recomputed and a note there that Bells help single-target towers too. Changed plan: level 2-2's star 3 is now "Use no gates." and level 3-2's is "Have at most 6 towers." (12.4); level 3-1 keeps one entrance, and the boss waves' strengths are listed (12.3). New: three guides for building waves (12.5), the search minimum and two shortcuts for the "No super tower" check (12.6), and starting a new run or daily over a saved one (4.10, 14.7). The region 2 wave changes are in TUNING_R2.md. Items 2-2's star 3, Ironshell's armor, 3-2's star 3 and 3-1's entrance change what Bart approved, so they are for the DM to tell Bart.
 
+Run tuning, 2026-10-25 (task G3), after the first run and daily report. The plan and its evidence are in docs/design/TUNING_RUNS.md. Changed rules: lives never rise above the starting lives (4.4), so on Normal a run's boss must be beaten (6.3, 14.1); wave 18's strength comes from its boss pack (6.4, 14.1, 14.3). Changed numbers: run maps hold 11 or 12 build spots and a Bakery spot that reaches 3 others (14.2); Tea Break's text, Sharp Pebbles 1 more damage instead of 2, Hurry Night 50% faster for 60 gold, Gateless Night 60 gold (14.5); Pip Parade 16 Pips for 120 gold, and Volley's arrows deal 25% less damage instead of 40% (14.6). New: the targets for the balance bots (14.8) and the daily's bar (15). Proposed, for Bart to decide: a new run length (14.1). Every item here changes what Bart approved, so all are for the DM to tell Bart. data/stats/ does not change.
+
 Names follow docs/art/NAMES.md, which Bart approved at hard stop B. The tables in 5.1, 5.3 to 5.8, 6.1, 6.3 and 12.1 give each tower, tier 3 path, creature, boss and region its id from that list, so the data files have one source. In each tower's tier table, the first tier 3 row is spec 0 and the second is spec 1.
 
 This file holds every game rule and number for version 1. The sim engineer, level designer, roguelite engineer, balance analyst and UI engineer build from it. If something here is unclear or seems to conflict with docs/ARCHITECTURE.md, ask the DM. Do not guess.
@@ -180,6 +182,7 @@ Clearing the final wave is not enough on its own. After an early call (4.9), an 
 
 - A creature that reaches the base costs its lives number (6.1). Most cost 1. Bosses cost 20.
 - At 0 lives or fewer, the level or run is lost at once, even in the middle of a wave.
+- Lives never rise above the starting lives. Nothing adds lives in the campaign. In runs, Tea Break does, up to the starting lives (14.5).
 
 ### 4.5 Gold
 
@@ -516,7 +519,7 @@ Breaks gates (Gatecrasher): see 7.7.
 
 ### 6.3 Bosses
 
-A boss always comes in the final wave of its level or run. A boss that reaches the base costs 20 lives, which loses any Normal game. On Relaxed, a player with more than 20 lives left survives it and can still win the level. That is intended: Relaxed exists so a player who is stuck can move on, and such a win earns star 1 only. Bosses can be slowed, with no exception for any boss. The Moon Moth is a flyer, so the flyer rule decides (6.5): a Night Bell slows it, and in runs so does any Lullaby Bell with the Frost Chime card (14.6).
+A boss always comes in the final wave of its level or run. A boss that reaches the base costs 20 lives, which loses any Normal game. That holds in runs too: lives never rise above the starting lives (4.4), so on Normal a run's boss must be beaten. On Relaxed, a player with more than 20 lives left survives it and can still win the level or run. That is intended: Relaxed exists so a player who is stuck can move on, and such a win earns star 1 only. Bosses can be slowed, with no exception for any boss. The Moon Moth is a flyer, so the flyer rule decides (6.5): a Night Bell slows it, and in runs so does any Lullaby Bell with the Frost Chime card (14.6).
 
 | Boss | Id | Region | Health | Armor | Speed | Moves | Lives lost | Bounty | Special |
 |---|---|---|---|---|---|---|---|---|---|
@@ -540,7 +543,7 @@ Exact boss rules:
 - Strength scales health, heal amounts, bounties, the wave clear bonus and risk card rewards. Each is the base number times strength / 100, rounded half up, at least 1.
 - Strength never changes armor, speed, tower damage or lives lost.
 - Campaign: each level has a strength (12.3). By default every wave in the level uses it. The level designer may give single waves their own strength.
-- Runs: wave w has strength 100 + 10 times (w minus 1) (14.1).
+- Runs: waves 1 to 17 have strength 100 + 10 times (w minus 1). Wave 18, the boss wave, has the strength its boss pack sets (14.1, 14.3).
 - Puffs and boss summons use the strength of their wave.
 - Twists (13) and risk cards (14.5) change creatures after strength, and each step rounds by its own rule. With Thick Hides, a Scamp at strength 150 has 60 health, then 90.
 
@@ -1118,14 +1121,14 @@ And the same inputs always give the same result.
 | Item | Value |
 |---|---|
 | Waves | 18. Wave 18 is a boss wave. |
-| Length | About 15 to 20 minutes at 1x. |
-| Strength of wave w | 100 + 10 times (w minus 1). Wave 1 is 100, wave 18 is 270. |
+| Length | About 15 to 20 minutes at 1x. Proposed by G3, for Bart to decide (docs/design/TUNING_RUNS.md 1.8): "About 12 to 16 minutes at 1x, counted as for levels (12.5). With a card to read in every build phase, about 15 to 20 minutes of real play." |
+| Strength of wave w | Waves 1 to 17: 100 + 10 times (w minus 1). Wave 1 is 100, wave 17 is 260. Wave 18, the boss wave, has the strength its boss pack sets (14.3). |
 | Starting gold | 300 on Normal, 450 on Relaxed. |
-| Starting lives | 20 on Normal, 40 on Relaxed. |
+| Starting lives | 20 on Normal, 40 on Relaxed. Lives never rise above the starting lives (4.4). |
 | Starting towers | The Sling Post only. Other towers come from cards. |
 | Gates | 1 at the start, up to 3 from cards. |
 | Cards | One draft after each of waves 1 to 17. |
-| End | The run is won like a level (4.1): when wave 18 has started and no wave is still running, with lives above 0. Clearing wave 18 is not enough while an older wave is still on the map. It is lost when lives reach 0. |
+| End | The run is won like a level (4.1): when wave 18 has started and no wave is still running, with lives above 0. Clearing wave 18 is not enough while an older wave is still on the map. It is lost when lives reach 0. A boss that gets through costs 20 lives, so on Normal the boss must be beaten (6.3). |
 
 All core rules (4 to 9) apply in runs: phases, pause, speeds, early calls, selling, gates, the route line and the wave preview.
 
@@ -1136,7 +1139,9 @@ All core rules (4 to 9) apply in runs: phases, pause, speeds, early calls, selli
 - Top segments hold 1 or 2 entrances, on the top edge or the side edges of that segment. Middle segments hold forks and gate sockets. Bottom segments hold the base. Any segment may have build spots and sockets.
 - The columns where a segment's road crosses its top row and its bottom row are its ports, read from its grid. On those rows no two road tiles sit side by side. Two segments join only if the bottom ports of the upper one are exactly the top ports of the lower one.
 - The run's seed picks a top segment, then a middle segment that joins it, then a bottom segment that joins that. Each pick is even among the segments that fit.
-- Every way of joining a top, a middle and a bottom segment that fit must give a valid map: 8 to 12 build spots, 2 to 5 gate sockets, and the same checks as a campaign map. Every top segment has at least one middle that fits under it, and every such middle has at least one bottom.
+- Every way of joining a top, a middle and a bottom segment that fit must give a valid map: 11 or 12 build spots, 2 to 5 gate sockets, and the same checks as a campaign map. Every top segment has at least one middle that fits under it, and every such middle has at least one bottom.
+- Every such map has a Bakery spot: a build spot with at least 3 other build spots among its eight neighbors, so a Bakery there reaches 3 towers (5.8).
+- Lanes that run side by side all the way to the base, where a gate can only move the creatures from one lane to the other, make walls (docs/design/TUNING_RUNS.md 1.5). Where a middle segment carries two lanes, join them, so the run's first gate can make a detour.
 - The level designer builds the segments. Tests check every way they can join.
 
 ### 14.3 Waves in a run
@@ -1154,6 +1159,19 @@ All core rules (4 to 9) apply in runs: phases, pause, speeds, early calls, selli
 | 6 | 16 to 18 | All. Wave 18 is a boss with its escort. |
 
 - The seed picks the run's boss from the four, and band 6 uses a pack made for that boss.
+- Each band 6 pack sets the strength of its third wave, the boss wave, as a campaign boss wave does (12.3). Every other pack wave takes the strength of 14.1. The level designer tunes each boss wave to the target in 14.8. Starting values:
+
+| Band 6 pack | Boss | Boss wave strength | Boss health |
+|---|---|---|---|
+| `b6_grumble_hill` | Grumblesack | 290 | 5800 |
+| `b6_grumble_march` | Grumblesack | 270 | 5400 |
+| `b6_iron_road` | Ironshell | 150 | 3750 |
+| `b6_iron_gate` | Ironshell | 150 | 3750 |
+| `b6_moon_rise` | Moon Moth | 150 | 2400 |
+| `b6_moon_tide` | Moon Moth | 140 | 2240 |
+| `b6_tusk_charge` | Old Tusk | 200 | 6000 |
+| `b6_tusk_night` | Old Tusk | 180 | 5400 |
+
 - Packs name entrance A or B. On a map with one entrance, B means A.
 - A creature a run has not shown yet comes in its own group, first in its wave, and no group of that wave starts before it. No wave brings two such creatures. Risk cards are the only exception, and their card says what they add.
 - No pack has a group of Puffs. Puffs only come from Puffballs.
@@ -1189,7 +1207,7 @@ Tower perks (6). Each is once per run.
 
 | Card | Tower | Effect |
 |---|---|---|
-| Sharp Pebbles | Sling Post | Deals 2 more damage per hit. |
+| Sharp Pebbles | Sling Post | Deals 1 more damage per hit. |
 | Wide Splash | Pumpkin Catapult | Splash radius is 0.25 tiles bigger. |
 | Deep Lullaby | Lullaby Bell | Slows are 10 points stronger. 35% becomes 45%. |
 | Steady Aim | Longbow Loft | Reload times are 20% shorter. 2.5 s becomes 2.0 s. |
@@ -1210,7 +1228,7 @@ Economy (5).
 | Fat Bounties | Creatures give 20% more gold for the rest of the run, rounded half up. The early call bonus counts the bigger bounties. | Once |
 | Feast Days | Wave clear bonuses are 50% bigger for the rest of the run, rounded half up. Risk card rewards stay the same. | Once |
 | Fair Trade | Selling refunds 90% instead of 70% for the rest of the run. | Once |
-| Tea Break | Gain 5 lives. | Again and again |
+| Tea Break | Gain 5 lives, but never more than the starting lives (4.4). Card text: "Gain 5 lives, but never more than you started with." | Again and again |
 
 Risk (5). Each changes the next wave only.
 
@@ -1218,8 +1236,8 @@ Risk (5). Each changes the next wave only.
 |---|---|---|
 | Crowded Night | Every group has 50% more creatures, rounded up. | 100 gold |
 | Thick Hides | Creatures have 50% more health, rounded half up. | 120 gold |
-| Hurry Night | Creatures move 25% faster. | 100 gold |
-| Gateless Night | Your gates stand open. They block nothing and cannot be broken. | 120 gold |
+| Hurry Night | Creatures move 50% faster. | 60 gold |
+| Gateless Night | Your gates stand open. They block nothing and cannot be broken. | 60 gold |
 | Flock | 8 extra Flitters come from entrance A, 0.4 s apart, starting 2.0 s after the last of the wave's own groups starts. | 80 gold |
 
 - A risk card's reward is paid together with its wave's clear bonus, when that wave is cleared. If the run ends before that, nothing is paid.
@@ -1239,7 +1257,7 @@ Risk (5). Each changes the next wave only.
 | Twin Pebbles | Tower perk, Sling Post | Hits 2 targets per shot, but deals 2 less damage per hit. Once. | Reach wave 6 in a run |
 | Heavy Pumpkins | Tower perk, Pumpkin Catapult | Deals 10 more damage, but reloads 0.5 s slower. Once. | Reach wave 12 in a run |
 | Frost Chime | Tower perk, Lullaby Bell | Also slows flyers, the Moon Moth included, but its range is 0.5 tiles shorter. Once. | Finish a daily challenge, won or lost |
-| Volley | Tower perk, Longbow Loft | Hits one more target per shot, but each arrow deals 40% less damage, rounded half up. Once. | Win a run |
+| Volley | Tower perk, Longbow Loft | Hits one more target per shot, but each arrow deals 25% less damage, rounded half up. Once. | Win a run |
 | Long Fuse | Tower perk, Firework Tower | Reaches 1 tile further, but reloads 0.5 s slower. Once. | Win a run on Normal |
 | Spice Rack | Tower perk, Bakery | Also adds 2 damage per hit to the towers it reaches, but its speed boost is 10 points smaller. 25% becomes 15%. Once. | Earn 24 stars |
 | Piggy Bank | Economy | When each build phase begins, after the clear bonus is paid, gain 10% of the gold you hold, rounded down, up to 50. Once. | Earn 36 stars |
@@ -1247,7 +1265,7 @@ Risk (5). Each changes the next wave only.
 | Iron Gate | Extra gate | Gain 2 gates, up to 3. When a wave starts, placed gates lock for good. Once. | Clear any Twist |
 | Moonlit Wager | Risk | Next wave: creatures have twice the health. Reward: 250 gold. | Earn 60 stars |
 | Crasher Escort | Risk | Next wave: 2 Gatecrashers join from entrance A at the wave's start, 3.0 s apart. Reward: 150 gold. | Win a run after taking 3 or more risk cards in it |
-| Pip Parade | Risk | Next wave: a crowd of 24 Pips joins from entrance A, 0.3 s apart, starting 1.0 s after the wave starts. Reward: 100 gold. | Earn 72 stars |
+| Pip Parade | Risk | Next wave: a crowd of 16 Pips joins from entrance A, 0.3 s apart, starting 1.0 s after the wave starts. Reward: 120 gold. | Earn 72 stars |
 
 - Daily runs count as runs for these conditions.
 - Frost Chime changes every tier and path of the Lullaby Bell, like every tower perk. Its Bells slow every flyer in their ring, the Moon Moth included (6.3), so a Hush Bell with Frost Chime slows the Moon Moth by 60%. A Night Bell already slows flyers, so for it the card only shortens the ring.
@@ -1262,6 +1280,24 @@ Risk (5). Each changes the next wave only.
 - A run ends when lives reach 0, when the player abandons it from Pause after a confirm, or when the player starts a new run of the same mode over it (4.10). An abandoned run counts as a loss at its current wave, and so does a run that was started over.
 - A run's result is: won or lost, waves cleared, and lives left.
 - Runs carry nothing over except progress toward unlocks (14.6).
+
+### 14.8 Targets for the balance bots
+
+Every run and daily report in docs/balance/ checks these. The bots and their strategies are in docs/balance/README.md. Unless a row says otherwise: Normal, the base cards (no unlocks), the 16 named strategies, run seeds 1 to 200. The bots are a floor. They never aim at Strong, sell to rebuild for the boss or read the preview, so a thoughtful player should win more often than the best of them.
+
+| Check | Bar |
+|---|---|
+| Every run can be won | On every run seed from 1 to 50, one of the 16 named strategies or one of up to 100 random strategies wins. |
+| Normal | The best named strategy wins 55% to 75% of its runs. The 16 together win 35% to 55%. |
+| Relaxed | The best named strategy wins at least 90%. The 16 together win at least 80%. |
+| Every card unlocked | On Normal and on Relaxed, the 16 together win within 5 points of the same seeds with no unlocks, higher or lower. Unlocks add variety (14.6): they should neither help nor hurt. |
+| The boss | For each band 6 pack, 50% to 75% of the named strategies' runs that start wave 18 win. |
+| Fair maps | For each segment, runs on maps that use it win at least 75% as often as all runs. No stack that 4 or more seeds use loses more than 10% of its plays by wave 6. |
+| Fair packs | No pack of bands 1 to 5 loses more than 10% of the runs that reach its first wave. |
+| No card decides a run | In the card experiment (each offered card taken in turn, then the run played on), no perk, gate, economy or risk card raises the win rate by more than 5 points. Tower cards are reported, not held to it: what a new tower is worth to the bots depends mostly on where their build rule puts it. |
+| Risk cards trade fairly | In the risk replay of waves 2 to 8 (each risk card played on the same wave, with the same towers), every risk card's extra gold for each extra life lost lies between half and twice the middle value of the risk cards. Gateless Night is reported, not held to it: the bots' gate rule is too simple to price it. |
+| Length | Won runs average about 12 to 16 minutes at 1x, counted as for levels (12.5), if Bart takes the proposal in 14.1. Until he decides, the report gives that count and the count with 30 s for each build phase. |
+| Same seed, same run | The same seed and the same picks always play the same, also across a save and load in the middle of a wave or with a draft open. |
 
 ## 15. Daily challenge
 
@@ -1281,6 +1317,7 @@ Risk (5). Each changes the next wave only.
   - Otherwise the streak starts again at 1.
   - The screen shows the streak while the last counted date is today or yesterday, and 0 after that.
 - The day's best result and the streak are saved on the phone only.
+- The bots check the daily over the 400 days after each report (14.8): at least 98% of the days are won by one of the 16 named strategies or by one of up to 400 random strategies, no two days in a row go unwon, and the named strategies alone win at least 60% of the days.
 
 ## 16. Progression
 
