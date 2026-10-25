@@ -95,6 +95,8 @@ I do not want to lengthen the waves. More creatures would bring more gold and mo
 
 Proposal for Bart: RULES 14.1 says "About 12 to 16 minutes at 1x, counted as for levels (12.5). With a card to read in every build phase, about 15 to 20 minutes of real play." This changes an approved number, so RULES 14.1 still carries the approved text with this proposal beside it, and Bart decides. The DM's run check on the Fold5 (contract 13) can time a real run.
 
+Bart chose this range on 2026-10-25, and RULES 14.1 now states it.
+
 ## 2. Targets
 
 Section 12 of the contract asked for the win-rate bars for runs, judged from the best bots, and the bar for the daily. They are now RULES 14.8 and the end of RULES 15. The three asked for:
@@ -214,7 +216,7 @@ tests/levels, new checks: every stack has a spot with 3 other spots among its ei
 
 ### 3.6 Game designer: RULES.md (done in this step)
 
-4.4 and 6.3 (lives never rise above the starting lives), 6.4 and 14.1 (wave 18's strength), 14.2 (11 or 12 spots and the Bakery spot), 14.3 (the boss wave strengths), 14.5 and 14.6 (the six cards), the new 14.8 (targets) and the end of 15 (the daily bar). 14.1 keeps the approved length with the proposal of 1.8 beside it.
+4.4 and 6.3 (lives never rise above the starting lives), 6.4 and 14.1 (wave 18's strength), 14.2 (11 or 12 spots and the Bakery spot), 14.3 (the boss wave strengths), 14.5 and 14.6 (the six cards), the new 14.8 (targets) and the end of 15 (the daily bar). 14.1 gives the run length Bart chose on 2026-10-25 (1.8). Section 1 and 14.8 match it.
 
 ### 3.7 data/stats/
 
@@ -238,7 +240,7 @@ The final candidate is every change of section 3, played in a scratch copy (sect
 | Fair packs: bands 1 to 5 | at most 10% lost inside | up to 20.1% | up to 11.1% (three band 4 packs at 10.1% to 11.1%) | no, see 3.4 |
 | No card decides a run | at most +5 points, tower cards reported | Tea Break +9.6, Sharp Pebbles +6.3 | Sharp Pebbles +6.1, standard error 2.4 (40 seeds); the Longbow Loft card +6.1, reported | not yet: within one standard error, see below |
 | Risk cards trade fairly | 18 to 71 gold a life (half and twice the middle, 35.5) | Pip Parade 8, Hurry Night 148 | 29 to 63 (Gateless Night 119, reported) | yes |
-| Length | about 12 to 16 minutes, if Bart agrees | 13.3 | 13.1 (14.3 with no early calls, 9.8 of wave time; 16.6 at 30 s a build phase) | yes |
+| Length | about 12 to 16 minutes at 1x (Bart, 2026-10-25) | 13.3 | 13.1 (14.3 with no early calls, 9.8 of wave time; 16.6 at 30 s a build phase) | yes |
 | The daily (RULES 15) | 98% of 400 days; no two unwon in a row; 60% by the named | 97.5% with 100 random strategies, 99.75% with 1,500; 2026-12-01 unwon; 70.0% by the named | 400 of 400 days; none unwon; 97.2% by the named (earlier) | yes |
 | Same seed, same run | | 50 of 50 | not run: nothing in the repo changed yet; B4 checks it | for B4 |
 
@@ -400,7 +402,7 @@ These change what Bart approved at hard stop A, so they are for the DM to tell h
 3. **Run maps hold 12 build spots** (were 9 to 11), every map has a spot where a Bakery reaches 3 towers, and two middle segments are redrawn so the first gate makes a detour.
 4. **Five more cards:** Sharp Pebbles adds 1 damage (was 2), Hurry Night is 50% faster for 60 gold (was 25% for 100), Gateless Night pays 60 gold (was 120), Pip Parade brings 16 Pips for 120 gold (was 24 for 100), and Volley's arrows deal 25% less damage (was 40%).
 5. **Five wave packs** ease a little: three in band 2 bring 5 or 6 Shellbacks instead of 8 or 9, and two in band 4 bring fewer Shellbacks with the first Menders and one Dusk Moth fewer. Three more small band 4 cuts are proposed for the level designer to confirm.
-6. **Run length, for Bart to choose** (1.8): keep "about 15 to 20 minutes at 1x" and lengthen the waves, or take "about 12 to 16 minutes at 1x counted as for levels, about 15 to 20 minutes of real play with the card drafts". I recommend the second.
+6. **Run length, for Bart to choose** (1.8): keep "about 15 to 20 minutes at 1x" and lengthen the waves, or take "about 12 to 16 minutes at 1x counted as for levels, about 15 to 20 minutes of real play with the card drafts". I recommend the second. Bart chose the second on 2026-10-25.
 7. **New bars** for the bots (RULES 14.8, 15). They are checks, not rules a player sees.
 
 Nothing in the campaign changes.
@@ -408,6 +410,6 @@ Nothing in the campaign changes.
 ## 8. Open questions
 
 1. The DM: contract changes 1 to 5 of 3.1 need the architect. Until changes 2 and 3 land, the level designer can make every segment and band 2 and 4 change but not the boss wave strengths, and runs keep a boss at 270, which the lives cap alone would make nearly unbeatable (5.1: 18.5% of the runs that reach it win). So S3's cap and R3 and L5's boss strengths should land together, or the cap should wait for them.
-2. Bart: run length (7.6).
+2. Bart: run length (7.6). Decided on 2026-10-25: Bart chose the second, now in RULES 14.1.
 3. Three bars are not met yet (section 4): every card unlocked (about 10 points, mostly the bots' blind perk picks; B4 and G5), one map stack, and three band 4 packs (both for L5, with B4 confirming). Sharp Pebbles is within one standard error of its bar; B4's larger card experiment decides.
 4. The DM, on the Fold5 run check (contract 13): how long a real run takes, with drafts. That settles 1.8 better than any count.

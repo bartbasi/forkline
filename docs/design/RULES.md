@@ -23,7 +23,7 @@ Phase 7 alignment, 2026-10-24 (task G1), after hard stop B and the contract revi
 
 Region 2 tuning, 2026-10-24 (task G2), after the region 2 balance report. The plan and its evidence are in docs/design/TUNING_R2.md. Changed numbers: Ironshell's armor 6 to 10 (6.3) and its card line (6.6), with the 5.10 Ironshell columns recomputed and a note there that Bells help single-target towers too. Changed plan: level 2-2's star 3 is now "Use no gates." and level 3-2's is "Have at most 6 towers." (12.4); level 3-1 keeps one entrance, and the boss waves' strengths are listed (12.3). New: three guides for building waves (12.5), the search minimum and two shortcuts for the "No super tower" check (12.6), and starting a new run or daily over a saved one (4.10, 14.7). The region 2 wave changes are in TUNING_R2.md. Items 2-2's star 3, Ironshell's armor, 3-2's star 3 and 3-1's entrance change what Bart approved, so they are for the DM to tell Bart.
 
-Run tuning, 2026-10-25 (task G3), after the first run and daily report. The plan and its evidence are in docs/design/TUNING_RUNS.md. Changed rules: lives never rise above the starting lives (4.4), so on Normal a run's boss must be beaten (6.3, 14.1); wave 18's strength comes from its boss pack (6.4, 14.1, 14.3). Changed numbers: run maps hold 11 or 12 build spots and a Bakery spot that reaches 3 others (14.2); Tea Break's text, Sharp Pebbles 1 more damage instead of 2, Hurry Night 50% faster for 60 gold, Gateless Night 60 gold (14.5); Pip Parade 16 Pips for 120 gold, and Volley's arrows deal 25% less damage instead of 40% (14.6). New: the targets for the balance bots (14.8) and the daily's bar (15). Proposed, for Bart to decide: a new run length (14.1). Every item here changes what Bart approved, so all are for the DM to tell Bart. data/stats/ does not change.
+Run tuning, 2026-10-25 (task G3), after the first run and daily report. The plan and its evidence are in docs/design/TUNING_RUNS.md. Changed rules: lives never rise above the starting lives (4.4), so on Normal a run's boss must be beaten (6.3, 14.1); wave 18's strength comes from its boss pack (6.4, 14.1, 14.3). Changed numbers: run maps hold 11 or 12 build spots and a Bakery spot that reaches 3 others (14.2); Tea Break's text, Sharp Pebbles 1 more damage instead of 2, Hurry Night 50% faster for 60 gold, Gateless Night 60 gold (14.5); Pip Parade 16 Pips for 120 gold, and Volley's arrows deal 25% less damage instead of 40% (14.6). New: the targets for the balance bots (14.8) and the daily's bar (15). Proposed, and chosen by Bart the same day: a new run length (1, 14.1, 14.8). Every item here changes what Bart approved, so all are for the DM to tell Bart. data/stats/ does not change.
 
 Names follow docs/art/NAMES.md, which Bart approved at hard stop B. The tables in 5.1, 5.3 to 5.8, 6.1, 6.3 and 12.1 give each tower, tier 3 path, creature, boss and region its id from that list, so the data files have one source. In each tower's tier table, the first tier 3 row is spec 0 and the second is spec 1.
 
@@ -64,7 +64,7 @@ These come from brief section 2. Each rule below serves at least one of them.
 | Hand-built levels beat generated ones | Every campaign map and wave is hand-built (12). Runs join hand-built segments and hand-built wave packs (14) |
 | Clarity over count, no super tower | Every number is shown (9). Combat has no randomness (8.1). No tower is best everywhere (5.10) |
 | No ambushes | Wave preview before every wave (9.1). One new thing per wave, each with an info card (9.2, 12.5) |
-| Short sessions | Levels take 5 to 10 minutes (12.5). Runs take 15 to 20 minutes (14.1). Pause at any moment (4.7) |
+| Short sessions | Levels take 5 to 10 minutes (12.5). Runs take about 12 to 16 minutes at 1x, about 15 to 20 of real play with card picks (14.1). Pause at any moment (4.7) |
 | Path control without fiddly mazes | A few gates on hand-built forks (7) |
 | Roguelite runs drive replay | Short seeded runs with card drafts (14) and a daily run (15) |
 | Cozy and bright for everyone | Gentle names and one-line cards (5.9, 6.6). Defeated creatures pop into sparkles. No blood |
@@ -1121,7 +1121,7 @@ And the same inputs always give the same result.
 | Item | Value |
 |---|---|
 | Waves | 18. Wave 18 is a boss wave. |
-| Length | About 15 to 20 minutes at 1x. Proposed by G3, for Bart to decide (docs/design/TUNING_RUNS.md 1.8): "About 12 to 16 minutes at 1x, counted as for levels (12.5). With a card to read in every build phase, about 15 to 20 minutes of real play." |
+| Length | About 12 to 16 minutes at 1x, about 15 to 20 of real play with card picks (Bart, 2026-10-25). Minutes at 1x are counted as for levels (12.5). |
 | Strength of wave w | Waves 1 to 17: 100 + 10 times (w minus 1). Wave 1 is 100, wave 17 is 260. Wave 18, the boss wave, has the strength its boss pack sets (14.3). |
 | Starting gold | 300 on Normal, 450 on Relaxed. |
 | Starting lives | 20 on Normal, 40 on Relaxed. Lives never rise above the starting lives (4.4). |
@@ -1296,7 +1296,7 @@ Every run and daily report in docs/balance/ checks these. The bots and their str
 | Fair packs | No pack of bands 1 to 5 loses more than 10% of the runs that reach its first wave. |
 | No card decides a run | In the card experiment (each offered card taken in turn, then the run played on), no perk, gate, economy or risk card raises the win rate by more than 5 points. Tower cards are reported, not held to it: what a new tower is worth to the bots depends mostly on where their build rule puts it. |
 | Risk cards trade fairly | In the risk replay of waves 2 to 8 (each risk card played on the same wave, with the same towers), every risk card's extra gold for each extra life lost lies between half and twice the middle value of the risk cards. Gateless Night is reported, not held to it: the bots' gate rule is too simple to price it. |
-| Length | Won runs average about 12 to 16 minutes at 1x, counted as for levels (12.5), if Bart takes the proposal in 14.1. Until he decides, the report gives that count and the count with 30 s for each build phase. |
+| Length | Won runs average about 12 to 16 minutes at 1x, counted as for levels (12.5). |
 | Same seed, same run | The same seed and the same picks always play the same, also across a save and load in the middle of a wave or with a draft open. |
 
 ## 15. Daily challenge
