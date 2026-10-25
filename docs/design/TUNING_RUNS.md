@@ -207,11 +207,33 @@ One stack is left for you: `top_fork, mid_merge, bot_square` lost 17.5% of its p
 
 tests/levels, new checks: every stack has a spot with 3 other spots among its eight neighbors; every band 6 pack's third wave has a strength, and no other pack wave has one. The existing checks all pass on the new files (section 6).
 
+### 3.4a What L5 changed from this plan
+
+L5 (commit fdbfec7) applied 3.4 with three differences, which the DM accepted (items 1 to 3). Everything else in 3.4 went in as written. Item 4 checks whole runs on the final data, and item 5 is a DM decision. The new `mid_merge`:
+
+```
+mid_merge (was)   mid_merge (new)
+.#.o.#.           .#.o.#.
+.#####.           .######
+oG.o.Go           oG.o.oG
+.#####.           .######
+...#...           ...#...
+```
+
+1. **`mid_merge` is redrawn,** though 3.4 left it as it was. The right side of its ring now runs to column 6, so the two lanes differ in length and the run's first gate makes a detour (RULES 14.2). It keeps its 4 spots, its 2 sockets and its ports. On `top_fork, mid_merge, bot_square` the road is still 15 steps with no gate. A gate on the left lane now makes it 17, where before no single gate lengthened it. Why: 3.4's `bot_square` changes alone did not fix that stack. With every run on seeds 1 to 200 forced onto it (3,200 plays), it lost 10.3% by wave 6 with 3.4's grids, and 5.1% with the new `mid_merge` and 3.4's `bot_square`. Section 4's 17.5% came from only 80 plays. `top_twin, mid_merge, bot_square` went from 2.8% to 1.8%.
+2. **`b4_field_nurses`** has only the tested change: wave 1's Shellbacks, 5 at 0, are now 3 at 3000. 3.4's Pip cut (wave 2, 24 to 20) is not in. It changed nothing (9.3% with it), and without it the pack lost 9.0% of the runs that reached it over 200 seeds, already under the 10% bar.
+3. **`b4_quiet_moths`** has 3.4's cut, wave 1 Bubblers 6 to 4, and one more: wave 3 Dusk Moths 4 to 3. Its losses in wave 12, its third wave, came from the Dusk Moths, not the Shellbacks. It lost 14.1% before the cuts, and 8.5% (seeds 1 to 100) and 8.2% (seeds 101 to 200) after. **`b4_moth_flight`** has both of 3.4's cuts in wave 3, Dusk Moths 5 to 4 and Flitters 8 to 6: 9.1% over 200 seeds.
+4. **Whole runs on the final data,** base cards, seeds 1 to 50 (800 plays): the 16 strategies won 50.6%, within the 35% to 55% bar, and lost 2.1% by wave 6 (section 4: 47.4% and 3.2%, on 200 seeds). `towers_tall` won 78.0% of its 50 runs, over the 55% to 75% bar. Section 4 measured it at 68.5% on 200 seeds, and on 50 runs one strategy's rate has a standard error of about 6 points, so B4 checks it on 200 seeds (3.5).
+5. **Run maps need no hint row.** The campaign's 12 and 13 row maps keep a row free for the first hint (contract 7.4, tests/levels). Of the 42 run stacks, one has none: `top_pair, mid_eye, bot_porch`. Runs show no hint (contract 3.4, step 5), so the DM decided run maps need none.
+
 ### 3.5 Balance analyst (B4)
 
 - Build a Bakery only from wave 9 on (my what-ifs: `FL_BAKERY_WAIT=9`, section 6). Today the bots build every new tower type at once, which turns a Bakery drawn in the first drafts into a wasted spot.
 - Give the bots a perk choice that fits their towers, so the every-card bar measures the cards and not the bots: for example, pass on a sidegrade whose cost falls on the towers the run has built most (Volley with Giant Bows, Twin Pebbles with Stone Slings, Long Fuse with Skyrockets).
-- Report the bars of RULES 14.8 and 15 with the real data once R3, S3 and L5 are in, on the same seeds as B2, and the card experiment on 200 seeds.
+- Report the bars of RULES 14.8 and 15 with the real data once R3, S3 and L5 are in, on the seeds of RULES 14.8 (run seeds 1 to 200 unless a row says otherwise) and the days of RULES 15, and the card experiment on 200 seeds.
+- Include `mid_merge` in the fair maps check: L5 redrew it after section 4 was measured (3.4a).
+- Force each stack that fails a check onto every seed from 1 to 200, as L5 did (3.4a), before calling it a wall. Natural runs give a stack only about 5 seeds (80 plays). Section 4's 17.5% came from such a sample; forced, the same grids lost 10.3%.
+- Check `towers_tall` on seeds 1 to 200. On the final data it won 78.0% of 50 runs, over the 55% to 75% bar, against 68.5% on 200 seeds in section 4 (3.4a).
 - Useful, not required: a bot that aims at Strong in the boss wave. My what-if hook for it is in section 6.
 
 ### 3.6 Game designer: RULES.md (done in this step)
@@ -236,8 +258,8 @@ The final candidate is every change of section 3, played in a scratch copy (sect
 | Every card unlocked, Relaxed | within 5 points | -10.5 | -7.8 (95.8% to 88.0%, first, seeds 1 to 50) | no, see below |
 | The boss: each band 6 pack | 50% to 75% of the runs that start wave 18 win | 15% to 57% | 55% to 67% | yes |
 | Fair maps: each segment against all maps | at least 0.75 times | 0.25 to 1.87 times | 0.80 to 1.30 times | yes |
-| Fair maps: stacks with 4 or more seeds, lost by wave 6 | at most 10% | 12 stacks above, up to 70.3% | one: top_fork, mid_merge, bot_square, 17.5% | no, see 3.4 |
-| Fair packs: bands 1 to 5 | at most 10% lost inside | up to 20.1% | up to 11.1% (three band 4 packs at 10.1% to 11.1%) | no, see 3.4 |
+| Fair maps: stacks with 4 or more seeds, lost by wave 6 | at most 10% | 12 stacks above, up to 70.3% | one: top_fork, mid_merge, bot_square, 17.5% | no, see 3.4 (L5's results: 3.4a) |
+| Fair packs: bands 1 to 5 | at most 10% lost inside | up to 20.1% | up to 11.1% (three band 4 packs at 10.1% to 11.1%) | no, see 3.4 (L5's results: 3.4a) |
 | No card decides a run | at most +5 points, tower cards reported | Tea Break +9.6, Sharp Pebbles +6.3 | Sharp Pebbles +6.1, standard error 2.4 (40 seeds); the Longbow Loft card +6.1, reported | not yet: within one standard error, see below |
 | Risk cards trade fairly | 18 to 71 gold a life (half and twice the middle, 35.5) | Pip Parade 8, Hurry Night 148 | 29 to 63 (Gateless Night 119, reported) | yes |
 | Length | about 12 to 16 minutes at 1x (Bart, 2026-10-25) | 13.3 | 13.1 (14.3 with no early calls, 9.8 of wave time; 16.6 at 30 s a build phase) | yes |
@@ -411,5 +433,5 @@ Nothing in the campaign changes.
 
 1. The DM: contract changes 1 to 5 of 3.1 need the architect. Until changes 2 and 3 land, the level designer can make every segment and band 2 and 4 change but not the boss wave strengths, and runs keep a boss at 270, which the lives cap alone would make nearly unbeatable (5.1: 18.5% of the runs that reach it win). So S3's cap and R3 and L5's boss strengths should land together, or the cap should wait for them.
 2. Bart: run length (7.6). Decided on 2026-10-25: Bart chose the second, now in RULES 14.1.
-3. Three bars are not met yet (section 4): every card unlocked (about 10 points, mostly the bots' blind perk picks; B4 and G5), one map stack, and three band 4 packs (both for L5, with B4 confirming). Sharp Pebbles is within one standard error of its bar; B4's larger card experiment decides.
+3. Three bars are not met yet (section 4): every card unlocked (about 10 points, mostly the bots' blind perk picks; B4 and G5), one map stack, and three band 4 packs (both for L5, with B4 confirming; L5's results: 3.4a). Sharp Pebbles is within one standard error of its bar; B4's larger card experiment decides.
 4. The DM, on the Fold5 run check (contract 13): how long a real run takes, with drafts. That settles 1.8 better than any count.
