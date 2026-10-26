@@ -84,6 +84,7 @@ Autoload and input map entries in project.godot are added by the DM during integ
   - Speed resets to 1x after Continue.
   - The fun review's after-playtest list (docs/design/FUN_REVIEW_R1.md) goes ahead, except item 7 (a "packed" mark in the wave preview), which Bart was not asked about and which goes beyond brief 3.5.
 - 2026-10-25: Bart chose the run length: RULES 14.1 becomes "about 12 to 16 minutes at 1x, about 15 to 20 of real play with card picks". Runs stay as tuned (docs/design/TUNING_RUNS.md).
+- 2026-10-25, hard stop C: Bart searched "Forkline" in the stores and app repositories and found no one using it. He approved creating github.com/bartbasi/forkline as a public repo and the first push, and asked the DM to keep pushing as verified work lands (each push only after the full suite passes on a clean copy). His friends test from the repo with debug builds; no release signing yet.
 
 ## Rules for every session and agent
 
@@ -99,7 +100,7 @@ Autoload and input map entries in project.godot are added by the DM during integ
 - Every outbound address is a constant, written once, never built from input.
 - Color is never the only signal. Text meets 4.5:1 contrast, checked by a script. Touch targets at least 48 dp. Respect safe areas. 60 fps on the Fold5.
 - The DM runs at most four agents at once and works phase by phase. Never launch the whole team together. If a max effort agent stalls, sprawls or adds unrequested features, the DM drops it to high for that task and tells Bart.
-- Hard stops: A is cleared (2026-10-23). B is cleared (2026-10-24). C, ask before creating the GitHub repo and the first push. Ask first before GitHub Pages, any signing, any Play Console work, and anything outside the brief. Play Console waits for Play, Inc.'s DUNS number.
+- Hard stops: A is cleared (2026-10-23). B is cleared (2026-10-24). C is cleared (2026-10-25): the repo is public and the DM pushes verified work. Ask first before GitHub Pages, any signing, any Play Console work, and anything outside the brief. Play Console waits for Play, Inc.'s DUNS number.
 - Before the first push, remind Bart to search "Forkline" in Google Play on his phone and run a quick trademark search.
 - End every phase with a short status for Bart: done, verified, next, blocking.
 - Every agent ends with a short report: files changed, how it was proven (command and result, test names, screenshot path), open questions, contract change requests.
