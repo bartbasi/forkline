@@ -25,6 +25,8 @@ Region 2 tuning, 2026-10-24 (task G2), after the region 2 balance report. The pl
 
 Run tuning, 2026-10-25 (task G3), after the first run and daily report. The plan and its evidence are in docs/design/TUNING_RUNS.md. Changed rules: lives never rise above the starting lives (4.4), so on Normal a run's boss must be beaten (6.3, 14.1); wave 18's strength comes from its boss pack (6.4, 14.1, 14.3). Changed numbers: run maps hold 11 or 12 build spots and a Bakery spot that reaches 3 others (14.2); Tea Break's text, Sharp Pebbles 1 more damage instead of 2, Hurry Night 50% faster for 60 gold, Gateless Night 60 gold (14.5); Pip Parade 16 Pips for 120 gold, and Volley's arrows deal 25% less damage instead of 40% (14.6). New: the targets for the balance bots (14.8) and the daily's bar (15). Proposed, and chosen by Bart the same day: a new run length (1, 14.1, 14.8). Every item here changes what Bart approved, so all are for the DM to tell Bart. data/stats/ does not change.
 
+Campaign tuning, 2026-10-25 (task G4), after the campaign pass of all 24 levels and every Twist (docs/balance/campaign-2026-10-25.md). The plan and its evidence are in docs/design/TUNING_CAMPAIGN.md. Changed plan: the third stars of 3-1, 3-2, 3-3 and 3-6, and the hints of 2-3, 3-4 and 4-1 (12.4), with a line on region 3 in the guide to third stars (12.5). Level 3-6's waves 5 and 9 bring fewer Pips, so the plain recipe wins on Relaxed with no gates (TUNING_CAMPAIGN.md). Changed checks: on a level whose third star bans a tower, the search for all three stars uses the other towers, the banned tower needs no lone search, and a Twist that a short search does not win gets two long ones (12.6). The third stars and hints change what Bart approved, so they are for the DM to tell Bart. No number changes, here or in data/stats/.
+
 Names follow docs/art/NAMES.md, which Bart approved at hard stop B. The tables in 5.1, 5.3 to 5.8, 6.1, 6.3 and 12.1 give each tower, tier 3 path, creature, boss and region its id from that list, so the data files have one source. In each tower's tier table, the first tier 3 row is spec 0 and the second is spec 1.
 
 This file holds every game rule and number for version 1. The sim engineer, level designer, roguelite engineer, balance analyst and UI engineer build from it. If something here is unclear or seems to conflict with docs/ARCHITECTURE.md, ask the DM. Do not guess.
@@ -962,17 +964,17 @@ The number in each star 3 rule is a starting target. The level designer confirms
 | 1-6 | Use no gates. | At tier 3, a tower picks one of two paths for good. | The spot beside the boss's longest stretch |
 | 2-1 | Call 6 waves early. | Doing well? Call the next wave early for bonus gold. | The call button |
 | 2-2 | Use no gates. | Bells make walkers drowsy. Slow crowds are easy Catapult targets. | A spot whose ring covers a bend beside a Catapult spot |
-| 2-3 | No tower above tier 2. | Armor blocks small hits. Longbow arrows go straight through. | A spot that sees two stretches of road |
+| 2-3 | No tower above tier 2. | Longbows ignore armor but can't hit flyers. Keep a Sling Post for the Flitters. | A spot that sees two stretches of road |
 | 2-4 | Use at most 1 gate. | Two gates now. Make their road as long as you can. | The socket that starts the longest road |
 | 2-5 | Build no Longbow Lofts. | A bubble stops one hit. Quick Sling Posts pop it for the big hitters. | A spot near the start of the road |
 | 2-6 | Use at most 3 kinds of tower. | Ironshell gets faster as it gets hurt. Keep it drowsy. | The spot beside its longest stretch |
-| 3-1 | Lose no lives. | Fireworks hit only flyers, but the whole flock at once. | A spot under the flight line |
-| 3-2 | Have at most 6 towers. | Puffballs burst into three Puffs. Pop them near a Catapult. | The spot where the road bunches |
-| 3-3 | Use at most 2 gates. | Three gates. Try each socket and watch the line. | A socket that looks good but is not the best |
-| 3-4 | Build no Sling Posts. | Dusk Moths wear armor. Skyrockets punch through it. | A spot under the flight line |
+| 3-1 | Build no Sling Posts. | Fireworks hit only flyers, but the whole flock at once. | A spot under the flight line |
+| 3-2 | No tower above tier 2. | Puffballs burst into three Puffs. Pop them near a Catapult. | The spot where the road bunches |
+| 3-3 | Have at most 5 towers. | Three gates. Try each socket and watch the line. | A socket that looks good but is not the best |
+| 3-4 | Build no Sling Posts. | Dusk Moths wear armor. Build a Firework on the glow and upgrade it early. | A spot under both flight lines |
 | 3-5 | No tower above tier 2. | none | none |
-| 3-6 | Lose no lives. | The Moon Moth flies straight in. Line its path with Fireworks. | A spot under its flight line |
-| 4-1 | Have at most 6 towers. | Bakeries make the towers around them faster. | The center of a cluster of spots |
+| 3-6 | Build no Sling Posts. | The Moon Moth flies straight in. Line its path with Fireworks. | A spot under its flight line |
+| 4-1 | Have at most 6 towers. | Bakeries speed up nearby towers. Close one side high and the other side low. | The center of a cluster of spots |
 | 4-2 | Build no Pumpkin Catapults. | Menders heal their friends. Set a tower to Last to hit them first. | A spot that sees the back of the groups, where Menders trail |
 | 4-3 | Use every gate and keep them whole. | Gatecrashers break gates. Guard the gate on their dashed line. | The socket on the dashed line |
 | 4-4 | Use at most 3 kinds of tower. | none | none |
@@ -983,7 +985,9 @@ Star 2 on every level: "Keep 15 lives."
 
 Region 1's star 3 rules were set with the bots (TUNING_R1.md): a rule that limits spending is what stops one tower type from earning all three stars. Level 1-6 no longer asks for early calls, which level 2-1 teaches.
 
-Region 2 keeps five of its six rules (TUNING_R2.md). They hold because 2-1, 2-4 and 2-5 bring a dense crowd early (12.5), 2-3 brings a few Flitters, so a tower that cannot hit flyers can never keep 15 lives there (12.6), and Ironshell's shell stops pebbles (6.3). Level 2-2 now asks for no gates: on its short road only Bells and splash keep up, and a lone Sling Post never wins there. Level 3-2 asks for at most 6 towers, because the level designer found that 7 let Sling Posts alone earn three stars.
+Region 2 keeps five of its six rules (TUNING_R2.md). They hold because 2-1, 2-4 and 2-5 bring a dense crowd early (12.5), 2-3 brings a few Flitters, so a tower that cannot hit flyers can never keep 15 lives there (12.6), and Ironshell's shell stops pebbles (6.3). Level 2-2 now asks for no gates: on its short road only Bells and splash keep up, and a lone Sling Post never wins there.
+
+Region 3's third stars were set with the campaign pass (TUNING_CAMPAIGN.md). Under the old rules of 3-1 and 3-6 (Lose no lives), 3-2 (Have at most 6 towers) and 3-3 (Use at most 2 gates), a lone Sling Post with Bells earned all three stars: those rules take away nothing it needs, and the early waves bring no crowd before the gold (12.5). On the three levels about flyers (3-1, 3-4 and 3-6), the third star now asks the player to stop every flyer with Fireworks, so it bans the Sling Post. On 3-2 and 3-5 it caps towers at tier 2. On 3-3 it allows 5 towers, so the three gates must make the road long.
 
 ### 12.5 Building waves: a guide for the level designer
 
@@ -1020,7 +1024,7 @@ Region 2 keeps five of its six rules (TUNING_R2.md). They hold because 2-1, 2-4 
 - A crowd before the gold. From region 2 on, tier 3 paths and Bells let one tower type buy its way through almost any wave once it has the gold. It cannot do that early, while gold is short. A dense crowd by wave 5 uses that: 36 to 40 Pips 0.05 s apart, at strength 115 or less (30 was not enough on 2-5). Levels 2-1, 2-4 and 2-5 have one, and on each it took a lone Sling Post's best under the level's third star from 19 or 20 lives down to 9 to 13, while mixed builds still keep all 20 (TUNING_R2.md). A crowd after wave 6 does not do it: by then the gold is there.
 - Pip health and splash. A Pip at strength 115 or less has 24 health or less, so one pumpkin from a tier 2 Catapult or a Jam Pot pops it. At strength 120 to 230 it takes two of those, and one from a Prize Pumpkin. Keep a Pip wave at 115 or less when tier 2 Catapults should clear it.
 - A short road favors splash. Single-target towers need time to work through a crowd, so they need a long road. Splash and slows need a crowd that is packed, not time, so they hold a short road too. This is why "Use no gates" asks for a mix on 2-2.
-- Third stars that bite. A star 3 rule that limits spending (Upgrade no towers, No tower above tier 2, Have at most N towers) makes the mix matter. In region 1, rules that limit nothing about towers (Call N waves early, Lose no lives) did not stop one tower type from earning all three stars: it bought its way through. Use no gates works on 1-6 only because its late waves are hard, and on 2-2 because a short road favors splash.
+- Third stars that bite. A star 3 rule that limits spending (Upgrade no towers, No tower above tier 2, Have at most N towers) makes the mix matter. In region 1, rules that limit nothing about towers (Call N waves early, Lose no lives) did not stop one tower type from earning all three stars: it bought its way through. Use no gates works on 1-6 only because its late waves are hard, and on 2-2 because a short road favors splash. Region 3 showed the same: Lose no lives, Use at most 2 gates and Have at most 6 towers let a lone Sling Post earn all three stars there. A ban on the tower that would do every job also works when another tower can take that job: Build no Sling Posts on the flyer levels, where Fireworks take the flyers.
 - Largest wave: one wave spawns at most 120 creatures, counting 3 Puffs for every Puffball, with the level's Twist applied. Boss summons depend on how long the boss lives, so the bots report the real peak. At most 2 waves run at once (4.9). That is the contract's performance ceiling. Aim for 80 or fewer per wave so the screen stays readable.
 - Groups per wave. The folded preview strip is one line (9.1), with room for about 4 groups on the cover screen. Prefer 4 groups or fewer a wave, so even a folded preview shows the whole wave. This is a guide, not a limit.
 - Map height: see 3.1. On a 13 row map the bottom row is scenery only. Ranges are long on a 7-wide map by design: a Longbow Loft in the middle column reaches both side lanes.
@@ -1059,8 +1063,8 @@ Every campaign level must pass these checks:
 |---|---|
 | The plain mixed recipe on Normal | Region 1: it keeps 15 lives or more on 1-1 to 1-5, and wins 1-6. Regions 2 to 4: it keeps 15 lives or more on each region's first two levels, and wins the other four. |
 | The plain mixed recipe on Relaxed | It wins with no gates placed, and with its best placement. |
-| All three stars | A search finds one Normal win that earns all three stars. |
-| No super tower | For each attacking tower the level offers, searches that may use only that tower plus the level's support towers find no Normal win with all three stars. Bells and Bakeries never defeat anything alone, so they need no search of their own. Each attacking tower gets two searches with different seeds, each of at least 6000 builds. If neither of the two has won a single game after 2500 builds, both may stop there. A tower that cannot hit flyers lets every flyer through, so it needs no search on a level whose flyers in the wave data cost 6 lives or more: it can never keep 15 lives there. In the same way the Firework Tower, which cannot hit walkers, needs no search on a level whose walkers cost 6 lives or more. |
+| All three stars | A search finds one Normal win that earns all three stars. On a level whose star 3 bans a tower, the search may use only the other towers: a search that may use every tower seldom finds builds that leave one tower out (docs/balance/campaign-2026-10-25.md, F6). |
+| No super tower | For each attacking tower the level offers, searches that may use only that tower plus the level's support towers find no Normal win with all three stars. Bells and Bakeries never defeat anything alone, so they need no search of their own. Each attacking tower gets two searches with different seeds, each of at least 6000 builds. If neither of the two has won a single game after 2500 builds, both may stop there. A tower that cannot hit flyers lets every flyer through, so it needs no search on a level whose flyers in the wave data cost 6 lives or more: it can never keep 15 lives there. In the same way the Firework Tower, which cannot hit walkers, needs no search on a level whose walkers cost 6 lives or more. The tower that the level's star 3 bans needs no search either: it can never earn star 3. |
 | Random play | Random strategies earn all three stars in under 10% of plays. |
 | Length | 5 to 10 minutes at 1x (12.5). |
 | Size and speed | The report gives the largest wave, the most creatures on the map at once and the time per tick. |
@@ -1069,7 +1073,7 @@ The "No super tower" check is stricter than the brief's words, "no single tower 
 
 Why two searches of 6000 builds: a search starts from random builds and edits the best ones, so it can get stuck. On 2-2 a lone Sling Post lost every build of one 2500 build search, a 6000 build search found no three-star win, and another 6000 build search found its first one at build 3872 (docs/balance/region2-2026-10-24.md, F7). A draft of the new 2-5 did the same: its 2500 build search found a best of 14 lives, and a 6000 build search found three-star builds from build 4783 on (TUNING_R2.md). Earlier passes used 2500 builds (TUNING_R1.md: on some levels the first single-tower win turned up after 1000 to 2200).
 
-Every Twist: some strategy wins it on Normal (13).
+Every Twist: some strategy wins it on Normal (13). A search of 1500 builds comes first. If it wins nothing, two searches of 6000 builds with different seeds decide, and one win is enough. The 3-2 Twist needed them (docs/balance/campaign-2026-10-25.md, F5).
 
 Across the campaign: every tower type, the Lullaby Bell and the Bakery included, is part of some three-star win (brief section 11). The report also counts each tier 3 path in three-star wins. A path that never shows up is a flag for the game designer, not a failed check.
 
