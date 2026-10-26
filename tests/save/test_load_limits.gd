@@ -702,6 +702,17 @@ func test_no_real_group_comes_near_the_count_ceiling() -> void:
 	print("    save: the largest real group is %d, the ceiling %d" % [most, Battle.MAX_ENEMIES])
 
 
+## Every campaign level creates with and without its Twist, Normal and Relaxed: create
+## refuses a Twist that alone passes a wave ceiling (3.1), and no real one does.
+func test_every_real_level_creates_with_its_twist() -> void:
+	for level_id: StringName in game.levels:
+		var level: LevelData = game.levels[level_id]
+		for effects: Array[Dictionary] in [[] as Array[Dictionary], level.twist_effects]:
+			for relaxed: bool in [false, true]:
+				var b: Battle = Battle.create(level, game.catalog, relaxed, effects)
+				assert_not_null(b, "%s with %d Twist effects, relaxed %s" % [level_id, effects.size(), relaxed])
+
+
 ## The speed and max health ceilings (5.6) sit far above real play: every level's Twist
 ## with any real risk card stays at a quarter of MAX_SPEED_PCT or less, and the catalog's
 ## largest health at the largest strength data allows (1,000 percent), with any real risk

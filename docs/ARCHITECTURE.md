@@ -1,6 +1,6 @@
 # Forkline: Architecture
 
-Owner: architect. Status: revised for phase 7, and brought up to the built sim (S1), the run code (R1, R2), the saves (S2), the run segments (L4), the Twist and run screens (U2), the rules alignment (G1), the run tuning (G3), the security fixes (S4, R4, S5) and the ceilings on stacked effects (S6), 2026-10-25.
+Owner: architect. Status: revised for phase 7, and brought up to the built sim (S1), the run code (R1, R2), the saves (S2), the run segments (L4), the Twist and run screens (U2), the rules alignment (G1), the run tuning (G3), the security fixes (S4, R4, S5) and the ceilings on stacked effects (S6, S7), 2026-10-25.
 
 This is the contract every agent builds against: folders and owners, ids and data files, every public class with its methods and data shapes, routing, saves, resume, orientation, outbound links, the performance budget, the tests and the build plans for phase 5 (section 11) and phase 7 (section 13). Do not invent a public method that another area must call. If you need a change here, put it in your report for the DM.
 
@@ -355,7 +355,7 @@ Which creatures an effect reaches: a Twist's creature effects reach every creatu
 | `add_lives` | amount | card, instant | Gain lives, never above the battle's starting lives (`start_lives`). A gain never lowers lives. | 4.4, 14.5 |
 
 - Order: a Twist's start effects come before Relaxed (RULES 11). Tower stats: the data, then every `tower_add`, then every `tower_pct`, then Bakery boosts on top (RULES 8.7). Creatures: the data, then strength, then effects, each step rounded by its own rule.
-- Floors after card effects (no ceilings, so Volley gives a Triple Bow 4 targets): price at least 10, reach at least 1, reload at least 50 ms, damage at least 1 on a tower that deals damage, splash at least 0, targets at least 1, a slow from 1 to 90 percent on a stat block that has a slow (a card never adds a slow to one that has none), boosts at least 0.
+- Floors after card effects: price at least 10, reach at least 1, reload at least 50 ms, damage at least 1 on a tower that deals damage, splash at least 0, targets at least 1, a slow from 1 to 90 percent on a stat block that has a slow (a card never adds a slow to one that has none), boosts at least 0. There are no rule ceilings beyond the slow's 90 percent, so Volley gives a Triple Bow 4 targets. The far ceilings of 5.6 refuse a card rather than clamp it: `add_effects` returns `&"bad_effect"` for a card that would take a tower stat, a gold gain or the next wave past one (3.1).
 - Instant effects change the state once and are not kept, so a restore never applies them twice. Every other effect is kept by the battle and saved with it.
 - Checks (`Modifiers.check`): the type is known and allowed for its use; the fields are exact; every id exists; pct is 1 to 1,000, except `refund_pct`, which is 1 to 100; counts are 1 to 200, except `set_gates` count, which is 0 to `max_gates` (the No Gates Twist gives 0); `set_lives` is 1 to 1,000; entrances are 1 to 4; times are multiples of 50 up to 600,000; `add_gold` `amount` and `per_wave`, `add_lives` `amount`, `reward_gold` `amount` and `interest` `max` are whole numbers from 0 to 1,000: a negative value is refused when it is loaded or picked, not counted as 0 (2026-10-24); every other number is -1,000 to 1,000; a `break_ms` creature already breaks gates (phase 7). `LevelData.check` also checks that `fixed_gates` cells are sockets of that level, that there are no more of them than the level gives, and that they do not seal. `RunData.check` adds the card rules of 2.11.
 
@@ -538,7 +538,7 @@ Every class below has the listed `class_name`. Fields are read only outside thei
 - A walker moves `speed * 10 * pct * (100 - slow) / 10000` sub-units a tick, where pct is 100 unless `speed_pct` changes it. The one truncation loses under one percent. Movement left over at a cell center carries into the next step, so speeds stay exact over a whole route.
 - Rounding follows RULES 2: half up for health, heals, gold scaled by strength or a percent, and damage percents; down for refunds; up for the early call bonus and `count_pct`. Every other product truncates once, at the end.
 - Two timers run at a changing pace, so they count in 1/100 ms. A tick takes `50 * (100 + rate boost)` off a tower's reload timer. A tower fires at most once a tick (RULES 5.2): with its timer at 0 or less and a target in range, it fires and adds `reload_ms * 100`, and a timer still below 0 after that is set to 0; with no target, the timer is set to 0 and waits. So between ticks, and in a save, a reload timer is 0 to `reload_ms * 100` of the tower's stats with card effects; an upgrade or a card never leaves it above that. A tick takes `50 * (100 - slow)` off a breaker's break timer (RULES 7.7). Every other timer counts whole ticks.
-- No product comes near 2^62: positions stay below 300,000, and the ceilings in 2.4 and 5.5 bound every input.
+- No product comes near 2^62: positions stay below 300,000, and the ceilings in 2.4, 5.5 and 5.6 bound every input.
 
 #### No chance in battle
 
@@ -691,7 +691,7 @@ static func group_count(effects: Array[Dictionary], count: int, flying: bool, la
                                                        # (1,000,000,000), clamped after every step, so no count overflows
 ```
 
-Inside src/sim/, every stacked percent effect but `start_gold_pct` is clamped as it multiplies, so no product overflows: `speed_pct` at 1,000,000,000 percent, health, bounty and clear bonus scaling at 10^12, and each `tower_pct` step in a tower's stats at 10^12. `Battle.create` applies `start_gold_pct` once, with no clamp: a Twist holds at most 8 effects, so its product stays far inside an int.
+Inside src/sim/, every stacked percent effect is clamped as it multiplies, so no product overflows: `speed_pct` at 1,000,000,000 percent, health, bounty and clear bonus scaling at 10^12, each `tower_pct` step in a tower's stats at 10^12, and starting gold at BIG (1,000,000,000) after each `start_gold_pct` step and after Relaxed.
 
 ```gdscript
 class_name Battle extends RefCounted                   # src/sim/battle.gd: one map being defended
@@ -766,8 +766,8 @@ func to_data() -> Dictionary
 static func from_data(data: Variant, catalog: Catalog) -> Battle   # null when any field is invalid
 ```
 
-- `create` sets the starting numbers: a Twist's `start_gold_pct`, `set_lives`, `set_gates` and `fixed_gates` first, then Relaxed (RULES 11). Lives come from rules.json. A run's map carries its own start gold, gates and towers (3.4).
-- `create` returns null when the level or the catalog is missing, or when the Twist has more than 8 effects, fails `Modifiers.check` for use `twist`, or has fixed gates that are not sockets of the level, outnumber the gates given (the level's, or the Twist's `set_gates`) or seal. Real data never does that: a level file holds at most 2 Twist effects and `LevelData.check` checks its fixed gates. So a null is a bug.
+- `create` sets the starting numbers: a Twist's `start_gold_pct`, `set_lives`, `set_gates` and `fixed_gates` first, then Relaxed (RULES 11). Starting gold is held at most BIG. Lives come from rules.json. A run's map carries its own start gold, gates and towers (3.4).
+- `create` returns null when the level or the catalog is missing, or when the Twist has more than 8 effects, fails `Modifiers.check` for use `twist`, has fixed gates that are not sockets of the level, outnumber the gates given (the level's, or the Twist's `set_gates`) or seal, or when any wave with the Twist alone (no risk card) passes a wave effect ceiling of 5.6, so no battle starts that no save of could load. Real data never does that: a level file holds at most 2 Twist effects, `LevelData.check` checks its fixed gates, and every real level's Twist stays far inside the ceilings (tests/save/). So a null is a bug.
 - `twist_effects`, `card_effects` and `risk_waiting` hold checked effects as plain data: ints, bools, Strings (ids included), and cells as `[column, row]` arrays. `gates_open` is true from the start of a wave whose risk card holds `gates_open` until the next build phase begins, even after that wave is cleared.
 - Tower numbers (`numbers`, `before`, `after` and `tower_numbers`) hold the tower's own stats with card effects: `damage`, `reload_ms`, `reach`, `splash`, `targets`, `pierce`, `slow_pct`, `slow_ms`, `hits_ground`, `hits_air`, `boost_pct`, `boost_damage`. `tower_numbers` adds `got_pct` and `got_damage` (the best Bakery boosts it gets), `boosting` (towers a Bakery boosts now), `spent`, `sell` and `aim`. The UI works out the rate as `(100 + got_pct) * 1000 / (100 * reload_ms)` attacks a second (RULES 5.2, 9.3).
 - `enemy_numbers(id)`: `health`, `max_health`, `armor`, `speed` (now, with slows and effects), `base_speed`, `flying`, `lives`, `bounty`, `heal`, `slow_pct`, `slow_ms` (left), `bubble` (up), `bubble_ms` (until it is back), `breaking_ms` (left, 0 when not breaking). RULES 9.4.
@@ -1819,6 +1819,7 @@ Settled on 2026-10-24:
 Settled on 2026-10-25:
 
 5. **Run targets.** Answered by G3: the bars for runs are RULES 14.8, and the bar for the daily is at the end of RULES 15.
+6. **Ceilings on stacked effects.** Count, speed, health, tower stats and gold gains are clamped as they multiply and checked in `Battle.from_data` and `add_effects` (S6). A Twist on its own is checked in `Battle.create`, and starting gold is clamped too (S7). See 3.1 and 5.6. A per-wave ceiling was left out by the DM.
 
 Open, with who answers and by when:
 
@@ -1828,7 +1829,6 @@ Suggestions, for the DM to decide. They are not part of the contract unless the 
 
 - **A repeatable economy card in the base pool, checked on load** (architect, 2026-10-25). `RunData.check` could require a base card (`unlock` `{}`) of kind `economy` that is not `once`. Today a cards.json without one still loads, and a normal run whose unlocks add no such card cannot start: its pool fails the pool rule of 3.4, so `RunSession.start` returns null. Only tests/run/test_real_data.gd guards against this now, by pinning `gold_purse` and `tea_break`.
 - **Heal marks within the heal event** (architect, 2026-10-25, for the render owner). The render's `MapView.HEAL_MARKS` should never exceed `Battle.HEAL_EVENT_IDS`, since a `healed` event lists no more ids than that (3.1). Both are 6 today. A test in tests/render/ could pin it.
-- **Ceilings on stacked effects** (settled 2026-10-25): count, speed, health, tower stats and gold gains are clamped as they multiply and checked in `Battle.from_data` and `add_effects` (3.1, 5.6). A per-wave ceiling was left out by the DM.
 
 ## 13. Phase 7 build plan
 
@@ -1891,6 +1891,7 @@ From wave 5 the work is the rest of the two loops. The DM starts each step when 
 | **R4** | roguelite-engineer (done 2026-10-25) | Finding N1 of the security review: `RunSession.from_data` ties the battle's kept card effects, its waiting risk card and each running wave's risk card to the picks (5.6) | the security review | tests/run/: the review's repro and each mismatch are refused, and real run and daily saves at every point load and play on the same |
 | **S5** | sim-engineer (done 2026-10-25) | Findings L5, L6, N7 and N8 of the second security review (docs/reviews/security-2026-10-25-2.md) in `Battle.from_data`: the crowd counted with what each creature can still let out, at most 8 creatures that summon and 40 that heal on the map at once, the saved level's waves included, and the seal check on every placed gate. Also a heal event lists at most 6 ids, and a summoned creature cannot heal (2.4, 2.6, 3.1, 4.4, 5.6) | the second security review | tests/save/: the review's tampered saves are refused, a heal tick at the load ceiling stays cheap, real play at its worst moments still loads, and real levels and runs stay far below both ceilings; tests/sim/: the heal event's ids and the summon rule |
 | **S6** | sim-engineer (done 2026-10-25) | The ceilings on stacked effects (section 12): stacked `count_pct`, `speed_pct`, `health_pct`, `bounty_pct`, `clear_bonus_pct` and `tower_pct` effects clamped as they multiply, so no product overflows; the wave effect and kept effect ceilings checked in `Battle.from_data` and `add_effects`; and gold held at most 1,000,000,000 at every gain (3.1, 5.6) | section 12 | tests/sim/: stacked effects clamp and never overflow; each ceiling is refused past its edge, at load and by `add_effects`, and a refused card gives nothing, not even its instant gold; gold stops at 1,000,000,000 and the save still loads; tests/save/: every real level with and without its Twist, every pack, every risk card and the whole card stack stay far below each ceiling, and they load |
+| **S7** | sim-engineer (done 2026-10-25) | The two gaps the architect found after S6, in `Battle.create`: every wave with the Twist alone is checked against the wave effect ceilings of 5.6, so no battle starts that no save of could load, and starting gold is held at most BIG after each `start_gold_pct` step and after Relaxed (3.1) | S6 | tests/sim/: `create` refuses a Twist past a wave ceiling, also when only the last wave passes it, and starting gold stops at BIG and the battle still saves and loads, on Normal and Relaxed; tests/save/: every real level creates with and without its Twist, on Normal and Relaxed |
 | **G4** | game-designer | Region 3 tuning from B3 | B3 | as G2 |
 | **L6** | level-designer | Region 3's level changes, then region 4, r4_l1 to r4_l6 with their Twists and tests/levels/ | G4 | tests/levels/ |
 | **B4** | balance-analyst | The pass over all 24 levels and every Twist, and the second run and daily report | L6, S3, R3, L5 | both reports |

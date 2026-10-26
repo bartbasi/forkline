@@ -156,7 +156,9 @@ var _removed: bool = false
 
 
 ## A Twist's effects apply first, then Relaxed (11, contract 3.1). Null when the level,
-## the catalog or an effect is not valid.
+## the catalog or an effect is not valid, or when any wave with the Twist alone passes a
+## wave effect ceiling of 5.6 (a battle no save of could load). Starting gold is held at
+## most BIG, clamped after each step so no product can overflow.
 static func create(level_data: LevelData, stats: Catalog, is_relaxed: bool, twist: Array[Dictionary]) -> Battle:
 	if level_data == null or stats == null or stats.rules == null:
 		return null
@@ -166,6 +168,9 @@ static func create(level_data: LevelData, stats: Catalog, is_relaxed: bool, twis
 	battle._setup(level_data, stats)
 	battle.relaxed = is_relaxed
 	battle.twist_effects = Modifiers.normalize_all(twist)
+	for w: int in level_data.waves.size():
+		if not battle._wave_effects_problem(w, []).is_empty():
+			return null
 	battle._fold()
 	var rules: GameRules = stats.rules
 	var lives_now: int = rules.start_lives
@@ -173,7 +178,7 @@ static func create(level_data: LevelData, stats: Catalog, is_relaxed: bool, twis
 	for effect: Dictionary in battle.twist_effects:
 		match String(effect["type"]):
 			"start_gold_pct":
-				gold_now = gold_now * int(effect["pct"]) / 100 / 10 * 10
+				gold_now = mini(gold_now * int(effect["pct"]) / 100 / 10 * 10, BIG)
 			"set_lives":
 				lives_now = effect["lives"]
 	var given: int = battle._given_gates()
@@ -188,7 +193,7 @@ static func create(level_data: LevelData, stats: Catalog, is_relaxed: bool, twis
 	if is_relaxed:
 		# 11: Relaxed lives, and gold rounded up to a multiple of 10.
 		battle.start_lives = lives_now * rules.relaxed_lives_pct / 100
-		battle.gold = (gold_now * rules.relaxed_gold_pct + 999) / 1000 * 10
+		battle.gold = mini((gold_now * rules.relaxed_gold_pct + 999) / 1000 * 10, BIG)
 	battle.lives = battle.start_lives
 	for cell: Vector2i in fixed:
 		var gate: GateState = GateState.new()

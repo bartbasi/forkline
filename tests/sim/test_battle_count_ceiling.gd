@@ -193,3 +193,36 @@ func test_max_health_past_big_is_refused_at_load_and_by_add_effects() -> void:
 	assert_not_null(Battle.from_data(running, catalog), "a running wave with a real health risk loads")
 	running["wave_risk"][0]["effects"] = _typed("health_pct", _repeat(1000, Modifiers.MAX_WAITING))
 	assert_null(Battle.from_data(running, catalog), "a running wave's 8 health effects at 1,000 percent")
+
+
+## A Twist on its own is checked against the wave ceilings at create, so no battle starts
+## that no save of could load. The level file's check passes this Twist; create refuses it.
+func test_create_refuses_a_twist_past_a_wave_ceiling() -> void:
+	var twist: Dictionary = {"name": "Too Fast", "text": "Far too fast.", "effects": _typed("speed_pct", [1000, 1000])}
+	var waves: Array = [{"groups": [Fx.group("scamp", 4, 0, 600)]}, {"groups": [Fx.group("scamp", 4, 0, 600)]}]
+	var level: LevelData = Fx.level(Fx.FORK_GRID, waves, {"twist": twist}, catalog)
+	assert_not_null(level, "the level file's check passes the Twist")
+	assert_null(Battle.create(level, catalog, false, level.twist_effects), "two speed effects at 1,000 percent")
+	assert_null(Battle.create(level, catalog, true, level.twist_effects), "Relaxed too")
+	assert_not_null(Battle.create(level, catalog, false, _typed("speed_pct", [1000])), "exactly %d percent" % Battle.MAX_SPEED_PCT)
+	assert_null(Battle.create(_level(), catalog, false, _counts([1000, 1000, 1000, 101])), "a group past %d" % Battle.MAX_ENEMIES)
+
+
+func test_create_checks_every_wave_with_the_twist() -> void:
+	var twist: Array[Dictionary] = _counts([1000, 1000, 1000])
+	assert_not_null(Battle.create(_level(), catalog, false, twist), "every group at exactly %d" % Battle.MAX_ENEMIES)
+	twist.append({"type": "count_pct", "pct": 101, "flyers": false, "last_wave": true})
+	assert_null(Battle.create(_level(), catalog, false, twist), "only the last wave passes the ceiling")
+
+
+## Eight effects at 1,000 percent on the most starting gold a level holds would overflow
+## an int. Each step is clamped, so starting gold stops at BIG and the battle saves.
+func test_starting_gold_stops_at_big() -> void:
+	var level: LevelData = Fx.level(Fx.FORK_GRID, [{"groups": [Fx.group("scamp", 4)]}], {"start_gold": 100000}, catalog)
+	var rich: Array[Dictionary] = _typed("start_gold_pct", _repeat(1000, Modifiers.MAX_TWIST))
+	for relaxed: bool in [false, true]:
+		var b: Battle = Battle.create(level, catalog, relaxed, rich)
+		assert_eq(b.gold, Battle.BIG, "relaxed %s" % relaxed)
+		assert_not_null(Battle.from_data(_data(b), catalog), "relaxed %s saves and loads" % relaxed)
+	assert_eq(Battle.create(level, catalog, false, _typed("start_gold_pct", [1000, 1000, 1000])).gold, 100000000, "under BIG is unchanged")
+	assert_eq(Battle.create(level, catalog, true, _typed("start_gold_pct", [1000, 1000, 1000])).gold, 150000000, "Relaxed under BIG is unchanged")
