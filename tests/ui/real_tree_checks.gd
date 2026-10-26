@@ -494,6 +494,7 @@ const Fx: GDScript = preload("res://tests/ui/flow_fixtures.gd")
 const BATTLE_TAGS: PackedStringArray = [
 	"real_cover_build", "real_inner_build", "real_cover_touch", "real_inner_touch",
 	"real_cover_drag", "real_inner_drag", "real_fold", "real_back",
+	"real_coverimm_build", "real_coverimm_touch",
 ]
 
 
@@ -552,13 +553,18 @@ func _line(from: Vector2, to: Vector2) -> Array[Vector2]:
 
 
 func _battle_screens() -> void:
-	for pair: Array in [[COVER, COVER_SAFE, "cover"], [INNER, INNER_SAFE, "inner"]]:
+	# The cover screen in immersive mode as QA found it (2026-10-26, p4): the display reports
+	# the whole screen but the 85 px camera cutout, and the gesture bar owns the bottom 39 px.
+	var immersive: Rect2 = Layout.safe_in_viewport(COVER, Vector2(904.0, 2316.0), Vector2.ZERO, Rect2(0.0, 85.0, 904.0, 2231.0), Layout.GESTURE_MARGIN)
+	check(is_equal_approx(immersive.end.y, COVER.y - Layout.GESTURE_MARGIN), "immersive cover: the safe area keeps the gesture margin clear")
+	for pair: Array in [[COVER, COVER_SAFE, "cover"], [INNER, INNER_SAFE, "inner"], [COVER, immersive, "coverimm"]]:
 		var size: Vector2 = pair[0]
 		var safe: Rect2 = pair[1]
 		var label: String = pair[2]
 		await _battle_build_phase(size, safe, label)
 		await _battle_panels_and_touch(size, safe, label)
-		await _battle_gate_drag(size, safe, label)
+		if label != "coverimm":
+			await _battle_gate_drag(size, safe, label)
 	await _battle_fold()
 	await _battle_back_and_pause()
 	await _battle_end_delay()
@@ -630,6 +636,7 @@ func _battle_panels_and_touch(size: Vector2, safe: Rect2, label: String) -> void
 		var sheet_top: float = screen.build_panel.get_global_rect().position.y
 		check(sheet_top >= screen.hud.get_global_rect().end.y - 0.5, "%s: the sheet never covers the HUD (%s vs %s)" % [where, sheet_top, screen.hud.get_global_rect().end.y])
 		_inside_and_big(screen.build_panel, size, "%s build panel" % where)
+		check(screen.build_panel.get_global_rect().end.y <= safe.end.y + 0.5, "%s: the build sheet is inside the safe area" % where)
 	# A real tap on Build builds.
 	screen.build_panel.select_tower(&"pumpkin_catapult")
 	await _frames(2)
@@ -1289,6 +1296,12 @@ func _u1_real() -> void:
 		if pause != null:
 			_inside_and_big(pause, size, "%s Pause with star lines" % where)
 			check(safe.grow(0.6).encloses(pause.card.get_global_rect()), "%s: the Pause card is inside the safe area (%s)" % [where, pause.card.get_global_rect()])
+			# QA 2026-10-26 p3: a tapped row keeps no lighter look, so hover draws as normal.
+			var rows: Array[Node] = pause.find_children("*", "TapButton", true, false)
+			check(rows.size() >= 5, "%s: the Pause rows were found" % where)
+			for node: Node in rows:
+				var row_button: TapButton = node as TapButton
+				check(row_button.get_theme_stylebox(&"hover") == row_button.get_theme_stylebox(&"normal"), "%s: the Pause button '%s' draws no hover look" % [where, row_button.text])
 			for line: StarLine in pause.star_lines:
 				check(line.sentence.get_global_rect().size.x >= 200.0, "%s: a star sentence has room (%.0f px)" % [where, line.sentence.get_global_rect().size.x])
 		made.handle_back()

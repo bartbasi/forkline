@@ -507,8 +507,7 @@ func _discard(node: Node) -> void:
 func leave_app() -> void:
 	if _active == null:
 		return
-	if _battle_screen != null and _active.battle.phase == Battle.Phase.WAVE and not _battle_screen.is_paused():
-		_battle_screen.pause()
+	if _battle_screen != null and _battle_screen.pause_for_leave():
 		return
 	save_active()
 

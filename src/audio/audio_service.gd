@@ -14,6 +14,17 @@ extends Node
 ## Mixing: 12 voices in all, at most 3 of the same sound at once, and a short
 ## gap between two starts of the same sound, so a big wave at 3x stays soft.
 ## A limiter on the Sfx bus is the last guard against clipping.
+##
+## Foreground only (phones): nothing plays while the app is not in front.
+## Android logs "AudioHardening background playback" when audio starts a
+## moment before the activity shows or runs on after it leaves, and a future
+## Android may mute that. So on a phone the service starts out silent and goes
+## to the front on NOTIFICATION_APPLICATION_RESUMED or FOCUS_IN. If neither
+## arrives, the second drawn frame counts as in front, because a frame is only
+## drawn once the activity has a surface. APPLICATION_PAUSED and FOCUS_OUT stop
+## every voice and the music at once. The notifications reach this node by
+## themselves, so the App forwards nothing. On Windows and in tests the
+## service is always in front, as before.
 
 const SFX_BUS: StringName = &"Sfx"
 const MUSIC_BUS: StringName = &"Music"
@@ -26,6 +37,9 @@ const FADE_IN_SECONDS: float = 0.8
 const FADE_OUT_SECONDS: float = 0.35
 ## Time the audio thread needs to drop stopped playbacks when the service leaves the tree.
 const PLAYBACK_DROP_MS: int = 200
+## Frames drawn before a phone service counts as in front when no RESUMED or
+## FOCUS_IN notification has arrived.
+const FRONT_FRAMES: int = 2
 
 ## Event kind (architecture 3.1) to sound id. Every kind has a sound.
 ## break_started and sped_up warn the player, so they are heard. released and
@@ -122,11 +136,22 @@ var _music: AudioStreamPlayer = null
 var _music_wanted: StringName = &""
 var _music_playing: StringName = &""
 var _tween: Tween = null
+## True when the app is in front, or when the service does not track that.
+var _front: bool = true
+## True when this service tracks the app coming to the front and leaving.
+var _gated: bool = false
+## True once a PAUSED or FOCUS_OUT notification has arrived.
+var _left: bool = false
+var _frames: int = 0
 
 
-func _init() -> void:
+## With `gated` (the default on a phone) the service stays silent until the app
+## is in front. Tests pass it to try that on a desktop.
+func _init(gated: bool = OS.has_feature("mobile")) -> void:
 	# Everything is set up here, not in _ready, so the service works before it
 	# joins the tree (the App may pick music first) and under a test runner.
+	_gated = gated
+	_front = not gated
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_ensure_bus(SFX_BUS, true)
 	_ensure_bus(MUSIC_BUS, false)
@@ -146,12 +171,13 @@ func _init() -> void:
 
 
 func _ready() -> void:
-	set_process(false)
+	# A phone service runs frames until it is in front (the frame fallback).
+	set_process(not _front and not _left)
 	# tree_exiting fires before the players below leave the tree.
 	tree_exiting.connect(_release_playback)
 	# Music picked before the node joined the tree starts now.
 	_music_playing = &""
-	if _enabled and _music_wanted != &"":
+	if _can_play() and _music_wanted != &"":
 		_apply_music()
 
 
@@ -159,14 +185,67 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_PREDELETE and _bank != null:
 		# Waits for any build still running, so no worker task outlives the service.
 		_bank.wait()
+	elif not _gated:
+		return
+	elif what == NOTIFICATION_APPLICATION_RESUMED or what == NOTIFICATION_APPLICATION_FOCUS_IN:
+		_left = false
+		_set_front(true)
+	elif what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_left = true
+		_set_front(false)
 
 
 func _process(_delta: float) -> void:
-	# Only runs while a music track is waiting for its stream to finish building.
+	# Runs while the app is not yet in front (the frame fallback), and while a
+	# music track is waiting for its stream to finish building.
+	if not _front:
+		if _left:
+			set_process(false)
+			return
+		_frames += 1
+		if _frames >= FRONT_FRAMES:
+			_set_front(true)
+		return
 	if _music_wanted == &"" or not _enabled or _music_playing == _music_wanted:
 		set_process(false)
 		return
 	_start_music()
+
+
+## True when sound may play: on, and the app in front.
+func _can_play() -> bool:
+	return _enabled and _front
+
+
+## True when the app is in front, or the service does not track that.
+func is_in_front() -> bool:
+	return _front
+
+
+## Moves the service to the front or back. Going back stops every voice and the
+## music at once. Coming forward brings the wanted music back.
+func _set_front(front: bool) -> void:
+	if front == _front:
+		return
+	_front = front
+	if not front:
+		_stop_all()
+		set_process(false)
+		return
+	_frames = 0
+	set_process(false)
+	if _enabled and _music_wanted != &"":
+		_apply_music()
+
+
+## Stops every voice and the music, with no fade.
+func _stop_all() -> void:
+	_kill_tween()
+	for i: int in _voices.size():
+		_voices[i].stop()
+		_voice_end[i] = 0
+	_music.stop()
+	_music_playing = &""
 
 
 ## Stops every player and lets go of its stream, so no playback outlives the
@@ -200,19 +279,14 @@ func set_enabled(on: bool) -> void:
 		return
 	_enabled = on
 	if not on:
-		_kill_tween()
-		for i: int in _voices.size():
-			_voices[i].stop()
-			_voice_end[i] = 0
-		_music.stop()
-		_music_playing = &""
-	elif _music_wanted != &"":
+		_stop_all()
+	elif _front and _music_wanted != &"":
 		_apply_music()
 
 
 ## Turns battle events (architecture 3.1) into sounds. Unknown events are ignored.
 func play_events(events: Array[Dictionary]) -> void:
-	if not _enabled or _voices.is_empty():
+	if not _can_play() or _voices.is_empty():
 		return
 	for event: Dictionary in events:
 		var sound: StringName = sound_for(event)
@@ -223,7 +297,7 @@ func play_events(events: Array[Dictionary]) -> void:
 
 ## Plays a UI sound: &"tap", &"refuse" or &"star". Anything else is ignored.
 func play_ui(sound: StringName) -> void:
-	if not _enabled or _voices.is_empty() or not UI_SOUNDS.has(sound):
+	if not _can_play() or _voices.is_empty() or not UI_SOUNDS.has(sound):
 		return
 	_play(sound, 1.0)
 
@@ -235,7 +309,7 @@ func set_music(track: StringName) -> void:
 	if wanted == _music_wanted:
 		return
 	_music_wanted = wanted
-	if _enabled:
+	if _can_play():
 		_apply_music()
 
 
@@ -246,7 +320,7 @@ func current_music() -> StringName:
 
 ## True when the music is playing right now.
 func is_music_playing() -> bool:
-	return _enabled and _music_playing != &"" and (not _music.is_inside_tree() or _music.playing)
+	return _can_play() and _music_playing != &"" and (not _music.is_inside_tree() or _music.playing)
 
 
 func is_enabled() -> bool:
@@ -273,7 +347,7 @@ func wait_until_ready() -> void:
 	if _bank == null:
 		return
 	_bank.wait()
-	if _enabled and _music_wanted != &"" and _music_playing != _music_wanted:
+	if _can_play() and _music_wanted != &"" and _music_playing != _music_wanted:
 		_start_music()
 
 
@@ -395,7 +469,7 @@ func _apply_music() -> void:
 
 
 func _start_music() -> void:
-	if not _enabled or _music_wanted == &"":
+	if not _can_play() or _music_wanted == &"":
 		return
 	var stream: AudioStreamWAV = _stream(_music_wanted)
 	if stream == null:

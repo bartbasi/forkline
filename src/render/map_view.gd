@@ -103,6 +103,8 @@ var _fx_time: float = 0.0
 var _last_game: float = -1.0
 var _last_real_us: int = 0
 var _real_dt: float = 0.0
+## True while a wave is on but the game clock did not move since the last sync (a pause).
+var _frozen: bool = false
 var _boosted: Array[Vector2] = []
 ## Gates a breaker is working on this frame, and how far along each is. MapGates draws them.
 var _crack_cells: Array[Vector2i] = []
@@ -181,6 +183,7 @@ func setup(new_battle: Battle) -> void:
 	_first_sync = true
 	_fx_time = 0.0
 	_last_game = -1.0
+	_frozen = false
 	_last_real_us = 0
 	_break_total.clear()
 	_crack_cells.clear()
@@ -244,6 +247,8 @@ func sync(alpha: float) -> void:
 	_sync_towers()
 	_sync_creatures(clampf(alpha, 0.0, 1.0))
 	_finish_dying()
+	if _frozen:
+		_hide_dying()
 	_sync_gates()
 	_sync_layers()
 	_first_sync = false
@@ -384,6 +389,16 @@ func bake_scale() -> float:
 	return _bake_scale
 
 
+## Creatures the sim removed that are still drawn whole, waiting for their shot to land.
+## It is 0 while the game is paused, so the map shows what the battle holds.
+func visible_ghost_count() -> int:
+	var n: int = 0
+	for v: CreatureView in _dying:
+		if v.sprite.visible:
+			n += 1
+	return n
+
+
 func is_effect_busy() -> bool:
 	return ghost_count() > 0 or (_shots != null and _shots.is_busy()) or (_leaks != null and _leaks.is_busy())
 
@@ -409,10 +424,12 @@ func _advance_clock(alpha: float) -> void:
 	if battle.phase == Battle.Phase.WAVE:
 		var game: float = (float(battle.tick) + clampf(alpha, 0.0, 1.0)) * float(Sim.MS_PER_TICK) / 1000.0
 		dt = 0.0
+		_frozen = _last_game >= 0.0 and absf(game - _last_game) < 0.000001
 		if _last_game >= 0.0 and game >= _last_game and game - _last_game <= 1.0:
 			dt = game - _last_game
 		_last_game = game
 	else:
+		_frozen = false
 		_last_game = -1.0
 	_fx_time += dt
 
@@ -576,6 +593,16 @@ func _finish_dying() -> void:
 			_dying.remove_at(i)
 		else:
 			i += 1
+
+
+## A creature the sim already removed waits for its shot to land, and the effect clock stops
+## in a pause. Hide it at once: the map then shows what the battle holds, and a tap on it
+## cannot mislead. It stays hidden on resume and puffs when the shot lands. That is calmer
+## than a whole creature showing again for a moment. It costs nothing per frame: _dying is
+## empty unless a pop was waiting, and a hidden sprite stays hidden.
+func _hide_dying() -> void:
+	for v: CreatureView in _dying:
+		v.sprite.visible = false
 
 
 func _pop(v: CreatureView) -> void:

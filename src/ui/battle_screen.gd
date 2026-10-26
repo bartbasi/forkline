@@ -298,6 +298,30 @@ func is_paused() -> bool:
 	return clock.paused
 
 
+## True when a wave is on and the Pause menu is not up yet: the clock is running, or only
+## the HUD's Paused strip holds it. A fold, a focus loss or a leave then calls pause(), so
+## the Pause menu opens on every path (docs/ARCHITECTURE.md 7.5). A first sight card that
+## froze the wave is not counted: it opens the menu itself when it closes.
+func needs_pause_menu() -> bool:
+	if battle == null or battle.phase != Battle.Phase.WAVE or _pause_panel != null:
+		return false
+	return not clock.paused or pause_strip.visible
+
+
+## The app is being left (focus lost, home, a close). Opens the Pause menu when a wave needs
+## it and returns true: the menu's save request has then saved the game. A first sight card
+## that froze the wave opens the menu when it closes, as after a resize. Returns false when
+## the caller still has to save.
+func pause_for_leave() -> bool:
+	if _card_froze:
+		_card_resized = true
+		return false
+	if not needs_pause_menu():
+		return false
+	pause()
+	return true
+
+
 ## Freezes the clock and opens the Pause menu.
 func pause() -> void:
 	if _pause_panel != null:
@@ -417,7 +441,7 @@ func apply_layout(new_window_size: Vector2, new_safe: Rect2) -> void:
 	if resized and _card_froze:
 		# A first sight card froze the wave. The wave pauses on the menu when the card closes.
 		_card_resized = true
-	if resized and battle != null and battle.phase == Battle.Phase.WAVE and not clock.paused:
+	if resized and needs_pause_menu():
 		pause()
 	cancel_drag()
 	super.apply_layout(new_window_size, new_safe)

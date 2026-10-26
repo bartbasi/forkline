@@ -57,6 +57,19 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_VISIBILITY_CHANGED or what == NOTIFICATION_EXIT_TREE:
 		_down = false
 		_tap_ok = false
+	elif what == NOTIFICATION_THEME_CHANGED or what == NOTIFICATION_ENTER_TREE:
+		_calm_hover()
+
+
+## A touch has no hover, but Godot keeps the emulated mouse where the finger last was, so a
+## button under that spot (after a panel closes and the screen comes back) would keep the
+## lighter hover look (QA 2026-10-26, p3). Hover draws as normal on every TapButton. The
+## pressed look still shows while a finger is down. The check below also stops the
+## theme-changed call that adding the override raises.
+func _calm_hover() -> void:
+	var normal: StyleBox = get_theme_stylebox(&"normal")
+	if get_theme_stylebox(&"hover") != normal:
+		add_theme_stylebox_override(&"hover", normal)
 
 
 ## The scroll position of the nearest scroll container above, or 0.

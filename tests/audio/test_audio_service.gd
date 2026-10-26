@@ -363,3 +363,135 @@ func test_releasing_playback_lets_go_of_every_stream() -> void:
 	for player: AudioStreamPlayer in service._voices:
 		assert_null(player.stream)
 	assert_false(service.is_music_playing())
+
+
+# Foreground only. A phone service (gated) plays nothing until the app is in
+# front and stops everything when it leaves. The notifications are sent by hand.
+
+func _gated_service() -> AudioService:
+	var gated: AudioService = AudioService.new(true)
+	gated.wait_until_ready()
+	return gated
+
+
+func test_a_phone_service_starts_silent_until_the_app_is_in_front() -> void:
+	var phone: AudioService = _gated_service()
+	assert_false(phone.is_in_front())
+	phone.set_music(&"menu")
+	phone.play_ui(&"tap")
+	phone.play_events(_events(&"built", 1))
+	assert_eq(phone.current_music(), &"menu")
+	assert_false(phone.is_music_playing())
+	assert_eq(phone.voice_count(), 0)
+	assert_eq(phone._music_playing, &"")
+	phone._notification(Node.NOTIFICATION_APPLICATION_FOCUS_IN)
+	assert_true(phone.is_in_front())
+	assert_true(phone.is_music_playing())
+	phone.play_ui(&"tap")
+	assert_eq(phone.voice_count(&"tap"), 1)
+	phone.free()
+
+
+func test_resumed_also_brings_the_app_to_the_front() -> void:
+	var phone: AudioService = _gated_service()
+	phone.set_music(&"battle")
+	phone._notification(Node.NOTIFICATION_APPLICATION_RESUMED)
+	assert_true(phone.is_music_playing())
+	phone.free()
+
+
+func test_leaving_the_front_stops_every_voice_and_the_music() -> void:
+	for leave: int in [Node.NOTIFICATION_APPLICATION_PAUSED, Node.NOTIFICATION_APPLICATION_FOCUS_OUT]:
+		var phone: AudioService = _gated_service()
+		phone._notification(Node.NOTIFICATION_APPLICATION_RESUMED)
+		phone.set_music(&"battle")
+		phone.play_events(_events(&"wave_cleared", 1))
+		phone.play_ui(&"tap")
+		assert_true(phone.is_music_playing())
+		assert_true(phone.voice_count() > 0)
+		phone._notification(leave)
+		assert_false(phone.is_in_front())
+		assert_false(phone.is_music_playing())
+		assert_eq(phone.voice_count(), 0)
+		assert_eq(phone._music_playing, &"")
+		for child: Node in phone.get_children():
+			if child is AudioStreamPlayer:
+				assert_false((child as AudioStreamPlayer).playing, "a player kept playing")
+		# Nothing new starts while away, and a music change waits.
+		phone.play_ui(&"tap")
+		phone.play_events(_events(&"won", 1))
+		phone.set_music(&"menu")
+		assert_eq(phone.voice_count(), 0)
+		assert_false(phone.is_music_playing())
+		assert_eq(phone.current_music(), &"menu")
+		# Back in front: the music wanted last comes back, and sounds play.
+		phone._notification(Node.NOTIFICATION_APPLICATION_RESUMED)
+		assert_true(phone.is_music_playing())
+		assert_eq(phone._music_playing, &"menu")
+		OS.delay_msec(int(AudioService.GAP_MS[&"tap"]) + 15)
+		phone.play_ui(&"tap")
+		assert_eq(phone.voice_count(&"tap"), 1)
+		phone.free()
+
+
+func test_sound_off_stays_off_after_coming_to_the_front() -> void:
+	var phone: AudioService = _gated_service()
+	phone.set_enabled(false)
+	phone.set_music(&"menu")
+	phone._notification(Node.NOTIFICATION_APPLICATION_RESUMED)
+	assert_false(phone.is_music_playing())
+	phone.play_ui(&"tap")
+	assert_eq(phone.voice_count(), 0)
+	phone.set_enabled(true)
+	assert_true(phone.is_music_playing())
+	# Turning sound on while away does not start anything.
+	phone._notification(Node.NOTIFICATION_APPLICATION_PAUSED)
+	phone.set_enabled(false)
+	phone.set_enabled(true)
+	assert_false(phone.is_music_playing())
+	phone.free()
+
+
+func test_the_frame_fallback_brings_a_phone_service_to_the_front() -> void:
+	# If neither RESUMED nor FOCUS_IN arrives, a drawn frame is the sign.
+	var phone: AudioService = _gated_service()
+	phone.set_music(&"menu")
+	phone._process(0.016)
+	assert_false(phone.is_music_playing(), "one frame is too early")
+	phone._process(0.016)
+	assert_true(phone.is_in_front())
+	assert_true(phone.is_music_playing())
+	phone.free()
+
+
+func test_the_frame_fallback_never_overrides_a_leave() -> void:
+	var phone: AudioService = _gated_service()
+	phone.set_music(&"menu")
+	phone._notification(Node.NOTIFICATION_APPLICATION_PAUSED)
+	for i: int in 10:
+		phone._process(0.016)
+	assert_false(phone.is_in_front())
+	assert_false(phone.is_music_playing())
+	phone.free()
+
+
+func test_a_desktop_service_ignores_focus_changes() -> void:
+	# Windows and headless keep the old behavior: always in front.
+	service.set_music(&"menu")
+	assert_true(service.is_in_front())
+	service._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	assert_true(service.is_in_front())
+	assert_true(service.is_music_playing())
+	service.play_ui(&"tap")
+	assert_eq(service.voice_count(&"tap"), 1)
+
+
+func test_releasing_playback_still_works_when_gated() -> void:
+	var phone: AudioService = _gated_service()
+	phone._notification(Node.NOTIFICATION_APPLICATION_RESUMED)
+	phone.set_music(&"menu")
+	phone.play_events(_events(&"built", 1))
+	phone._release_playback()
+	assert_null(phone._music.stream)
+	assert_false(phone.is_music_playing())
+	phone.free()

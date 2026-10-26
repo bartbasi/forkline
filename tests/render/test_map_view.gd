@@ -133,6 +133,41 @@ func test_nodes_follow_creatures_and_nothing_leaks() -> void:
 	assert_true(seen.size() > peak + 4, "more creatures passed through (%d) than the pool bound allows (peak %d)" % [seen.size(), peak])
 
 
+func test_a_creature_removed_before_a_pause_is_not_drawn_whole() -> void:
+	# QA round 3, p2: a pop waiting for its shot froze with the clock and stayed drawn whole.
+	var b: Battle = Fx.battle("r1_l2")
+	var v: MapView = _view(b)
+	Fx.defend(b)
+	b.start_next_wave()
+	var waiting: bool = false
+	var guard: int = 0
+	while b.phase == Battle.Phase.WAVE and guard < 6000 and not waiting:
+		var events: Array[Dictionary] = Fx.tick(b)
+		v.sync(0.5)
+		v.play_events(events)
+		waiting = v.ghost_count() > 0
+		guard += 1
+	assert_true(waiting, "a creature was removed while its shot was still in flight")
+	assert_true(v.visible_ghost_count() > 0, "it shows until the pause")
+	# The pause: the same tick and the same alpha, frame after frame.
+	for i: int in 5:
+		v.sync(0.5)
+		v.play_events([] as Array[Dictionary])
+		assert_eq(v.visible_ghost_count(), 0, "paused frame %d: no whole creature the battle does not hold" % i)
+		assert_eq(v.creature_count(), b.enemies.size(), "paused frame %d: the map shows what the battle holds" % i)
+	assert_true(v.ghost_count() > 0, "the pop still waits for its shot")
+	# Resume: it stays hidden and its puff plays when the shot lands.
+	var burst_before: int = v.sparkles().bursts
+	for i: int in 8:
+		var events: Array[Dictionary] = Fx.tick(b)
+		v.sync(0.5)
+		v.play_events(events)
+		assert_eq(v.visible_ghost_count(), 0, "resumed tick %d: it does not come back whole" % i)
+	v.advance_effects(2.0)
+	assert_eq(v.ghost_count(), 0, "the pop finished after the resume")
+	assert_true(v.sparkles().bursts > burst_before, "the puff played")
+
+
 func test_sold_towers_free_their_nodes() -> void:
 	var b: Battle = Fx.battle("r1_l1")
 	var v: MapView = _view(b)
