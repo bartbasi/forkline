@@ -437,7 +437,7 @@ func test_a_tower_card_only_while_its_tower_is_not_in_the_run() -> void:
 func test_a_perk_only_while_its_tower_is_in_the_run() -> void:
 	var first: Dictionary = _seen(1, true)
 	assert_true(first.has(&"sharp_pebbles"))
-	assert_true(first.has(&"twin_pebbles"))
+	assert_false(first.has(&"twin_pebbles"), "an unlocked perk waits for the base perk (3.4)")
 	for id: StringName in first.keys():
 		if _kind(id) == &"perk":
 			assert_eq(data.card(id)["tower"], &"sling_post", "%s needs a tower the run does not have" % id)
@@ -449,6 +449,71 @@ func test_a_perk_only_while_its_tower_is_in_the_run() -> void:
 			bell[id] = true
 	assert_true(bell.has(&"deep_lullaby"), "the Bell's perk joins once the Bell is in the run")
 	assert_false(bell.has(&"warm_ovens"))
+
+
+# the unlocked perk rule (RULES 14.4, 14.6)
+
+## Every offer of the drafts after waves 1 to 17 with the given picks held, over many seeds.
+func _offered_with(picked: Array[StringName], every_card: bool, ids: Array[StringName] = []) -> Dictionary:
+	var seen: Dictionary = {}
+	for run_seed: int in 200:
+		var s: RunSession = Player.session(run_seed, false, "", every_card) if ids.is_empty() else _with_pool(run_seed, ids)
+		var held: Array[StringName] = picked.duplicate()
+		while held.size() < 8:
+			held.append(&"gold_purse")
+		_open(s, 9, held)
+		for id: StringName in s.offers():
+			seen[id] = true
+	return seen
+
+
+func test_an_unlocked_perk_is_never_offered_while_a_base_perk_is_eligible() -> void:
+	# Only the Sling Post in the run: Sharp Pebbles is eligible, so Twin Pebbles waits.
+	for draft: int in [1, 2, 5, 9, 17]:
+		for run_seed: int in 150:
+			var s: RunSession = Player.session(run_seed, false, "", true)
+			_open(s, draft)
+			assert_false(s.offers().has(&"twin_pebbles"), "seed %d, draft %d" % [run_seed, draft])
+	# A tower card makes its base perk eligible: the unlocked perk waits again.
+	var bell: Dictionary = _offered_with([&"sharp_pebbles", &"tower_lullaby_bell"], true)
+	assert_true(bell.has(&"deep_lullaby"))
+	assert_false(bell.has(&"twin_pebbles"), "Deep Lullaby is eligible, so Twin Pebbles waits")
+
+
+func test_an_unlocked_perk_is_offered_once_no_base_perk_is_eligible() -> void:
+	var after_sharp: Dictionary = _offered_with([&"sharp_pebbles"], true)
+	assert_true(after_sharp.has(&"twin_pebbles"), "Sharp Pebbles is taken")
+	assert_false(after_sharp.has(&"sharp_pebbles"))
+	# With the Bell too, it comes back after Deep Lullaby is taken.
+	var both: Dictionary = _offered_with([&"sharp_pebbles", &"tower_lullaby_bell", &"deep_lullaby"], true)
+	assert_true(both.has(&"twin_pebbles"))
+	assert_false(both.has(&"deep_lullaby"))
+
+
+func test_a_pool_without_a_base_perk_offers_the_unlocked_perk_at_once() -> void:
+	var ids: Array[StringName] = [&"tower_bakery", &"twin_pebbles", &"gold_purse", &"spare_gate"]
+	var seen: Dictionary = _offered_with([], false, ids)
+	assert_true(seen.has(&"twin_pebbles"), "the pool has no base perk for the Sling Post")
+	var first: Dictionary = {}
+	for run_seed: int in 100:
+		var s: RunSession = _with_pool(run_seed, ids)
+		_open(s, 1)
+		for id: StringName in s.offers():
+			first[id] = true
+	assert_true(first.has(&"twin_pebbles"), "from the first draft")
+
+
+func test_an_unlocked_perk_in_the_pool_changes_no_draft_while_a_base_perk_is_eligible() -> void:
+	var base: Array[StringName] = data.pool({})
+	var with_twin: Array[StringName] = base.duplicate()
+	with_twin.append(&"twin_pebbles")
+	for run_seed: int in 60:
+		for draft: int in [1, 2, 6]:
+			var a: RunSession = _with_pool(run_seed, base)
+			var b: RunSession = _with_pool(run_seed, with_twin)
+			_open(a, draft)
+			_open(b, draft)
+			assert_eq(b.offers(), a.offers(), "seed %d, draft %d" % [run_seed, draft])
 
 
 func test_a_once_card_is_gone_after_it_is_taken_and_others_come_back() -> void:
@@ -514,7 +579,12 @@ func test_unlocked_cards_come_only_from_the_pool() -> void:
 	var base: Dictionary = _seen(1, false, 200)
 	for id: StringName in [&"twin_pebbles", &"piggy_bank", &"pip_parade"]:
 		assert_false(base.has(id), "%s is not in the base pool" % id)
-	var all: Dictionary = _seen(9, true, 300)
+	var all: Dictionary = {}
+	for run_seed: int in 300:
+		var s: RunSession = Player.session(run_seed, false, "", true)
+		_open(s, 9, [&"sharp_pebbles", &"gold_purse", &"gold_purse", &"gold_purse", &"gold_purse", &"gold_purse", &"gold_purse", &"gold_purse"] as Array[StringName])
+		for id: StringName in s.offers():
+			all[id] = true
 	for id: StringName in [&"twin_pebbles", &"piggy_bank", &"pip_parade"]:
 		assert_true(all.has(id), "%s is offered when the pool has it" % id)
 	var unlocked: RunSession = RunSession.start(1, "", false, data.pool({"best_run_wave": 6}), data, catalog)
@@ -591,11 +661,11 @@ func test_offers_are_pinned_for_fixed_seeds() -> void:
 		20261023: [[&"tower_firework_tower", &"spare_gate", &"sharp_pebbles"], [&"tower_bakery", &"tower_longbow_loft", &"crowded_night"], [&"tower_firework_tower", &"tower_longbow_loft", &"sharp_pebbles"], [&"tower_longbow_loft", &"tower_firework_tower", &"tower_bakery"]],
 	}
 	var every: Dictionary = {
-		0: [[&"tower_bakery", &"spare_gate", &"tower_lullaby_bell"], [&"tower_bakery", &"tower_longbow_loft", &"tower_pumpkin_catapult"], [&"tower_longbow_loft", &"twin_pebbles", &"sharp_pebbles"], [&"tower_bakery", &"piggy_bank", &"twin_pebbles"]],
-		1: [[&"tower_pumpkin_catapult", &"twin_pebbles", &"spare_gate"], [&"tower_firework_tower", &"gold_purse", &"tower_lullaby_bell"], [&"tower_bakery", &"piggy_bank", &"pip_parade"], [&"tower_bakery", &"twin_pebbles", &"tower_pumpkin_catapult"]],
-		2: [[&"tower_bakery", &"spare_gate", &"crowded_night"], [&"tower_lullaby_bell", &"sharp_pebbles", &"pip_parade"], [&"tower_lullaby_bell", &"tower_firework_tower", &"sharp_pebbles"], [&"tower_pumpkin_catapult", &"tower_bakery", &"twin_pebbles"]],
-		12345: [[&"tower_lullaby_bell", &"spare_gate", &"twin_pebbles"], [&"tower_bakery", &"crowded_night", &"sharp_pebbles"], [&"tower_firework_tower", &"piggy_bank", &"gold_purse"], [&"tower_lullaby_bell", &"tower_pumpkin_catapult", &"spare_gate"]],
-		20261023: [[&"tower_firework_tower", &"spare_gate", &"twin_pebbles"], [&"tower_bakery", &"tower_longbow_loft", &"pip_parade"], [&"tower_firework_tower", &"tower_longbow_loft", &"twin_pebbles"], [&"tower_longbow_loft", &"tower_firework_tower", &"tower_bakery"]],
+		0: [[&"tower_bakery", &"spare_gate", &"tower_lullaby_bell"], [&"tower_bakery", &"tower_longbow_loft", &"tower_pumpkin_catapult"], [&"tower_longbow_loft", &"sharp_pebbles", &"tower_lullaby_bell"], [&"tower_bakery", &"piggy_bank", &"sharp_pebbles"]],
+		1: [[&"tower_pumpkin_catapult", &"sharp_pebbles", &"pip_parade"], [&"tower_firework_tower", &"gold_purse", &"tower_lullaby_bell"], [&"tower_bakery", &"piggy_bank", &"pip_parade"], [&"tower_bakery", &"sharp_pebbles", &"tower_lullaby_bell"]],
+		2: [[&"tower_bakery", &"spare_gate", &"crowded_night"], [&"tower_lullaby_bell", &"sharp_pebbles", &"gold_purse"], [&"tower_lullaby_bell", &"tower_firework_tower", &"sharp_pebbles"], [&"tower_pumpkin_catapult", &"tower_bakery", &"sharp_pebbles"]],
+		12345: [[&"tower_lullaby_bell", &"spare_gate", &"sharp_pebbles"], [&"tower_bakery", &"crowded_night", &"sharp_pebbles"], [&"tower_firework_tower", &"piggy_bank", &"gold_purse"], [&"tower_lullaby_bell", &"tower_pumpkin_catapult", &"spare_gate"]],
+		20261023: [[&"tower_firework_tower", &"spare_gate", &"sharp_pebbles"], [&"tower_bakery", &"tower_longbow_loft", &"pip_parade"], [&"tower_firework_tower", &"tower_longbow_loft", &"sharp_pebbles"], [&"tower_longbow_loft", &"tower_firework_tower", &"tower_bakery"]],
 	}
 	var drafts: Array[int] = [1, 2, 9, 17]
 	for every_card: bool in [false, true]:

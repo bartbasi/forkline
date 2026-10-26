@@ -496,9 +496,9 @@ Every card of RULES 14.5 and 14.6 as data. `name` is the RULES name; `text` is t
 | `flock` | risk | false | `{}` | `add_group` flitter, 8, entrance 1, at_ms 2000, every_ms 400, after_last true; `reward_gold` 80 |
 | `twin_pebbles` | perk, `sling_post` | true | `best_run_wave` 6 | `tower_add` targets 1; `tower_add` damage -2 |
 | `heavy_pumpkins` | perk, `pumpkin_catapult` | true | `best_run_wave` 12 | `tower_add` damage 10; `tower_add` reload_ms 500 |
-| `frost_chime` | perk, `lullaby_bell` | true | `dailies_finished` 1 | `tower_hits_air`; `tower_add` reach -50 |
-| `volley` | perk, `longbow_loft` | true | `runs_won` 1 | `tower_add` targets 1; `tower_pct` damage 75 |
-| `long_fuse` | perk, `firework_tower` | true | `runs_won_normal` 1 | `tower_add` reach 100; `tower_add` reload_ms 500 |
+| `frost_chime` | perk, `lullaby_bell` | true | `dailies_finished` 1 | `tower_hits_air`; `tower_add` reach -25 |
+| `volley` | perk, `longbow_loft` | true | `runs_won` 1 | `tower_add` targets 1; `tower_pct` damage 85 |
+| `long_fuse` | perk, `firework_tower` | true | `runs_won_normal` 1 | `tower_add` reach 100; `tower_add` reload_ms 250 |
 | `spice_rack` | perk, `bakery` | true | `stars` 24 | `tower_add` boost_damage 2; `tower_add` boost_pct -10 |
 | `piggy_bank` | economy | true | `stars` 36 | `interest` pct 10, max 50 |
 | `bargain` | economy | true | `stars` 48 | `cost_add` build 20, upgrade -20 |
@@ -967,6 +967,7 @@ Drafts (RULES 14.4):
 - Eligible cards when a draft opens are the pool's cards, less every `once` card already picked, and:
   - a tower card only while its tower is not in the run. The run's towers are run.json `towers` plus the tower of every tower card picked;
   - a perk only while its tower is in the run;
+  - a perk with an unlock condition (RULES 14.6) only while no perk without one is eligible;
   - a gate card only while the run's gates, placed and in hand, are fewer than `max_gates` and fewer than the map's sockets;
   - economy cards always;
   - a risk card only while `battle.risk_waiting` is empty and wave 17 has not started (`battle.waves_started < 17`). So the boss wave is never changed, even when wave 17 was called early and the draft after wave 16 opens after it.

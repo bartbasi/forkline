@@ -197,9 +197,9 @@ func test_the_run_tuning_cards_are_as_set_in_g3() -> void:
 	var group: Dictionary = parade["effects"][0]
 	assert_eq([group["type"], group["enemy"], group["count"], group["entrance"], group["at_ms"], group["every_ms"], group["after_last"]], ["add_group", "pip", 16, 1, 1000, 300, false])
 	var volley: Dictionary = data.card(&"volley")
-	assert_eq(volley["text"], "Longbow Lofts hit 1 more target, but deal 25% less damage.")
+	assert_eq(volley["text"], "Longbow Lofts hit 1 more target, but deal 15% less damage.")
 	assert_eq([volley["effects"][0]["stat"], volley["effects"][0]["amount"]], ["targets", 1])
-	assert_eq([volley["effects"][1]["type"], volley["effects"][1]["stat"], volley["effects"][1]["pct"]], ["tower_pct", "damage", 75])
+	assert_eq([volley["effects"][1]["type"], volley["effects"][1]["stat"], volley["effects"][1]["pct"]], ["tower_pct", "damage", 85])
 
 
 func test_every_real_card_is_accepted_by_a_battle() -> void:

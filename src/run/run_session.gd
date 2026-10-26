@@ -396,7 +396,26 @@ func _eligible() -> Array[Dictionary]:
 				if not risk_room:
 					continue
 		out.append(card)
-	return out
+	# A perk with an unlock condition (RULES 14.6) only while no perk without one is eligible.
+	var base_perk: bool = false
+	for card: Dictionary in out:
+		if card["kind"] == &"perk" and _unlock_of(card).is_empty():
+			base_perk = true
+			break
+	if not base_perk:
+		return out
+	var kept: Array[Dictionary] = []
+	for card: Dictionary in out:
+		if card["kind"] == &"perk" and not _unlock_of(card).is_empty():
+			continue
+		kept.append(card)
+	return kept
+
+
+## A card's unlock condition: {} for a base card.
+static func _unlock_of(card: Dictionary) -> Dictionary:
+	var unlock: Dictionary = card["unlock"]
+	return unlock
 
 
 ## The eligible cards of one kind that are not offered yet, in cards.json order.

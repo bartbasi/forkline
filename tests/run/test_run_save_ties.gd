@@ -385,3 +385,48 @@ func test_real_data_saves_load_and_play_on_the_same() -> void:
 		drafts += int(cut["draft"])
 	assert_true(drafts >= 20, "%d drafts were saved and loaded" % drafts)
 	assert_true(risks > 0, "a real risk card was saved while waiting")
+
+
+## The three changed unlockable perks (G5) tie to their picks in a saved run: it loads, and a
+## save with another number for the perk's effect is refused.
+func test_a_saved_run_with_a_changed_unlockable_perk_loads_and_a_changed_number_is_refused() -> void:
+	var files: Dictionary = {}
+	var paths: Array[String] = ["runs/run.json", "cards/cards.json", "segments/index.json", "segments/packs.json"]
+	for rel: String in paths:
+		files[rel] = JsonFile.read("res://data/" + rel, 262144)["data"]
+	for id: Variant in files["segments/index.json"]["segments"]:
+		var rel: String = "segments/%s.json" % id
+		files[rel] = JsonFile.read("res://data/" + rel, 16384)["data"]
+	_data = RunData.from_data(files, catalog)
+	assert_not_null(_data)
+	if _data == null:
+		return
+	var cases: Array = [
+		[&"tower_lullaby_bell", &"frost_chime", "reach", -25.0],
+		[&"tower_longbow_loft", &"volley", "damage", 85.0],
+		[&"tower_firework_tower", &"long_fuse", "reload_ms", 250.0],
+	]
+	for item: Array in cases:
+		var tower_card: StringName = item[0]
+		var perk: StringName = item[1]
+		var pool: Array[StringName] = [tower_card, perk, &"gold_purse"]
+		var s: RunSession = RunSession.start(7, "", false, pool, _data, catalog)
+		assert_not_null(s)
+		var p: RefCounted = _player(7)
+		assert_true(_advance_until(p, s, func(x: RunSession) -> bool: return x.draft_open()))
+		assert_true(s.offers().has(tower_card), "the first draft offers the tower card")
+		assert_eq(s.pick(tower_card), Battle.DONE)
+		assert_true(_advance_until(p, s, func(x: RunSession) -> bool: return x.draft_open()))
+		assert_true(s.offers().has(perk), "%s is offered with no base perk in the pool" % perk)
+		assert_eq(s.pick(perk), Battle.DONE)
+		var pair: Array = _saved(s)
+		assert_not_null(_load(pair.duplicate(true)), "%s: the save loads" % perk)
+		var found: bool = false
+		var changed: Array = pair.duplicate(true)
+		for effect: Dictionary in (changed[1] as Dictionary)["effects"]:
+			for key: String in ["amount", "pct"]:
+				if effect.get("stat", "") == item[2] and effect.has(key) and absf(float(effect[key]) - float(item[3])) < 0.01:
+					effect[key] = float(effect[key]) + 1.0
+					found = true
+		assert_true(found, "%s keeps the new number %s in the battle" % [perk, item[3]])
+		assert_null(_load(changed), "%s: a changed number is refused" % perk)

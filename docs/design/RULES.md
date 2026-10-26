@@ -27,6 +27,8 @@ Run tuning, 2026-10-25 (task G3), after the first run and daily report. The plan
 
 Campaign tuning, 2026-10-25 (task G4), after the campaign pass of all 24 levels and every Twist (docs/balance/campaign-2026-10-25.md). The plan and its evidence are in docs/design/TUNING_CAMPAIGN.md. Changed plan: the third stars of 3-1, 3-2, 3-3 and 3-6, and the hints of 2-3, 3-4 and 4-1 (12.4), with a line on region 3 in the guide to third stars (12.5). Level 3-6's waves 5 and 9 bring fewer Pips, so the plain recipe wins on Relaxed with no gates (TUNING_CAMPAIGN.md). Changed checks: on a level whose third star bans a tower, the search for all three stars uses the other towers, the banned tower needs no lone search, and a Twist that a short search does not win gets two long ones (12.6). The third stars and hints change what Bart approved, so they are for the DM to tell Bart. No number changes, here or in data/stats/.
 
+Run tuning, 2026-10-26 (task G5), after the second run and daily report (docs/balance/runs-2026-10-26.md). The plan and its evidence are in docs/design/TUNING_RUNS.md section 9. Changed rule: an unlocked tower perk is offered only while no base tower perk can be offered (14.4, 14.6), so unlocking cards no longer makes the base perks rarer. Changed numbers: Frost Chime's ring 0.25 tiles shorter instead of 0.5, Volley's arrows 15% less damage instead of 25%, and Long Fuse 0.25 s slower instead of 0.5 s (14.6). The bars of 14.8 do not change. Both items change what Bart approved, so they are for the DM to tell Bart. data/stats/ does not change.
+
 Names follow docs/art/NAMES.md, which Bart approved at hard stop B. The tables in 5.1, 5.3 to 5.8, 6.1, 6.3 and 12.1 give each tower, tier 3 path, creature, boss and region its id from that list, so the data files have one source. In each tower's tier table, the first tier 3 row is spec 0 and the second is spec 1.
 
 This file holds every game rule and number for version 1. The sim engineer, level designer, roguelite engineer, balance analyst and UI engineer build from it. If something here is unclear or seems to conflict with docs/ARCHITECTURE.md, ask the DM. Do not guess.
@@ -1195,6 +1197,7 @@ All core rules (4 to 9) apply in runs: phases, pause, speeds, early calls, selli
 - Eligible cards:
   - A tower card only for a tower not yet in the run.
   - A tower perk only for a tower in the run.
+  - An unlocked tower perk (14.6) only while no base tower perk (14.5) is eligible. So until every tower in the run holds its base perk, perk slots offer only base perks, exactly as with no unlocks. A new tower card brings its tower's base perk into the drafts, and the unlocked perks wait again until it is taken.
   - A card marked once is gone after it is taken.
   - An extra gate only while the run has fewer than 3 gates, placed and in hand together, and fewer gates than the map has sockets.
   - At most one risk card per draft. None while another risk card is waiting. None once wave 17 has started, so the boss wave is never changed. That covers the draft after wave 17, and also the draft after wave 16 when wave 17 was called early, because that draft opens only after wave 17 has started.
@@ -1255,14 +1258,15 @@ Risk (5). Each changes the next wave only.
 - Playing unlocks new cards into the pool. Each one is a sidegrade: it changes how something works and carries a cost, so it adds variety, never raw power. Nothing is bought.
 - An unlocked card joins the pool from the next run on. A run's pool is fixed when the run starts and is saved with it.
 - The daily challenge always uses every card, unlocked or not (15).
+- The six unlocked tower perks come into a run's drafts only once every tower in the run holds its base perk (14.4). Until then a draft is the same as with no unlocks, so unlocking them never makes the base perks rarer. After that they are a second perk for a tower. The other six unlocked cards join their kinds at once.
 
 | Card | Type | Effect | Unlocked by |
 |---|---|---|---|
 | Twin Pebbles | Tower perk, Sling Post | Hits 2 targets per shot, but deals 2 less damage per hit. Once. | Reach wave 6 in a run |
 | Heavy Pumpkins | Tower perk, Pumpkin Catapult | Deals 10 more damage, but reloads 0.5 s slower. Once. | Reach wave 12 in a run |
-| Frost Chime | Tower perk, Lullaby Bell | Also slows flyers, the Moon Moth included, but its range is 0.5 tiles shorter. Once. | Finish a daily challenge, won or lost |
-| Volley | Tower perk, Longbow Loft | Hits one more target per shot, but each arrow deals 25% less damage, rounded half up. Once. | Win a run |
-| Long Fuse | Tower perk, Firework Tower | Reaches 1 tile further, but reloads 0.5 s slower. Once. | Win a run on Normal |
+| Frost Chime | Tower perk, Lullaby Bell | Also slows flyers, the Moon Moth included, but its range is 0.25 tiles shorter. Once. | Finish a daily challenge, won or lost |
+| Volley | Tower perk, Longbow Loft | Hits one more target per shot, but each arrow deals 15% less damage, rounded half up. Once. | Win a run |
+| Long Fuse | Tower perk, Firework Tower | Reaches 1 tile further, but reloads 0.25 s slower. Once. | Win a run on Normal |
 | Spice Rack | Tower perk, Bakery | Also adds 2 damage per hit to the towers it reaches, but its speed boost is 10 points smaller. 25% becomes 15%. Once. | Earn 24 stars |
 | Piggy Bank | Economy | When each build phase begins, after the clear bonus is paid, gain 10% of the gold you hold, rounded down, up to 50. Once. | Earn 36 stars |
 | Bargain | Economy | New towers cost 20 more. Upgrades cost 20 less. Once. | Earn 48 stars |

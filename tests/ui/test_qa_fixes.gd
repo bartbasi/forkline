@@ -73,6 +73,7 @@ func test_info_holds_runs_cards_and_the_daily() -> void:
 	assert_true(text.contains("Risk cards change the next wave and pay a reward."))
 	assert_true(text.contains("at most one risk card"))
 	assert_true(text.contains("the boss wave is never changed"))
+	assert_true(text.contains("A tower perk you unlocked is offered only once every tower in your run has its basic perk."))
 	assert_true(text.contains("always Normal and uses every card"))
 	assert_true(text.contains("the day's best"))
 	assert_true(text.contains("Your streak counts days in a row"))
@@ -87,7 +88,7 @@ func test_info_leaves_the_run_rules_out_until_runs_are_built() -> void:
 func test_info_new_sections_keep_the_plain_style_and_name_nothing() -> void:
 	var info: InfoScreen = _keep(InfoScreen.new({"runs_built": true})) as InfoScreen
 	var all: String = _all(info).to_lower()
-	for word: String in ["sling", "pumpkin", "lullaby", "longbow", "firework", "bakery", "scamp", "pip", "skitter", "flitter", "grumblesack", "ironshell", "old tusk", "moon moth", "crowded night", "gold purse"]:
+	for word: String in ["sling", "pebbles", "pumpkin", "lullaby", "longbow", "firework", "bakery", "scamp", "pip", "skitter", "flitter", "grumblesack", "ironshell", "old tusk", "moon moth", "crowded night", "gold purse"]:
 		assert_false(all.contains(word), "Info must not name %s" % word)
 	for text: String in _texts(info):
 		assert_false(text.contains("—") or text.contains("–") or text.contains("--"), text)

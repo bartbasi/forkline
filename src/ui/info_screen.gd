@@ -131,7 +131,7 @@ func _run_sections() -> Array[Dictionary]:
 		{"title": "Cards", "text": [
 			"Cards come in five kinds. Tower cards add a tower to your run. Tower perks change a tower you already have. Extra gate cards give you a gate, up to 3. Economy cards help with gold and lives. Risk cards change the next wave and pay a reward.",
 			"A risk card changes only the next wave that starts. Its gold is paid with that wave's clear bonus, and nothing is paid if the run ends before then. A draft has at most one risk card, and none while another waits. None come once wave 17 has started, so the boss wave is never changed.",
-			"Playing unlocks new cards for later runs. Each one is a sidegrade: it changes how something works and carries a cost."]},
+			"Playing unlocks new cards for later runs. Each one is a sidegrade: it changes how something works and carries a cost. A tower perk you unlocked is offered only once every tower in your run has its basic perk."]},
 		{"title": "The daily", "text": [
 			"The daily is built like a run, but it comes from the phone's date. Everyone with the same version of the game gets the same run on the same date, with no network. It is always Normal and uses every card.",
 			"You can try as often as you like. Each finished try is compared with the day's best. A win beats a loss. Between wins, more lives left is better. Between losses, more waves cleared is better. A tie keeps the earlier result.",

@@ -2,6 +2,8 @@
 
 Owner: game designer. 2026-10-25 (task G3). Answers the first run and daily report, docs/balance/runs-2026-10-24.md (B2, commit da1fc38). RULES.md holds the rules and numbers; this file says what changes for runs and the daily, why, and exactly what each owner types in. Section 7 lists what changes Bart's approvals.
 
+Section 9 (task G5, 2026-10-26) answers the second report, docs/balance/runs-2026-10-26.md (B4). Its 9.3 lists what changes Bart's approvals, and it ends with the changes per owner.
+
 ## 1. Decisions
 
 ### 1.1 The final boss must be beaten
@@ -226,6 +228,19 @@ oG.o.Go           oG.o.oG
 4. **Whole runs on the final data,** base cards, seeds 1 to 50 (800 plays): the 16 strategies won 50.6%, within the 35% to 55% bar, and lost 2.1% by wave 6 (section 4: 47.4% and 3.2%, on 200 seeds). `towers_tall` won 78.0% of its 50 runs, over the 55% to 75% bar. Section 4 measured it at 68.5% on 200 seeds, and on 50 runs one strategy's rate has a standard error of about 6 points, so B4 checks it on 200 seeds (3.5).
 5. **Run maps need no hint row.** The campaign's 12 and 13 row maps keep a row free for the first hint (contract 7.4, tests/levels). Of the 42 run stacks, one has none: `top_pair, mid_eye, bot_porch`. Runs show no hint (contract 3.4, step 5), so the DM decided run maps need none.
 
+**Later: L8 (commit 496cd46, 2026-10-26) moved `mid_merge`'s spots again.** B4 found two walls on its `bot_porch` stacks (`top_fork` 19.7% and `top_twin` 11.9% lost by wave 6, forced). L8 keeps the road, both sockets, the ports and the spot at the right end of the ring's inside, and moves the other three spots: to the top row's left edge, next to that spot inside the ring, and to the bottom row. This is the `mid_merge` the game uses now:
+
+```
+mid_merge (L5)    mid_merge (L8)
+.#.o.#.           o#...#.
+.######           .######
+oG.o.oG           .G..ooG
+.######           .######
+...#...           ...#.o.
+```
+
+L8's numbers, as the DM reported them: every `mid_merge` stack, forced onto seeds 1 to 200, loses 2.6% or less by wave 6. On Normal with the base cards the 16 together win 52.6% (B4: 50.4%), `towers_tall` wins 151 of 200 (75.5%, ceiling 75%), and `mid_eye` is 0.748 times all runs (bar 0.75). G5 decides that both are within noise (9.1).
+
 ### 3.5 Balance analyst (B4)
 
 - Build a Bakery only from wave 9 on (my what-ifs: `FL_BAKERY_WAIT=9`, section 6). Today the bots build every new tower type at once, which turns a Bakery drawn in the first drafts into a wasted spot.
@@ -435,3 +450,156 @@ Nothing in the campaign changes.
 2. Bart: run length (7.6). Decided on 2026-10-25: Bart chose the second, now in RULES 14.1.
 3. Three bars are not met yet (section 4): every card unlocked (about 10 points, mostly the bots' blind perk picks; B4 and G5), one map stack, and three band 4 packs (both for L5, with B4 confirming; L5's results: 3.4a). Sharp Pebbles is within one standard error of its bar; B4's larger card experiment decides.
 4. The DM, on the Fold5 run check (contract 13): how long a real run takes, with drafts. That settles 1.8 better than any count.
+
+## 9. G5: the second run tuning (2026-10-26)
+
+Task G5 answers the second run and daily report, docs/balance/runs-2026-10-26.md (B4, commit e9b8e11). B4 met every bar of RULES 14.8 and 15 but three. This section settles two of them: every card unlocked, and Deep Lullaby. The third, two map walls on `mid_merge`, was the level designer's. L8 has fixed it (3.4a), and item 3 of 9.1 answers the two checks that L8 moved. Nothing here changes a map, a pack or a base card.
+
+### 9.1 Decisions
+
+#### 1. Every card unlocked: unlocked tower perks wait for the base perks, and three of them cost less
+
+B4 measured the 16 strategies with every card unlocked at 13.3 points below the base cards on Normal (37.1% against 50.4%; the bar is 5 points either way). Its F5 traced the gap to the six unlocked tower perks, and found that bots that never take one still lose 8.0 points: with every card a draft holds 12 tower perks instead of 6, so each base perk comes up about half as often.
+
+I played 12 candidates on seeds 1 to 100, and the main ones again with L8's `mid_merge` (9.2). The numbers below are L8's. What they show:
+
+- **Numbers alone cannot reach the bar.** The analyst's three softer sidegrades (option a) gain 4.6 points, to -8.4. Making all six nearly free still leaves -4.8, on the bar's edge, with cards that no longer cost anything (RULES 14.6). Stronger sidegrades also break another bar: at 10% less damage Volley measured +6.0 in the card experiment with every card, and Twin Pebbles at 1 less damage +5.7, over the +5 of "No card decides a run".
+- **With fair numbers, what is left is dilution.** With softer Frost Chime, Volley and Long Fuse (candidate E) the gap is still -10.2. The bots took 2.4 base perks a run instead of 3.8. Setting right two of the bots' fit pairs (9.4) gained only 0.6. A careful player feels the same thing: Sharp Pebbles comes up half as often.
+- **Moving the bar would mean accepting that.** A bar that fair cards meet would have to allow about 12 points below, nearly all of what B4 found. Unlocks are a reward for playing. They must never make runs easier (brief 3.7), and they should not make them harder either. So I did not choose option c.
+- **A draft rule that removes the dilution meets the bar.** Rule 1, "a tower's unlocked perk only once the run holds that tower's base perk", reads more easily but removes only half of it, because an unlocked perk still competes with the other towers' base perks: -8.1. Rule 2, "unlocked tower perks only while no base tower perk can be offered", keeps every draft the same as with no unlocks until every tower in the run holds its base perk. Then the unlocked perks come in as a second perk for a tower. Alone it measured -4.2. With E's numbers: **-2.9 on Normal and -1.1 on Relaxed**, from -13.0 and -4.7 on the same seeds.
+
+So the decision is option b, Rule 2, with three fairer sidegrades. Rule 2 changes the draft rule of RULES 14.4, which Bart approved (9.3).
+
+What Rule 2 costs: an unlocked tower perk is offered 1.4 times a run instead of 7.2, mostly in the last third of a run, and a new tower card hides the unlocked perks again until its base perk is taken. Unlocks still add variety. The six other unlockable cards (Piggy Bank, Bargain, Iron Gate and three risk cards) join their kinds at once, as now. And the perks come when a run has little else to choose: B4 found that from wave 16 every play had nothing left to buy (F1), so a late card that gives gold does nothing.
+
+The three cards. Each still has a real cost, also when taken after its base perk:
+
+| Card | Now | New | Why |
+|---|---|---|---|
+| Frost Chime | Bells reach 0.5 tiles less | 0.25 tiles less | A ring 0.5 tiles shorter took 44% of a tier 1 Bell's area and 36% of a tier 2 one's. It was the worst pick with every card: -4.8 in B4's card experiment, below zero on both halves of the seeds. At 0.25 tiles it takes 23% and 19%. |
+| Volley | arrows deal 25% less damage | 15% less | At 25% less a Triple Bow's 4 arrows (4 x 53 = 212 damage) did no more against a crowd than its own 3 (210), and every single target, the boss too, took a quarter less. It was -3.0 in the card experiment, and it cost 3.5 points when added to the pool (F5). At 15% less: 4 x 60 = 240, and a single target takes 15% less. At 10% less it measured +6.0. |
+| Long Fuse | reloads 0.5 s slower | 0.25 s slower | At 0.5 s a tier 1 or 2 Firework Tower fired a third less often for a third more reach. At 0.25 s it fires a fifth less often. It cost 1.4 points when added to the pool (F5). |
+
+Twin Pebbles stays at 2 less damage. Its card is already a good pick (+2.4 with every card), and at 1 less it measured +5.7. What it cost in F5 (2.6 points when added to the pool) was dilution of Sharp Pebbles, which Rule 2 removes.
+
+#### 2. Deep Lullaby: no change
+
+B4 measured it at +5.8 points with every card (bar +5), on 162 offers with a standard error of 1.9. By seed it is +7.8 on seeds 1 to 100 and +3.9 on 101 to 200, and with the base cards +1.9 on 369 offers. Steady Aim swung the other way (+2.1 and +8.4). That is noise, as the analyst says. Part of it was also the weak cards it was offered with: a card's gain is counted against the other cards in its draft, and Frost Chime, the other Bell perk, was the worst pick. With Rule 2 and the new numbers it measured +0.2 on seeds 1 to 100, with a standard error of 1.3 on 185 offers (9.2). Weakening it would change a base card, and with it every base bar. If B5's experiment on 200 seeds still puts it above +5, it becomes +5 slow (35% becomes 40%) in the next tuning, and the base bars are measured again.
+
+#### 3. After L8: `towers_tall` at 75.5% and `mid_eye` at 0.748 need no change
+
+L8's `mid_merge` (3.4a) removed both walls. With it, two base-card checks sit a hair past their bars (RULES 14.8), on L8's measurement over seeds 1 to 200:
+
+- `towers_tall` wins 151 of 200 runs: 75.5% against the 75% ceiling. That is one run over the line, and one strategy's rate over 200 runs has a standard error of 3.1 points; B4's four chunks of 50 seeds ran from 70% to 78%. It rose by two runs because two walls are gone, not because the strategy got stronger: the 16 together rose too, from 50.4% to 52.6%, inside 35% to 55%. Taking back one win in 200 would mean making Normal harder for every strategy, to answer noise. On seeds 1 to 100 it is 75.0% (9.2).
+- `mid_eye` is 0.748 times all runs against the 0.75 bar. Its own runs did not change: no `mid_eye` map uses `mid_merge`, and they still win 39.4% of their plays. The ratio fell only because all runs rose. One segment's ratio on about 30 seeds has a standard error of about 0.1 times (B4 F3), and its stacks lose 3.7% or less by wave 6, so it is no wall.
+
+Both are within noise, and neither needs a change. G5 changes no base card, so B5 will measure the same two numbers on the same seeds. B5 reports them as at the bar, with their standard errors. If a later data change moves either one further out, its owner looks again: the level designer for `mid_eye`, and I for `towers_tall`. The check that would show a real weakness in `mid_eye` is B4's suggestion 7, its eight stacks forced through whole runs.
+
+### 9.2 Measured candidates
+
+Every card unlocked, the 16 named strategies, run seeds 1 to 100 (1,600 plays a row), B4's bots (Bakery from wave 9, perks that fit, no boss aim). The gap is the row's win rate less the base cards' on the same seeds and strategies. Its standard error counts each seed as one sample. The bar is 5 points either way. Two maps: L5's `mid_merge`, which B4 measured (base cards 48.4% on Normal, 94.9% on Relaxed), and L8's (50.1% and 95.3%), which changes only the 18 of these seeds whose map uses `mid_merge` (9.4). "Offered, taken" is how often a run is offered, and takes, one of the six unlocked tower perks.
+
+| Candidate | What changes | Normal, L5 map | Normal, L8 map | Relaxed, L5 map | Relaxed, L8 map | Offered, taken |
+|---|---|---|---|---|---|---|
+| Today | nothing | -12.4 (1.5) | -13.0 (1.5) | -4.8 (0.9) | -4.7 (0.9) | 7.2, 1.3 |
+| a, the analyst's | Volley 15% less, Twin Pebbles 1 less, Long Fuse 0.25 s | -8.0 (1.4) | -8.4 (1.5) | | | 7.2, 1.3 |
+| B | a, but Volley 10% less; Frost Chime 0.25 tiles | -6.6 (1.3) | | -1.8 (0.8) | | 7.2, 1.3 |
+| B' | a with Frost Chime 0.25 tiles | -6.9 (1.3) | | | | 7.2, 1.3 |
+| E | B' with Twin Pebbles as it is | -9.8 (1.4) | -10.2 (1.5) | | | 7.2, 1.3 |
+| C, the bound | all six nearly free: Volley 5% less, Twin Pebbles 1 less, Long Fuse 0.1 s, Frost Chime 0.25 tiles, Heavy Pumpkins 0.25 s, Spice Rack 5 points | -4.9 (1.3) | -4.8 (1.4) | | | 7.2, 1.3 |
+| Rule 1 | today's numbers | -8.4 (1.3) | -8.1 (1.3) | | | 3.7, 0.9 |
+| Rule 1 with a | | -5.7 (1.2) | | | | 3.7, 0.9 |
+| Rule 1 with B | | -4.6 (1.2) | | | | 3.7, 0.9 |
+| Rule 2 | today's numbers | -4.1 (1.2) | -4.2 (1.2) | | | 1.4, 0.5 |
+| Rule 2 with a | | -2.6 (1.1) | | | | 1.4, 0.5 |
+| **Rule 2 with E: chosen** | | **-2.9 (1.2)** | **-2.9 (1.2)** | **-1.1 (0.8)** | **-1.1 (0.7)** | **1.4, 0.5** |
+| B, two fit pairs set right | the bots pass Twin Pebbles on Quickshots and Long Fuse on Star Blooms; seeds 1 to 50 | +0.6 (1.2) against B | | | | |
+
+Gaps in points, standard errors in brackets.
+
+- **Base cards unchanged.** No candidate changes a base card, and both rules touch only unlocked perks, so a pool with no unlocks plays exactly as today. I checked it for the chosen candidate: its copy, with the rule and the new cards, played the base cards on seeds 1 to 50 (L5's map) and gave B4's 800 rows field for field.
+- **The chosen candidate's Normal runs on the L8 map,** against today's every card and the base cards: won 47.2% (37.1%, 50.1%), lost by wave 6 3.0% (3.5%, 1.6%), lost in waves 7 to 17 18.6% (22.9%, 16.0%), lost at the boss 31.2% (36.5%, 32.3%). Of the runs that start wave 18: Grumblesack 64% won, Ironshell 56%, Moon Moth 64%, Old Tusk 55%. Its best strategy is `towers_tall` at 74.0%. The bots take 3.7 base perks a run (3.8 with no unlocks, 2.4 today).
+- **The card experiment with every card,** the chosen candidate, seeds 1 to 100, L8 map (1,541 drafts): no base perk, gate, economy or risk card is above +5. The highest are Iron Gate +3.2 and Crasher Escort +1.8. Deep Lullaby is +0.2 (standard error 1.3, 185 offers), Steady Aim +0.0 and Sharp Pebbles -0.5. The Longbow Loft card is +8.0 (a tower card, reported). The six unlocked perks are offered only 11 to 34 times each, too few to judge: Long Fuse +9.1 (standard error 6.5, 11 offers) and Volley +5.6 (6.2, 18 offers) sit within one standard error of the bar. Offered all run, without the rule (candidate E, seeds 1 to 50), they measured +3.6 and +4.2 on 46 and 48 offers. For comparison, on the same seeds B4 had Deep Lullaby at +7.8, Volley -2.2 and Frost Chime -3.9, and candidate B had Volley at +6.0 and Twin Pebbles +5.7.
+
+### 9.3 For Bart
+
+These change what Bart approved, so they are for the DM to tell him:
+
+1. **Unlocked tower perks wait for the basic perks (RULES 14.4).** In a run, the six unlockable tower perks (Twin Pebbles, Heavy Pumpkins, Frost Chime, Volley, Long Fuse, Spice Rack) are offered only once every tower in the run has its basic perk (Sharp Pebbles, Wide Splash and so on). Until then a draft is the same as with no unlocks. Why: with every card unlocked, each basic perk came up half as often, so unlocking cards made runs harder: the bots won 13 points less with every card than with none. With this rule and item 2 they win about 3 points less on Normal and 1 on Relaxed, inside the bar of 5. The cost: unlocked perks show up about a fifth as often as now, mostly late in a run, as a second perk for a tower.
+2. **Three unlockable cards cost less (RULES 14.6).** Frost Chime's Bells reach 0.25 tiles less (was 0.5). Volley's arrows deal 15% less damage (was 25%). Long Fuse reloads 0.25 s slower (was 0.5 s). Frost Chime and Volley were traps: taking them did worse than the other cards on offer. Each still has a real cost, and their card texts change to match.
+3. Not chosen: keep the draft as it is and let the bots' bar allow about 12 points less with every card. Unlocked perks would show up as often as now, and runs would get harder as cards unlock.
+4. After the level designer's fix of two map walls, two bot checks sit a hair past their bars: the best strategy wins 75.5% (ceiling 75%), and one map segment is 0.748 times all runs (bar 0.75). Both are within noise, so nothing changes (9.1, item 3).
+
+### 9.4 How to repeat
+
+Every row was played in scratch copies of 53d6ad7 (`git archive`, the working tree's tools/balance/ copied over, then `godot --headless --path . --import`), at most 3 jobs at once. For runs, 53d6ad7 plays exactly as B4's e9b8e11: every card on seeds 1 to 50 gave B4's 800 rows field for field. Since then only L8 (496cd46) changed run data, and the L8 rows below use its committed `mid_merge`. So B4's raw files (docs/balance/raw/2026-10-25-b4/: `rates_base_r0`, `rates_all_r0`, `rates_base_r1` and `rates_all_r1`, seeds 1 to 100) are the L5 map's baselines. A candidate is a copy whose data/cards/cards.json carries the numbers of 9.2. Each row is two jobs, for example:
+
+```
+godot --headless --path . --script res://tools/balance/runs.gd -- mode=rates first=1 count=50 pool=all relaxed=0 out=OUT_1.json
+godot --headless --path . --script res://tools/balance/runs.gd -- mode=rates first=51 count=50 pool=all relaxed=0 out=OUT_51.json
+```
+
+with `relaxed=1` for Relaxed, `pool=base` for the base check, and `mode=cardvalue first=1 count=50 pool=all` (and `first=51`) for the card experiment.
+
+- **The rules** were a few lines in the copy's src/run/run_session.gd, `_eligible()`. Rule 1 skips a perk that has an unlock condition unless the picks hold a perk of the same tower with none. Rule 2 builds the list as today, then, if the list holds a perk with no unlock condition, drops every perk that has one.
+- **The fit what-if** changed two pairs in the copy's tools/balance/run_bot.gd `UNFIT`: `twin_pebbles` to `quickshot`, and `long_fuse` to `star_bloom`. G3 3.5 had them backwards: Twin Pebbles' flat cost falls hardest on small hits, so it suits Stone Slings, and Long Fuse's extra reload costs a Star Bloom (1.0 s) more than a Skyrocket (1.5 s).
+- **The L8 map.** A seed's map comes from its seed alone, so L8's `mid_merge` changes only the seeds whose map uses it: 4, 10, 26, 28, 39, 41, 44, 45, 51, 52, 74, 79, 80, 83, 84, 86, 89 and 100 of 1 to 100. I played those seeds again in copies with L8's data/segments/mid_merge.json (`first=4 count=1` and so on) and put their rows in place of the old ones. A one-seed job gives exactly the rows of a full job: seed 4's 16 rows matched B4's.
+
+Nothing in the repo changed to play any of this. The copies, hooks, job list and result files stay in the session's scratch folder under `g5/`.
+
+### 9.5 Open questions
+
+1. The DM: a saved run or daily that has already taken Frost Chime, Volley or Long Fuse will not load after this change. RunSession.from_data ties the battle's card effects to the picks' effects in the current cards.json (contract 5.6), and the App deletes a saved game that fails a check at launch. G3's card changes did the same. Before release that costs a tester one run. After release every card number change would cost players their saved run, so the DM may want a rule for it before then.
+
+### 9.6 Changes per owner
+
+#### Roguelite engineer
+
+data/cards/cards.json, three cards. Every other card is unchanged.
+
+| id | Field | Now | New |
+|---|---|---|---|
+| `frost_chime` | effects | `tower_add` reach, `amount` -50 | `tower_add` reach, `amount` -25 (`tower_hits_air` unchanged) |
+| `frost_chime` | text | Lullaby Bells also slow flyers, but reach 0.5 tiles less. | Lullaby Bells also slow flyers, but reach 0.25 tiles less. |
+| `volley` | effects | `tower_pct` damage, `pct` 75 | `tower_pct` damage, `pct` 85 (`tower_add` targets 1 unchanged) |
+| `volley` | text | Longbow Lofts hit 1 more target, but deal 25% less damage. | Longbow Lofts hit 1 more target, but deal 15% less damage. |
+| `long_fuse` | effects | `tower_add` reload_ms, `amount` 500 | `tower_add` reload_ms, `amount` 250 (`tower_add` reach 100 unchanged) |
+| `long_fuse` | text | Firework Towers reach 1 tile further, but reload 0.5 s slower. | Firework Towers reach 1 tile further, but reload 0.25 s slower. |
+
+src/run/run_session.gd, `_eligible()`, once the contract has the rule: build the list as today; then, if it holds a perk whose `unlock` is empty, drop every perk whose `unlock` is not empty. The rule reads only the pool, the picks and the run's towers, so offers stay a function of the saved state, and a restored run shows the same offers.
+
+tests/run:
+- test_real_data.gd pins Volley (lines 199 to 202): its text and `pct` 75 become the new text and 85.
+- test_run_session.gd, `test_offers_are_pinned_for_fixed_seeds`, pins the every-card drafts of five seeds. Several offer Twin Pebbles before Sharp Pebbles is taken, so those pins change under the rule; work them out again. The base-card pins stay.
+- New tests: with every card and only the Sling Post, no unlocked perk is offered until Sharp Pebbles is taken, and Twin Pebbles can be offered after it. A new tower card hides the unlocked perks again until its base perk is taken. A pool with no unlocked cards gives the same offers as today. A pool that lacks a tower's base perk still offers that tower's unlocked perk once no base perk is eligible.
+
+#### Architect, through the DM
+
+- 3.4, drafts, eligible cards, one more line: "a perk with an unlock condition (RULES 14.6) only while no perk without one is eligible".
+- 2.11's card table, text only: `frost_chime` `tower_add` reach -25; `volley` `tower_pct` damage 85; `long_fuse` `tower_add` reload_ms 250.
+
+#### UI engineer
+
+src/ui/info_screen.gd, "Cards" section. After "Playing unlocks new cards for later runs. Each one is a sidegrade: it changes how something works and carries a cost." add: "A tower perk you unlocked is offered only once every tower in your run has its basic perk." (The DM dropped the example: Info names no tower or card, and two UI tests guard that.) Card texts come from cards.json, so nothing else changes on screen.
+
+#### Game designer (done in this step)
+
+RULES 14.4 (the rule), 14.6 (three rows, and a line on when unlocked perks come), and the change note at the top. The bars of 14.8 do not change. TUNING_RUNS 3.4a now shows L8's `mid_merge`, and this section.
+
+#### Balance analyst (B5)
+
+No bot or bar changes. On the committed data, with the seeds and days of RULES 14.8 and 15:
+
+1. Every card unlocked, Normal and Relaxed (bar 5 points either way). Mine on seeds 1 to 100 with L8's map: -2.9 and -1.1.
+2. The card experiment, base cards and every card: no perk, gate, economy or risk card above +5, Deep Lullaby and the three changed cards especially. Under Rule 2 the six unlocked perks are offered about 1.4 times a run, so each rests on few offers (11 to 34 on my 100 seeds). Give their offers and standard errors next to their gains, and read a gain within one standard error of +5 as noise.
+3. The base cards. G5 changes none, so the base bars are L8's. Report `towers_tall` (75.5%) and `mid_eye` (0.748) as at the bar, with their standard errors (9.1, item 3).
+4. The daily over the same 400 days (it uses every card), against RULES 15.
+5. Same seed, same run, with a wave save and with a draft open (`mode=det`): a draft's offers now depend on which base perks were picked.
+6. The risk replay. It uses every card, so its towers change a little.
+7. With L8's `mid_merge`: the forced stacks (phase C) and the fair maps. Useful, not required: B4's suggestion 7, `mid_eye`'s eight stacks forced through whole runs.
+
+#### Nobody else
+
+- Sim engineer: nothing. tests/sim/test_battle_effects.gd builds its own Twin Pebbles and Frost Chime effects (-2 damage, -50 reach) to test the sim and does not read cards.json, so it still passes.
+- Level designer: nothing here. L8 stays as it is (9.1, item 3).
+- data/stats/: no change. Nothing in the campaign changes.
