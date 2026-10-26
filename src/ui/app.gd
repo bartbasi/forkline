@@ -657,7 +657,9 @@ func _begin(saved: SavedGame, resumed: bool) -> void:
 		probe = PerfProbe.new()
 		add_child(probe)
 	var screen: BattleScreen = BattleScreen.new()
-	screen.host = self
+	screen.info_requested.connect(open_info)
+	screen.settings_requested.connect(open_settings)
+	screen.modal_requested.connect(open_modal)
 	screen.probe = probe
 	screen.save_requested.connect(save_active)
 	screen.progress_changed.connect(save_progress)

@@ -364,6 +364,38 @@ func test_the_sound_setting_is_saved_and_applied() -> void:
 	Fx.audio().set_enabled(true)
 
 
+# The battle screen reaches the App only through signals.
+
+func test_pause_goes_to_the_app_as_a_modal() -> void:
+	var made: App = _app()
+	var screen: BattleScreen = _start(made)
+	assert_eq(made.modal_count(), 0)
+	screen.pause()
+	assert_true(screen.pause_menu_open())
+	assert_eq(made.modal_count(), 1, "modal_requested put Pause in the App's layer")
+	assert_true(made.top_modal() is PausePanel)
+	assert_eq(screen._modals.size(), 0, "and the screen kept none of its own")
+
+
+func test_pause_info_opens_the_info_screen() -> void:
+	var made: App = _app()
+	var screen: BattleScreen = _start(made)
+	screen.pause()
+	var before: int = made.screen_count()
+	(made.top_modal() as PausePanel).info_requested.emit()
+	assert_eq(made.screen_count(), before + 1, "info_requested pushed a screen")
+	assert_true(made.current_screen() is InfoScreen)
+
+
+func test_pause_settings_opens_the_settings_panel() -> void:
+	var made: App = _app()
+	var screen: BattleScreen = _start(made)
+	screen.pause()
+	(made.top_modal() as PausePanel).settings_requested.emit()
+	assert_eq(made.modal_count(), 2, "settings_requested opened a second modal")
+	assert_true(made.top_modal() is SettingsPanel)
+
+
 # Save triggers.
 
 func test_a_finished_wave_saves_the_next_build_phase() -> void:

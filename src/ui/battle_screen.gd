@@ -38,6 +38,13 @@ signal progress_changed()
 signal ended(result: Dictionary)
 ## "Back to menu" in Pause. The game stays saved.
 signal left()
+## Pause asked for the Info screen. The App opens it.
+signal info_requested()
+## Pause asked for Settings. The App opens it.
+signal settings_requested()
+## A modal to show above everything. With nothing connected (a lone screen in a test), the
+## screen keeps the modal itself.
+signal modal_requested(modal: Modal)
 
 const NO_CELL: Vector2i = Vector2i(-1, -1)
 const SIDE_WIDTH: float = 760.0
@@ -59,8 +66,6 @@ const FIT_FRAMES: int = 3
 var battle: Battle = null
 var audio: AudioService = null
 var progress: Progress = null
-## The App, which owns the modals. Null in a lone screen (tests), which then keeps its own.
-var host: App = null
 ## Debug builds only: times every tick.
 var probe: PerfProbe = null
 var clock: BattleClock = BattleClock.new()
@@ -351,13 +356,11 @@ func _on_pause_closed() -> void:
 
 
 func _open_info() -> void:
-	if host != null:
-		host.open_info()
+	info_requested.emit()
 
 
 func _open_settings() -> void:
-	if host != null:
-		host.open_settings()
+	settings_requested.emit()
 
 
 func _on_leave() -> void:
@@ -388,8 +391,8 @@ func card_open() -> bool:
 # Modals.
 
 func _open_modal(modal: Modal) -> void:
-	if host != null:
-		host.open_modal(modal)
+	if not modal_requested.get_connections().is_empty():
+		modal_requested.emit(modal)
 		return
 	_modals.append(modal)
 	add_child(modal)
