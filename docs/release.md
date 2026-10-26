@@ -69,3 +69,44 @@ bash scripts/check_apk.sh --release path/to/forkline-release.apk
 ## Wording for the privacy policy and store listing (phase 9)
 
 The export sets `allowBackup` to false, so there is no cloud or adb backup of saves. Android's documentation says some manufacturers' devices can still move app files in a device to device transfer on API 31 and higher. So write that the app never sends saves anywhere. Do not write that saves can never leave the phone.
+
+## Store material (phase 9)
+
+Everything for the Play listing is in `docs/store/`. Nothing has been entered in Play Console. The listing and the privacy policy are drafts for Bart to review.
+
+| File | What it is |
+|---|---|
+| docs/store/listing.md | Every field to paste into Play Console, with limits and counts |
+| docs/store/privacy-policy.md | The privacy policy |
+| docs/store/graphics/ | The icon (512 x 512), feature graphic (1024 x 500) and five phone screenshots (1080 x 2160) |
+
+### Make the graphics
+
+Both tools need a rendering display, so run them without `--headless`, from the repo root. Each opens a window for a short time.
+
+```bash
+godot --path . --script res://tools/store/make_graphics.gd       # icon and feature graphic, a few seconds
+godot --path . --script res://tools/store/make_screenshots.gd    # five real screens, about a minute
+```
+
+`make_graphics.gd` draws the icon with `IconArt` and the feature graphic with `Wordmark`, `MapArt`, `Silhouettes` and the palette. `make_screenshots.gd` runs the real app in a SubViewport at 1080 x 2160 with the bundled data, a throwaway save folder (`user://store_shots/`, removed afterwards) and the sound off. It plays three waves of The Fork out of sight and tops up the gold, so the pictures show a full defense. Add `-- --only=wave` (or `front_door`, `modes`, `levels`, `build`) for one picture. Rerun after any change to the look, then run the check.
+
+### Check the store material
+
+```bash
+bash tools/store/check_store.sh
+```
+
+It checks the character counts in listing.md (the stated count must match the real one, and stay under Google's limit), plain ASCII only (no em dashes or curly quotes), no double hyphens in prose, the required wording in the listing and the policy, and the size of every PNG. Exit 0 means it all passed. When you change a text field, change its `Characters: N of L.` line to match.
+
+### Screenshots from the Fold5
+
+The tool's pictures are enough for the phone slots. If Play Console asks for large screen screenshots, take them on the Fold5's inner screen:
+
+1. Install the build (`bash scripts/install.sh`), unfold the phone, and open Forkline.
+2. Capture these four screens with the phone's own screenshot (power and volume down): the front door, the campaign list, a level in its build phase with a gate placed, and a wave in progress.
+3. Copy them off with `adb pull` and put them in docs/store/graphics/. Play wants JPEG or 24 bit PNG, each side from 320 to 3840 px, and no side more than twice the other.
+
+### What is still missing for a Play submission
+
+See the end of the phase 9 report. In short: a release key and a signed upload, a bundle (AAB) export, the privacy policy on a public address, Play Console itself, and a few decisions of Bart's. All of these are ask first.
