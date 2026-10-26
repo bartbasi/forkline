@@ -56,6 +56,33 @@ leaves, and a Twist's fixed gates are already placed. Twists have no stars, so t
 asks for a win, then lives. The bots read the level's own Twist, so a Twist that the sim refuses
 stops the run with exit code 2.
 
+**Added for the 2026-10-25 campaign pass.**
+
+- `mode=need`: no plays. Works out the flyer cost and the walker cost of a level (count times lives, bosses included) and
+  which lone attackers RULES 12.6 says need a search. A tower that cannot hit flyers needs none when the flyers cost 6 lives
+  or more; the Firework Tower needs none when the walkers do.
+- `stop_dry=N` on a search: stop when N builds are tried and none has won (RULES 12.6: 2500 of the 6000). The result says
+  `stopped_dry`. `run_pass_post.sh` plays a dry search in full when its partner won something.
+- `mode=replay from=FILE,FILE pick=best_win|three_star_best|top|all`: plays strategies saved in search results again, on the level
+  as it is now. It takes every what-if the other modes take (`level_file=`, `towers=`, `enemies=`, `stat=`, `tweak=`,
+  `twist=1`, `relaxed=1`) and `max_tier=N` (no tower above tier N). `from=plain` plays the plain recipe at every gate
+  placement. Each row has the saved result next to the new one, lives lost by creature type (`leaks`, and `leaks_wave` by the
+  wave the creature came from), kills, and for every flying boss its health a quarter, a half and three quarters of the
+  way along its line and how it ended. A cheap first screen for any what-if: no search is needed.
+- `mode=plain max_tier=N`: the plain recipe with no tower above tier N.
+- `Bot.play(..., watch)`: a play that records events. It only reads, so a watched play gives the same result as an unwatched one.
+- `run_special.sh` parts: 1 (every level watched, random play under every Twist, tier caps on 3-4 and 3-5), 2 (the saved
+  champions of 3-4 to 3-6 watched), 3 (any-tower searches with the banned tower left out, for 3-4 and 4-2: the plain any-tower
+  search misses builds that avoid a tower), 4 (longer Twist searches), 5 (the 3-4 champions at tiers 3, 2 and 1).
+  `run_whatif_b3.sh` plays star 3 what-ifs on the failing levels (2500 build screens), and with `CHECKS=1` the 6000 build checks
+  of the rules a report recommends. A 2500 build screen can miss (3-2 "at most 5 towers" in the 2026-10-25 report).
+  Do not overwrite a script while a copy of it is running: bash reads it as it goes.
+- `run_pass.sh` now follows RULES 12.6 as revised by G2 (two lone searches of 6000 builds per attacker that needs one,
+  stopping at 2500 when dry), takes `SEED_SHIFT`, and can run as several workers on one folder (a lock folder per job).
+  `run_pass_post.sh` does what needs the first jobs: dry pairs in full, determinism again in a new process, timing.
+  `run_special.sh` has the extra jobs of the 2026-10-25 report (who costs the lives, the Moon Moth, Dusk Moths, random play
+  under every Twist). `summary.gd pass=1` prints every table, special ones included.
+
 Two more tools: `benchmark.gd` times each tick, and `run.gd mode=det` plays the same things twice
 (and once with a save and load in the middle of a wave) and checks the results match.
 
@@ -117,6 +144,8 @@ Length at 1x is the wave time plus 15 s for each build phase, the same rule as f
   files of `run_whatif_b1.sh`). Without it, the old region 1 tables.
 - `tools/balance/run_bot.gd`, `runs.gd`, `runs_summary.gd`, `run_runs.sh`: the run and daily bots, runner, tables and job list (above).
 - `tools/balance/run_region1.sh`, `run_whatif.sh`, `run_stats.sh`: the exact job lists and seeds.
+- `tools/balance/run_pass.sh`, `run_pass_post.sh`, `run_special.sh`, `run_whatif_b3.sh`: the job lists and seeds of the 2026-10-25
+  campaign pass (raw folder `raw/2026-10-25-b3/`, report `campaign-2026-10-25.md`, `SEED_SHIFT=100000`).
 - `tools/balance/run_pass.sh` and `run_whatif_b1.sh`: the job lists of the B1 pass (2026-10-24, raw folder
   `raw/2026-10-24-b1/`) and its star 3 what-ifs (other rules tried with `tweak=star3:...`, and a level file with
   Flitters added to 2-3).

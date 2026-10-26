@@ -23,10 +23,19 @@ extends SceneTree
 ##   the old region 1 recipe ("sling, catapult, alternating, road order, tier 2") and lists any difference.
 ## mode=det: the same strategies played twice, played again with a save and load in the middle
 ##   of a wave, and the same search run twice, must all match.
+## mode=need: no play at all. Which attacking towers the "no super tower" check must search on this level (RULES 12.6):
+##   the flyer cost and walker cost in the wave data, and for each attacking tower the reason to skip it, if any.
+## mode=replay from=FILE,FILE pick=best_win|three_star_best|top|all [max_tier=N]: plays strategies saved in search results (or
+##   from=plain, the plain recipe at every gate placement) again, on the level as it is now, so it can be used
+##   with level_file=, towers=, enemies=, stat=, tweak= and twist=1 as a what-if. Each row has the saved result and
+##   the new result, lives lost by creature type and how far the flying bosses got (relaxed=1 plays Relaxed).
 ## mode=search `only` also takes solo:ID, one attacking tower plus every support tower the level offers
 ##   (the "no super tower" search of RULES 12.6).
 ## Any mode takes twist=1: the level is played with its Twist (ARCHITECTURE 2.8), a banned tower is not offered,
 ##   and a win is all that counts (Twists have no stars).
+## mode=search also takes stop_dry=N: the search stops when N builds are tried and none has won (RULES 12.6: if neither
+##   of the two searches of a tower has won a game after 2500 builds, both may stop there). The result says `stopped_dry`.
+## mode=plain also takes max_tier=N (1 to 3): no tower goes above that tier (the report's tier 2 variant on 3-4 and 3-5).
 ## mode=search also takes early=off: no strategy calls a wave early (the star 3 of 1-6 is then out of reach).
 ## Any mode also takes level_file=PATH (a level JSON file played in place of the level named by `level`),
 ##   towers=PATH and enemies=PATH (stat files played in place of data/stats/towers.json and enemies.json).
@@ -91,6 +100,10 @@ func _initialize() -> void:
 		result = _recipes(ctx)
 	elif mode == "plain":
 		result = _plain(ctx)
+	elif mode == "need":
+		result = _need(ctx)
+	elif mode == "replay":
+		result = _replay(ctx)
 	else:
 		printerr("unknown mode %s" % mode)
 		quit(2)
@@ -353,7 +366,12 @@ func _search(ctx: Dictionary, seed_value: int, evals: int, allowed: Array[String
 	var attempts: int = 0
 	var start_count: int = evals / 3
 	var level: LevelData = ctx["level"]
+	var stop_dry: int = int(_args.get("stop_dry", "0"))
+	var stopped_dry: bool = false
 	while played < evals and attempts < evals * 20:
+		if stop_dry > 0 and played >= stop_dry and wins == 0:
+			stopped_dry = true
+			break
 		attempts += 1
 		var strat: Dictionary
 		if played < start_count or pool.is_empty() or rng.randf() < 0.1:
@@ -401,7 +419,7 @@ func _search(ctx: Dictionary, seed_value: int, evals: int, allowed: Array[String
 		return Bot.signature(a["strat"]) < Bot.signature(b["strat"]))
 	var out: Dictionary = {"evals": played, "wins": wins, "outcomes": star_counts, "first_three_star_eval": first_three,
 		"three_star_found": threes.size(), "peak_max": peak_max, "allowed": _names(allowed),
-		"rule3_wins": rule3_wins, "rule3_best_lives": rule3_best_lives}
+		"rule3_wins": rule3_wins, "rule3_best_lives": rule3_best_lives, "stopped_dry": stopped_dry}
 	# Tower use across every three star win found: what stood at the end, not what was planned.
 	var use: Dictionary = {}
 	var mix: Dictionary = {}
@@ -566,6 +584,8 @@ func _recipes(ctx: Dictionary) -> Dictionary:
 ## the most waves. Worst is the other end. The first of equals wins in both. "none" is the empty placement.
 func _plain(ctx: Dictionary) -> Dictionary:
 	var strat: Dictionary = Bot.plain_recipe(ctx)
+	if int(_args.get("max_tier", "0")) > 0:
+		strat = Bot.cap_tier(strat, int(_args["max_tier"]))
 	var rows: Array = []
 	var summary: Dictionary = {}
 	for mode: String in ["normal", "relaxed"]:
@@ -634,6 +654,101 @@ func _compare_old(ctx: Dictionary, rows: Array) -> Dictionary:
 					if row[key] != old_row[key]:
 						differences.append({"mode": row["mode"], "gate": row["gate"], "field": key, "plain": row[key], "old": old_row[key]})
 	return {"compared": compared, "differences": differences}
+
+
+# Which lone-tower searches the check needs (RULES 12.6).
+
+## The cost, in lives, of the flyers and of the walkers in the wave data (count times lives, bosses included, a
+## Puffball as itself). A tower that cannot hit flyers lets every flyer through; a tower that cannot hit walkers
+## lets every walker through. From 6 lives up, either can never keep 15 lives, so its search is not needed.
+func _need(ctx: Dictionary) -> Dictionary:
+	var level: LevelData = ctx["level"]
+	var catalog: Catalog = ctx["catalog"]
+	var air: int = 0
+	var ground: int = 0
+	for wave: WaveData in level.waves:
+		for group: WaveGroup in wave.groups:
+			var type: EnemyType = catalog.enemy(group.enemy)
+			if type.flying:
+				air += group.count * type.lives
+			else:
+				ground += group.count * type.lives
+	var rows: Array = []
+	var needed: Array = []
+	for id: StringName in ctx["offered"]:
+		var tower: TowerType = catalog.tower(id)
+		if tower.kind != &"attack":
+			continue
+		var stats: TowerStats = tower.stats(1, -1)
+		var reason: String = ""
+		if not stats.hits_air and air >= 6:
+			reason = "cannot hit flyers, which cost %d lives" % air
+		elif not stats.hits_ground and ground >= 6:
+			reason = "cannot hit walkers, which cost %d lives" % ground
+		rows.append({"tower": String(id), "search": reason == "", "reason": reason})
+		if reason == "":
+			needed.append(String(id))
+	return {"flyer_cost": air, "walker_cost": ground, "attackers": rows, "search_needed": needed}
+
+
+# Replaying saved strategies.
+
+## Strategies saved in a search result file, or the plain recipe. Each: label, the strategy as saved, and the saved result.
+func _saved_strategies(ctx: Dictionary, path: String, pick: String) -> Array:
+	var out: Array = []
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if not parsed is Dictionary:
+		printerr("cannot read %s" % path)
+		return out
+	var data: Dictionary = parsed
+	var base: String = path.get_file().get_basename()
+	if pick in ["best_win", "all"] and data.has("best_win"):
+		out.append({"label": base + ":best_win", "strategy": data["best_win"]["strategy"], "saved": data["best_win"]["result"]})
+	if pick in ["three_star_best", "all"]:
+		var n: int = 0
+		for item: Dictionary in data.get("three_star_best", []):
+			n += 1
+			out.append({"label": "%s:three_star_best_%d" % [base, n], "strategy": item["strategy"], "saved": item["result"]})
+	if pick in ["top", "all"] and data.has("top"):
+		out.append({"label": base + ":top", "strategy": data["top"]["strategy"], "saved": data["top"]["result"]})
+	return out
+
+
+func _replay(ctx: Dictionary) -> Dictionary:
+	var relaxed: bool = String(_args.get("relaxed", "0")) == "1"
+	var pick: String = String(_args.get("pick", "best_win"))
+	var rows: Array = []
+	var items: Array = []
+	for path: String in String(_args.get("from", "plain")).split(",", false):
+		if path == "plain":
+			var plain: Dictionary = Bot.plain_recipe(ctx)
+			if int(_args.get("max_tier", "0")) > 0:
+				plain = Bot.cap_tier(plain, int(_args["max_tier"]))
+			for gates: Array in Bot.placements(ctx):
+				var typed: Array[Vector2i] = []
+				typed.append_array(gates)
+				var one: Dictionary = plain.duplicate(true)
+				one["gates"] = typed
+				items.append({"label": "plain:" + Bot.gates_label(gates), "strategy": Bot.to_data(one), "saved": {}})
+		else:
+			items.append_array(_saved_strategies(ctx, path, pick))
+	for item: Dictionary in items:
+		var watch: Dictionary = {"on": true}
+		var strat: Dictionary = Bot.from_data(item["strategy"])
+		if int(_args.get("max_tier", "0")) > 0:
+			strat = Bot.cap_tier(strat, int(_args["max_tier"]))
+		var res: Dictionary = Bot.play(ctx, strat, relaxed, false, -1, watch)
+		watch.erase("wave_of")
+		watch.erase("on")
+		var saved: Dictionary = item["saved"]
+		var row: Dictionary = {"label": item["label"], "won": res["won"], "stars": res["stars"], "lives": res["lives"], "cleared": res["cleared"],
+			"ticks": res["ticks"], "peak": res["peak"], "built": res["built"], "lives_at": res["lives_at"],
+			"leaks": watch.get("leaks", {}), "leaks_wave": watch.get("leaks_wave", {}), "kills": watch.get("kills", {}),
+			"bosses": watch.get("bosses", {}).values(), "relaxed": relaxed}
+		if not saved.is_empty():
+			row["saved"] = {"won": saved["won"], "stars": saved["stars"], "lives": saved["lives"], "cleared": saved["cleared"]}
+		rows.append(row)
+	return {"rows": rows, "pick": pick}
 
 
 # Exhaustive check of small builds.

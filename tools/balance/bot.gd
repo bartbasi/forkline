@@ -393,10 +393,13 @@ static func _tower_index(towers: Array, cell: Vector2i) -> int:
 ##   boss_steps (the fewest road steps the boss had left to the base when last sampled, -1 for no boss).
 ## With timing, also step_us and step_live: the time of each tick and the creatures on the map.
 ## With restore_at, the battle is saved and loaded again at that tick (a mid-wave resume).
-static func play(ctx: Dictionary, strat: Dictionary, relaxed: bool, timing: bool = false, restore_at: int = -1) -> Dictionary:
+## With a `watch` Dictionary (empty by default), events stay on and the play fills it with what the report
+## asks about (see `_watch_tick`): lives lost by creature type, and how far each flying boss got and with how
+## much health. A watched play is the same play: it only reads.
+static func play(ctx: Dictionary, strat: Dictionary, relaxed: bool, timing: bool = false, restore_at: int = -1, watch: Dictionary = {}) -> Dictionary:
 	var level: LevelData = ctx["level"]
 	var b: Battle = Battle.create(level, ctx["catalog"], relaxed, ctx["twist"])
-	b.record_events = false
+	b.record_events = not watch.is_empty()
 	for gate: Vector2i in strat["gates"]:
 		b.place_gate(gate)
 	var seq: Array = strat["seq"]
@@ -457,7 +460,7 @@ static func play(ctx: Dictionary, strat: Dictionary, relaxed: bool, timing: bool
 				if copy == null:
 					return {"restore_failed": true, "won": false, "stars": 0, "lives": 0, "cleared": 0, "ticks": b.tick, "digest": 0, "stuck": true}
 				b = copy
-				b.record_events = false
+				b.record_events = not watch.is_empty()
 			if timing:
 				var t0: int = Time.get_ticks_usec()
 				b.step()
@@ -465,6 +468,8 @@ static func play(ctx: Dictionary, strat: Dictionary, relaxed: bool, timing: bool
 				step_live.append(b.enemies.size())
 			else:
 				b.step()
+			if not watch.is_empty():
+				_watch_tick(b, ctx, watch)
 			if b.enemies.size() > peak:
 				peak = b.enemies.size()
 			if boss_level and b.tick % 5 == 0:
@@ -511,6 +516,58 @@ static func play(ctx: Dictionary, strat: Dictionary, relaxed: bool, timing: bool
 		out["step_us"] = step_us
 		out["step_live"] = step_live
 	return out
+
+
+## What a watched play records each tick. `watch["leaks"]`: lives lost, by creature type, and
+## `watch["leaks_wave"]`: the same by the wave (1 based) the creature came from. `watch["kills"]`: creatures
+## defeated, by type. `watch["bosses"]`: for each flying boss, its health when it was a quarter, a half and
+## three quarters of the way along its line (-1 before), and where and how it ended.
+static func _watch_tick(b: Battle, ctx: Dictionary, watch: Dictionary) -> void:
+	if not watch.has("leaks"):
+		watch["leaks"] = {}
+		watch["leaks_wave"] = {}
+		watch["kills"] = {}
+		watch["bosses"] = {}
+		watch["wave_of"] = {}
+	var catalog: Catalog = ctx["catalog"]
+	var wave_of: Dictionary = watch["wave_of"]
+	for enemy: EnemyState in b.enemies:
+		if not wave_of.has(enemy.id):
+			wave_of[enemy.id] = enemy.wave + 1
+		if enemy.flying and catalog.enemy(enemy.type).boss and enemy.fly_length > 0:
+			var bosses: Dictionary = watch["bosses"]
+			if not bosses.has(enemy.id):
+				bosses[enemy.id] = {"type": String(enemy.type), "wave": enemy.wave + 1, "max": enemy.max_health, "q1": -1, "half": -1, "q3": -1,
+					"last_permille": 0, "last_health": enemy.health, "fate": "alive"}
+			var row: Dictionary = bosses[enemy.id]
+			var permille: int = enemy.flown * 1000 / enemy.fly_length
+			row["last_permille"] = permille
+			row["last_health"] = enemy.health
+			if permille >= 250 and int(row["q1"]) < 0:
+				row["q1"] = enemy.health
+			if permille >= 500 and int(row["half"]) < 0:
+				row["half"] = enemy.health
+			if permille >= 750 and int(row["q3"]) < 0:
+				row["q3"] = enemy.health
+	for event: Dictionary in b.take_events():
+		var kind: StringName = event["kind"]
+		if kind == &"leaked":
+			var type_key: String = String(event["enemy"])
+			var lost: int = int(event["lives"])
+			var leaks: Dictionary = watch["leaks"]
+			leaks[type_key] = int(leaks.get(type_key, 0)) + lost
+			var wave_key: String = str(int(wave_of.get(event["id"], 0)))
+			var by_wave: Dictionary = watch["leaks_wave"]
+			if not by_wave.has(wave_key):
+				by_wave[wave_key] = {}
+			by_wave[wave_key][type_key] = int(by_wave[wave_key].get(type_key, 0)) + lost
+			if watch["bosses"].has(event["id"]):
+				watch["bosses"][event["id"]]["fate"] = "reached the base"
+		elif kind == &"defeated":
+			var kill_key: String = String(event["enemy"])
+			watch["kills"][kill_key] = int(watch["kills"].get(kill_key, 0)) + 1
+			if watch["bosses"].has(event["id"]):
+				watch["bosses"][event["id"]]["fate"] = "defeated"
 
 
 ## Buys in the order of the strategy while gold lasts. A refusal other than too_poor skips the item.
@@ -616,6 +673,24 @@ static func plain_recipe(ctx: Dictionary) -> Dictionary:
 			seq.append(r)
 	var none: Array[Vector2i] = []
 	return {"towers": towers, "seq": seq, "gates": none, "early": {"on": false, "from": 1, "live": 0, "max": 99}, "wave_buy": false}
+
+
+## The strategy with no tower above `top` (1 to 3): the upgrade steps above it are dropped. The plain recipe
+## with top 2 is the "tier 2 only" variant of the Dusk Moth question (report, 3-4).
+static func cap_tier(strat: Dictionary, top: int) -> Dictionary:
+	var out: Dictionary = strat.duplicate(true)
+	var steps: Array[int] = []
+	steps.resize(out["towers"].size())
+	steps.fill(0)
+	var seq: Array = []
+	for index: int in out["seq"]:
+		steps[index] += 1
+		if steps[index] <= top:
+			seq.append(index)
+	out["seq"] = seq
+	for t: Dictionary in out["towers"]:
+		t["depth"] = mini(int(t["depth"]), top - 1)
+	return out
 
 
 ## Every placement of up to the gates in hand that seals no entrance, the empty one first, then by
