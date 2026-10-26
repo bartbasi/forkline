@@ -131,6 +131,28 @@ Modes of `runs.gd`:
 `run_runs.sh` is the job list and its seeds. `runs_summary.gd dir=PATH` prints the report's tables from the raw folder (`part=det|rates|search|length|waves|boss|maps|towers|cards|daily|risk|cardvalue|whatif|ironshell|lives`). Jobs added by hand are in `extra_jobs.txt` of the raw folder.
 Length at 1x is the wave time plus 15 s for each build phase, the same rule as for levels (RULES 12.5).
 
+## Second run and daily report (task B4)
+
+Report: `runs-2026-10-25.md`. Raw numbers: `raw/2026-10-25-b4/`. Job list: `run_b4.sh` (phase A, then phase B from what A shows). The
+tables come from `runs_summary.gd dir=PATH part=b4` (or one part: `bars`, `boss`, `fair`, `forced`, `cardbar`, `riskfair`,
+`lengthb4`, `detb4`, `dailyb4`, `whatifb4`; `flags` prints the phase B job lines, with `OUTDIR` in place of the folder).
+
+Bot changes (TUNING_RUNS 3.5). The numbers of the 2026-10-24 report need `bakery_from=0 perk_fit=0` to repeat on the same data.
+
+- `bakery_from=W` (default 9): a bot builds no Bakery until W waves have started (G3's `FL_BAKERY_WAIT=9`). 0 is the B2 rule.
+- `perk_fit=1` (default): a bot passes on a sidegrade perk whose cost falls on the tier 3 path it will take (its path is fixed by its
+  seeded tastes): Volley with Giant Bow, Twin Pebbles with Stone Sling, Long Fuse with Skyrocket, Frost Chime with Night Bell, Spice Rack
+  with Grand Oven. If every offered card is such a perk, it takes one anyway. `perk_fit=0` picks blind, as in B2.
+- `boss_aim=1`: every attacking tower aims at Strong when the boss wave starts (a what-if, off in the report's bars).
+- `mode=rates` also takes `stack=TOP,MIDDLE,BOTTOM` (every seed plays on that stack, its own packs and boss), `pack=ID` (the pack replaces the
+  seed's pack of its band) and `stop=N` (the play ends when N waves have started and none is on the map; the row has `stopped`). A forced
+  session is built through public calls only: `MapAssembler.build`, `Battle.create`, `RunSession.from_data` with no picks.
+- `pool=plus:id,id` is the base cards and those unlock cards (what-ifs for the every-card gap). `perk_fit=2` passes on every sidegrade perk of the list.
+- `run_b4.sh` phases: A (the main run), B (forced packs, what-ifs, from `runs_summary.gd part=flags`), C (all 42 stacks forced onto seeds 1 to 200,
+  from `part=allstacks`), D (`perk_fit=2` with every card). Natural seeds give a stack 2 to 10 seeds and missed a wall, so run C after any segment change.
+- `mode=search list=3,5,9` searches only those run seeds. `mode=det days=N day_from=K` plays N dailies from day K; a save that a load
+  refuses is recorded in the row (`wave_refused`, `draft_refused`) and the play counts as a failure.
+
 ## Files
 
 - `tools/balance/bot.gd`: strategies, the generator and mutator, the plain recipe, the player.
@@ -143,6 +165,7 @@ Length at 1x is the wave time plus 15 s for each build phase, the same rule as f
   a `run_pass.sh` run (plain, solo, search, spread, Twist, determinism and benchmark files, and the what-if
   files of `run_whatif_b1.sh`). Without it, the old region 1 tables.
 - `tools/balance/run_bot.gd`, `runs.gd`, `runs_summary.gd`, `run_runs.sh`: the run and daily bots, runner, tables and job list (above).
+- `tools/balance/run_b4.sh`: the job list and seeds of the B4 run report (raw folder `raw/2026-10-25-b4/`).
 - `tools/balance/run_region1.sh`, `run_whatif.sh`, `run_stats.sh`: the exact job lists and seeds.
 - `tools/balance/run_pass.sh`, `run_pass_post.sh`, `run_special.sh`, `run_whatif_b3.sh`: the job lists and seeds of the 2026-10-25
   campaign pass (raw folder `raw/2026-10-25-b3/`, report `campaign-2026-10-25.md`, `SEED_SHIFT=100000`).

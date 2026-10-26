@@ -11,11 +11,13 @@ extends SceneTree
 ##   godot --headless --path . --script res://tools/balance/runs.gd -- mode=static out=PATH
 ##
 ## mode=rates: every strategy (or strats=id,id) plays run seeds seed_of(first) to seed_of(first + count - 1).
-##   pool=base is the pool with no unlocks, pool=all every card. relaxed=1 plays Relaxed.
-## mode=det: the same-seed checks (docs/balance/README.md "Runs").
+##   pool=base is the pool with no unlocks, pool=all every card, pool=plus:id,id the base cards and those cards. relaxed=1 plays Relaxed.
+## mode=det: the same-seed checks (docs/balance/README.md "Runs"). days=N day_from=K play N dailies from day offset K
+##   (default the first min(count, 50) days). A save that a load refuses is recorded in the row (wave_refused, draft_refused).
 ## mode=daily: day offsets from to from + count - 1, counted from 2026-10-25 (offset 0). Always Normal and every card.
 ## rates and daily also take boss=ironshell: only the seeds (days) whose run has that boss.
 ## mode=search: n random strategies (RunBot.random_strategy, seeded from the run seed) play each run seed.
+##   list=3,17,40 searches only those seeds (run seed indexes) instead of first to first + count - 1.
 ## mode=daily also takes extra=N: a day no named strategy wins gets up to N random strategies, until one wins.
 ## mode=cardvalue: a strategy (strats=a,b alternate by seed) plays a run; before each pick the state is saved, and each of the
 ##   3 offered cards is taken in turn and the run played on to its end by the same strategy (pool=base or all).
@@ -23,6 +25,10 @@ extends SceneTree
 ## mode=risk: snapshots of one strategy's run before each wave, then each risk card applied to that wave.
 ## mode=static: the stacks, the packs and the most creatures a pack wave spawns with each risk card.
 ## Any mode takes bakery_min=1 (a bot builds a Bakery that reaches only 1 spot; default 2).
+## Any mode takes bakery_from=W (a bot builds no Bakery before W waves have started; B4 default 9, 0 is B2's rule),
+##   perk_fit=0 (bots pick perks blindly, as in B2) and boss_aim=1 (attackers aim at Strong when the boss wave starts).
+## mode=rates also takes stack=TOP,MIDDLE,BOTTOM (play every seed on that stack), pack=PACK_ID (every seed uses that pack
+##   in its band) and stop=N (a play ends when N waves have started and none is on the map).
 ## Any mode takes tweak=strength_step:8,strength_start:100,start_gold:300,gates:1,tea_break:5 (RunData numbers and the lives of Tea Break, in memory only).
 ## The result is one JSON object, written to `out` and printed after "RESULT ".
 
@@ -43,6 +49,7 @@ func _initialize() -> void:
 		quit(2)
 		return
 	RunBot.set_bakery_min(int(_args.get("bakery_min", "2")))
+	RunBot.set_options(int(_args.get("bakery_from", "9")), int(_args.get("boss_aim", "0")), int(_args.get("perk_fit", "1")))
 	var tweak: String = String(_args.get("tweak", ""))
 	if tweak != "" and not _apply_tweak(game, tweak):
 		return
@@ -81,6 +88,10 @@ func _initialize() -> void:
 		result["tweak"] = tweak
 	if RunBot.get_bakery_min() != 2:
 		result["tweak"] = (String(result.get("tweak", "")) + " bakery_min:%d" % RunBot.get_bakery_min()).strip_edges()
+	result["bots"] = {"bakery_from": RunBot.bakery_from, "boss_aim": RunBot.boss_aim, "perk_fit": RunBot.perk_fit}
+	for key: String in ["stack", "pack", "stop"]:
+		if _args.has(key):
+			result[key] = String(_args[key])
 	var text: String = JSON.stringify(result)
 	print("RESULT " + text.substr(0, 300))
 	var out: String = String(_args.get("out", ""))
@@ -135,10 +146,17 @@ func _apply_tweak(game: GameData, tweak: String) -> bool:
 	return true
 
 
+## pool=base (no unlocks), pool=all (every card), or pool=plus:id,id (the base cards and those unlock cards: what-ifs that find
+## which unlock cards cost the bots win rate).
 func _pool(game: GameData, which: String) -> Array[StringName]:
 	if which == "all":
 		return game.run.card_ids()
-	return game.run.pool({})
+	var out: Array[StringName] = game.run.pool({})
+	if which.begins_with("plus:"):
+		for id: String in which.trim_prefix("plus:").split(",", false):
+			if not game.run.card(StringName(id)).is_empty() and not out.has(StringName(id)):
+				out.append(StringName(id))
+	return out
 
 
 func _stack(game: GameData, run_seed: int) -> Dictionary:
@@ -175,6 +193,26 @@ func _rates(game: GameData, first: int, count: int) -> Dictionary:
 			chosen.append(strat)
 	var cards: Array = _card_ids(game)
 	var only_boss: String = String(_args.get("boss", ""))
+	var opts: Dictionary = {}
+	var forced_stack: PackedStringArray = String(_args.get("stack", "")).split(",", false)
+	if forced_stack.size() == 3:
+		opts["stack"] = Array(forced_stack)
+	elif forced_stack.size() != 0:
+		return {"bad": "stack= needs TOP,MIDDLE,BOTTOM"}
+	var forced_pack: String = String(_args.get("pack", ""))
+	var forced_boss: String = ""
+	if forced_pack != "":
+		opts["pack"] = forced_pack
+		var known: bool = false
+		for item: Dictionary in game.run.packs:
+			if String(item["id"]) == forced_pack:
+				known = true
+				if int(item["band"]) == RunData.BANDS:
+					forced_boss = String(item["boss"])
+		if not known:
+			return {"bad": "unknown pack %s" % forced_pack}
+	if int(_args.get("stop", "0")) > 0:
+		opts["stop_after"] = int(_args["stop"])
 	var rows: Array = []
 	for i: int in range(first, first + count):
 		var run_seed: int = seed_of(i)
@@ -182,12 +220,17 @@ func _rates(game: GameData, first: int, count: int) -> Dictionary:
 		if only_boss != "" and stack["boss"] != only_boss:
 			continue
 		for strat: Dictionary in chosen:
-			var row: Dictionary = RunBot.play(game, run_seed, "", relaxed, pool, strat)
+			var row: Dictionary = RunBot.play(game, run_seed, "", relaxed, pool, strat, opts)
 			if row.has("bad"):
 				return row
 			row["i"] = i
-			row["stack"] = "%s|%s|%s" % [stack["top"], stack["middle"], stack["bottom"]]
-			row["boss"] = stack["boss"]
+			if forced_stack.size() == 3:
+				row["stack"] = "|".join(forced_stack)
+			else:
+				row["stack"] = "%s|%s|%s" % [stack["top"], stack["middle"], stack["bottom"]]
+			row["boss"] = forced_boss if forced_boss != "" else stack["boss"]
+			if forced_pack != "":
+				row["pack"] = forced_pack
 			_pack_cards(row, cards)
 			rows.append(row)
 	return {"relaxed": relaxed, "pool": which, "pool_size": pool.size(), "cards": cards, "first": first, "count": count, "rows": rows}
@@ -248,6 +291,8 @@ func _det(game: GameData, first: int, count: int) -> Dictionary:
 		row["wave_restored"] = int(c.get("restores", 0)) == 1
 		row["draft_restore_equal"] = _same(a, d) and bool(d.get("offers_equal", false))
 		row["draft_restored"] = int(d.get("restores", 0)) == 1
+		row["wave_refused"] = "%s at %s" % [c["refused"], c["at"]] if c.has("refused") else ""
+		row["draft_refused"] = "%s at %s" % [d["refused"], d["at"]] if d.has("refused") else ""
 		row["won"] = a["won"]
 		row["cleared"] = a["cleared"]
 		row["offers_hash"] = JSON.stringify(a["offered"]).hash()
@@ -259,7 +304,9 @@ func _det(game: GameData, first: int, count: int) -> Dictionary:
 		rows.append(row)
 	# Dailies: the first days after the report, played twice and with the same two saves.
 	var daily_rows: Array = []
-	for n: int in mini(count, 50):
+	var day_from: int = int(_args.get("day_from", "0"))
+	var day_count: int = int(_args.get("days", str(mini(count, 50))))
+	for n: int in range(day_from, day_from + day_count):
 		var day: String = day_of(n)
 		var daily_seed: int = RunSeeds.daily_seed(day)
 		var strat: Dictionary = strats[n % strats.size()]
@@ -270,6 +317,8 @@ func _det(game: GameData, first: int, count: int) -> Dictionary:
 		var drow: Dictionary = {"day": day, "seed": daily_seed, "strategy": String(strat["id"]),
 			"again_equal": _same(a, b), "wave_restore_equal": _same(a, c), "wave_restored": int(c.get("restores", 0)) == 1,
 			"draft_restore_equal": _same(a, d) and bool(d.get("offers_equal", false)), "draft_restored": int(d.get("restores", 0)) == 1,
+			"wave_refused": "%s at %s" % [c["refused"], c["at"]] if c.has("refused") else "",
+			"draft_refused": "%s at %s" % [d["refused"], d["at"]] if d.has("refused") else "",
 			"won": a["won"], "battle_hash": a["battle_hash"], "run_hash": a["run_hash"]}
 		if not (drow["again_equal"] and drow["wave_restore_equal"] and drow["draft_restore_equal"]):
 			failures.append(day)
@@ -359,7 +408,14 @@ func _search(game: GameData, first: int, count: int) -> Dictionary:
 	var pool: Array[StringName] = _pool(game, which)
 	var n: int = int(_args.get("n", "200"))
 	var rows: Array = []
-	for i: int in range(first, first + count):
+	var seeds: Array[int] = []
+	if _args.has("list"):
+		for item: String in String(_args["list"]).split(",", false):
+			seeds.append(int(item))
+	else:
+		for i: int in range(first, first + count):
+			seeds.append(i)
+	for i: int in seeds:
 		var run_seed: int = seed_of(i)
 		var stack: Dictionary = _stack(game, run_seed)
 		var rng: RandomNumberGenerator = RandomNumberGenerator.new()

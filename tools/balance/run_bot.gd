@@ -22,6 +22,12 @@ extends RefCounted
 ## route), buys during waves as gold comes in, never moves a gate and sells only to make room for a
 ## tower type it has never built.
 ##
+## B4 changes (docs/design/TUNING_RUNS.md 3.5). A bot builds no Bakery until `bakery_from` waves have started
+## (default 9, as the FL_BAKERY_WAIT=9 of the G3 what-ifs; 0 is the old rule). A bot passes on a sidegrade perk whose
+## cost lands on the tier 3 path it will take (UNFIT). `boss_aim` points every attacker at Strong when the boss wave starts.
+## `play` also takes opts "stack" (top, middle, bottom ids), "pack" (a pack id replacing the seed's pack of that band) and
+## "stop_after" (stop once that many waves have started and none is on the map), for forced stacks and packs.
+##
 ## Run state ("st") is plain data and holds no Battle, so a restored battle can carry on with the same bot.
 
 const TICK_CAP: int = 72000                       # 60 minutes of wave time: far past a run. A play that hits it is "stuck".
@@ -34,6 +40,26 @@ static var bakery_min: int = 2
 
 static func set_bakery_min(n: int) -> void:
 	bakery_min = n
+
+
+## Waves that must have started before a bot builds a Bakery (B4: 9). 0 builds one at once, as B2's bots did.
+static var bakery_from: int = 9
+## 1 = the bot sets every attacking tower to Strong when the boss wave starts (a what-if, not part of the report's bars).
+static var boss_aim: int = 0
+## 1 = the bot passes on a sidegrade perk that does not fit the tier 3 paths it takes (UNFIT). 0 = B2's blind picks.
+## 2 = it passes on every sidegrade perk of UNFIT, whatever its path (a what-if: how much of the unlock gap is the sidegrades).
+static var perk_fit: int = 1
+## A sidegrade perk, and the tier 3 path that carries its cost without its gain (TUNING_RUNS 3.5).
+const UNFIT: Dictionary = {
+	&"volley": &"giant_bow", &"twin_pebbles": &"stone_sling", &"long_fuse": &"skyrocket",
+	&"frost_chime": &"night_bell", &"spice_rack": &"grand_oven",
+}
+
+
+static func set_options(from_bakery: int, aim: int, fit: int) -> void:
+	bakery_from = from_bakery
+	boss_aim = aim
+	perk_fit = fit
 
 
 static func get_bakery_min() -> int:
@@ -137,19 +163,39 @@ static func new_state(session: RunSession, strat: Dictionary, run_seed: int) -> 
 static func choose(st: Dictionary, session: RunSession, offers: Array[StringName]) -> StringName:
 	var rng: RandomNumberGenerator = st["rng"]
 	var style: StringName = st["strat"]["pick"]
+	var fit: Array[StringName] = []
+	for id: StringName in offers:
+		if _fits(st, session, id):
+			fit.append(id)
+	if fit.is_empty():
+		fit = offers
 	if style == &"random":
-		return offers[rng.randi_range(0, offers.size() - 1)]
+		return fit[rng.randi_range(0, fit.size() - 1)]
 	var order: Array = st["strat"]["order"] if style == &"custom" else PRIORITY[style]
 	if style == &"economy" and _kinds_of_tower(session) < 2:
 		order = [&"tower", &"economy", &"perk", &"gate", &"risk"]
 	for kind: StringName in order:
 		var same: Array[StringName] = []
-		for id: StringName in offers:
+		for id: StringName in fit:
 			if session.card(id).get("kind", &"") == kind:
 				same.append(id)
 		if not same.is_empty():
 			return _weighted(st, session, same, rng)
-	return offers[0]
+	return fit[0]
+
+
+## False for a sidegrade perk whose cost falls on the tier 3 path this bot takes (UNFIT), when B4's perk choice is on.
+static func _fits(st: Dictionary, session: RunSession, id: StringName) -> bool:
+	if perk_fit == 0 or not UNFIT.has(id):
+		return true
+	if perk_fit == 2:
+		return false
+	var card: Dictionary = session.card(id)
+	var tower: StringName = StringName(card.get("tower", &""))
+	if not st["spec_of"].has(tower):
+		return true
+	var stats: TowerType = session.battle.catalog.tower(tower)
+	return stats.specs[int(st["spec_of"][tower])] != UNFIT[id]
 
 
 ## A card among those of one kind. Tower cards and perks lean to the tower's weight (attackers over Bells and
@@ -273,9 +319,13 @@ static func _next_step(st: Dictionary, session: RunSession) -> Dictionary:
 	var want: int = mini(ranked.size(), (4 + int(0.7 * waves)) if wide else (2 + waves / 4))
 	if strat.has("base"):
 		want = mini(ranked.size(), int(float(strat["base"]) + float(strat["rate"]) * waves))
+	# The Bakery waits until bakery_from waves have started (B4).
+	var bakery_wait: bool = waves < bakery_from
 	# A type never built goes first. With no spot free (or no good Bakery spot free) it sells one tower to make room.
 	for id: StringName in available:
 		if int(count[id]) > 0 or dead.has("t:" + String(id)):
+			continue
+		if id == &"bakery" and bakery_wait:
 			continue
 		var cell: Vector2i = _spot_for(id, free, ranked)
 		if cell != Vector2i(-1, -1):
@@ -296,7 +346,10 @@ static func _next_step(st: Dictionary, session: RunSession) -> Dictionary:
 			if victim != null:
 				return {"do": "sell", "cell": victim.cell, "type": id, "spec": -1, "key": "s:%d,%d" % [victim.cell.x, victim.cell.y]}
 	var upgrade: Dictionary = _upgrade_step(st, session)
-	var type: StringName = _deficit(available, count, weight, dead)
+	var pickable: Array[StringName] = available.duplicate()
+	if bakery_wait:
+		pickable.erase(&"bakery")
+	var type: StringName = _deficit(pickable, count, weight, dead)
 	if not free.is_empty() and type != &"" and (b.towers.size() < want or upgrade.is_empty()):
 		var cell2: Vector2i = _spot_for(type, free, ranked)
 		if cell2 != Vector2i(-1, -1):
@@ -396,6 +449,9 @@ static func _weakest(b: Battle, count: Dictionary) -> TowerState:
 ##   "snapshots": true        keep the saved state before each wave starts (for the risk branches)
 ##   "draft_snapshots": true  keep the saved state (and the bot's generator) before each pick (for the card experiment)
 ##   "resume": Dictionary     carry on from a draft snapshot; "force" is then the card taken first
+##   "stack": Array           top, middle and bottom segment ids to use instead of the seed's (B4: forced stacks)
+##   "pack": String           a pack id that replaces the seed's pack of that pack's band (B4: forced packs)
+##   "stop_after": n          stop at the first build phase after n waves have started (all cleared)
 ## Returns a plain Dictionary (see the keys at the end).
 static func play(game: GameData, run_seed: int, day: String, relaxed: bool, pool: Array[StringName], strat: Dictionary, opts: Dictionary = {}) -> Dictionary:
 	var session: RunSession = null
@@ -412,7 +468,12 @@ static func play(game: GameData, run_seed: int, day: String, relaxed: bool, pool
 		st["gate_dead"] = (saved["gate_dead"] as Dictionary).duplicate()
 		st["swapped"] = (saved["swapped"] as Dictionary).duplicate()
 	else:
-		session = RunSession.start(run_seed, day, relaxed, pool, game.run, game.catalog)
+		var forced_stack: Array = opts.get("stack", [])
+		var forced_pack: String = String(opts.get("pack", ""))
+		if forced_stack.is_empty() and forced_pack == "":
+			session = RunSession.start(run_seed, day, relaxed, pool, game.run, game.catalog)
+		else:
+			session = forced_session(game, run_seed, relaxed, pool, forced_stack, forced_pack)
 		if session == null:
 			return {"bad": "RunSession.start gave null for seed %d" % run_seed}
 		st = new_state(session, strat, run_seed)
@@ -446,15 +507,22 @@ static func play(game: GameData, run_seed: int, day: String, relaxed: bool, pool
 	var spent_total: int = 0
 	var idle: StringName = &"waiting"
 	var boss_dist: PackedInt32Array = b.map.distances(b.closed_cells())
+	var stop_after: int = int(opts.get("stop_after", 0))
+	var stopped: bool = false
+	var aim_boss: bool = boss_aim == 1
+	var boss_aimed: bool = false
 	while b.phase == Battle.Phase.BUILD and b.tick < TICK_CAP:
+		if stop_after > 0 and b.waves_started >= stop_after:
+			stopped = true
+			break
 		gold_pre.append(b.gold)
 		lives_pre.append(b.lives)
 		while session.draft_open():
 			if restore_draft == session.picks.size() and restores == 0:
 				var before: Array[StringName] = session.offers()
 				var again: Dictionary = _roundtrip(game, session)
-				if again.is_empty():
-					return {"restore_failed": true, "won": false, "seed": run_seed}
+				if again.has("refused"):
+					return {"restore_failed": true, "refused": again["refused"], "at": "draft %d" % restore_draft, "won": false, "seed": run_seed}
 				session = again["session"]
 				b = session.battle
 				b.record_events = false
@@ -493,6 +561,11 @@ static func play(game: GameData, run_seed: int, day: String, relaxed: bool, pool
 		var first_tick: int = started_at
 		var index: int = wave_ticks.size() - 1
 		while b.phase == Battle.Phase.WAVE and b.tick < TICK_CAP:
+			if aim_boss and not boss_aimed and b.waves_started == wave_count:
+				boss_aimed = true
+				for tower: TowerState in b.towers:
+					if tower.kind == &"attack":
+						b.set_aim(tower.cell, TowerState.Aim.STRONG)
 			if b.tick % 4 == 0:
 				idle = buy(st, session)
 			if early_on and b.waves_started < wave_count and b.waves_started >= int(strat.get("early_from", 3)) and b.enemies.size() <= int(strat.get("early_live", 6)) and b.tick % 2 == 0:
@@ -510,8 +583,8 @@ static func play(game: GameData, run_seed: int, day: String, relaxed: bool, pool
 					first_tick = b.tick
 			if restore_wave.size() == 2 and restores == 0 and b.waves_started == int(restore_wave[0]) + 1 and b.tick - first_tick >= int(restore_wave[1]):
 				var moved: Dictionary = _roundtrip(game, session)
-				if moved.is_empty():
-					return {"restore_failed": true, "won": false, "seed": run_seed}
+				if moved.has("refused"):
+					return {"restore_failed": true, "refused": moved["refused"], "at": "wave %d" % int(restore_wave[0]), "won": false, "seed": run_seed}
 				session = moved["session"]
 				b = session.battle
 				b.record_events = false
@@ -545,7 +618,7 @@ static func play(game: GameData, run_seed: int, day: String, relaxed: bool, pool
 		"seed": run_seed, "day": day, "relaxed": relaxed, "strategy": String(strat["id"]),
 		"won": res["won"], "lives": res["lives"], "cleared": res["waves"], "reached": res["reached"], "risks": res["risks"],
 		"ticks": b.tick, "builds": builds, "early": calls, "peak": peak, "peak_at": peak_at,
-		"stuck": b.phase == Battle.Phase.WAVE or b.phase == Battle.Phase.BUILD,
+		"stuck": (b.phase == Battle.Phase.WAVE or b.phase == Battle.Phase.BUILD) and not stopped, "stopped": stopped,
 		"gold_pre": gold_pre, "lives_pre": lives_pre, "gold_at": gold_at, "lives_at": lives_at, "towers_at": towers_at, "tiers_at": tiers_at, "idle_at": idle_at,
 		"wave_ticks": wave_ticks, "gates_end": b.gates.size(), "end_gold": b.gold, "spent": spent_total, "mix": mix,
 		"picks": picks, "offered": _names(offered),
@@ -561,19 +634,51 @@ static func play(game: GameData, run_seed: int, day: String, relaxed: bool, pool
 
 
 ## Saves the session and its battle to JSON text and loads them again: the real path of a saved game.
-## {} when anything refuses to load.
+## {"refused": why} when anything refuses to load (the save checks of RunSession.from_data included).
 static func _roundtrip(game: GameData, session: RunSession) -> Dictionary:
 	var text: String = JSON.stringify({"battle": session.battle.to_data(), "run": session.to_data()})
 	var parsed: Variant = JSON.parse_string(text)
 	if typeof(parsed) != TYPE_DICTIONARY:
-		return {}
+		return {"refused": "json"}
 	var battle: Battle = Battle.from_data(parsed["battle"], game.catalog)
 	if battle == null:
-		return {}
+		return {"refused": "battle"}
 	var again: RunSession = RunSession.from_data(parsed["run"], battle, game.run)
 	if again == null:
-		return {}
+		return {"refused": "run"}
 	return {"session": again}
+
+
+## A run on a forced stack and/or pack. The seed's own plan fills what is not forced. The session is made the public way:
+## the level from MapAssembler.build, a Battle around it, and RunSession.from_data with no picks (a new run's save).
+static func forced_session(game: GameData, run_seed: int, relaxed: bool, pool: Array[StringName], stack: Array, pack: String) -> RunSession:
+	var plan: Dictionary = MapAssembler.plan(run_seed, game.run)
+	if plan.is_empty():
+		return null
+	var top: StringName = plan["top"]
+	var middle: StringName = plan["middle"]
+	var bottom: StringName = plan["bottom"]
+	if stack.size() == 3:
+		top = StringName(String(stack[0]))
+		middle = StringName(String(stack[1]))
+		bottom = StringName(String(stack[2]))
+	var packs: Array[StringName] = []
+	packs.assign(plan["packs"])
+	if pack != "":
+		for item: Dictionary in game.run.packs:
+			if String(item["id"]) == pack:
+				packs[int(item["band"]) - 1] = item["id"]
+	var level: LevelData = MapAssembler.build(game.run, game.catalog, top, middle, bottom, packs)
+	if level == null:
+		return null
+	var no_twist: Array[Dictionary] = []
+	var made: Battle = Battle.create(level, game.catalog, relaxed, no_twist)
+	if made == null:
+		return null
+	var ids: Array[String] = []
+	for id: StringName in pool:
+		ids.append(String(id))
+	return RunSession.from_data({"format": RunSession.FORMAT, "seed": run_seed, "day": "", "pool": ids, "picks": []}, made, game.run)
 
 
 static func _tier_sum(b: Battle) -> int:

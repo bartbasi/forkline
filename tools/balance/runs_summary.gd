@@ -7,6 +7,11 @@ extends SceneTree
 ##   godot --headless --path . --script res://tools/balance/runs_summary.gd -- dir=C:/path/docs/balance/raw/2026-10-24-b2
 ##   ... part=det|rates|search|length|waves|boss|maps|towers|cards|daily|risk|whatif   (default: all)
 ##
+## B4 parts: bars (every bar of RULES 14.8 and 15 with pass or fail), boss (per band 6 pack), fair (segments, stacks, packs),
+## forced (the forced stack and pack files), cardbar (the card experiment against its bar), riskfair (the risk replay),
+## lengthb4 (run length groups), detb4 (same seed, same run, refused saves), dailyb4, whatifb4, flags (the phase B job lines) and
+## allstacks (the job lines that force every stack that fits onto seeds 1 to 200: phase C).
+##
 ## It prints markdown to the console. It reads only files runs.gd wrote.
 
 const BUILD_SECONDS: int = 15
@@ -34,9 +39,17 @@ func _initialize() -> void:
 	var parts: Dictionary = {"det": _det, "rates": _rates_tables, "search": _search_tables, "length": _length_tables,
 		"waves": _wave_tables, "boss": _boss_tables, "maps": _map_tables, "towers": _tower_tables, "cards": _card_tables,
 		"daily": _daily_tables, "risk": _risk_tables, "cardvalue": _cardvalue_tables, "whatif": _whatif_tables, "ironshell": _ironshell_tables, "lives": _lives_tables}
-	for part_name: String in parts.keys():
-		if part == "all" or part == part_name:
-			(parts[part_name] as Callable).call()
+	var b4: Dictionary = {"bars": _bars, "boss": _boss_b4, "fair": _fair_b4, "forced": _forced_b4, "cardbar": _cardbar_b4, "riskfair": _riskfair_b4,
+		"lengthb4": _length_b4, "detb4": _det_b4, "dailyb4": _daily_b4, "whatifb4": _whatif_b4, "flags": _flags_b4, "allstacks": _allstacks_b4}
+	if part == "b4":
+		for part_name: String in ["bars", "boss", "fair", "forced", "cardbar", "riskfair", "lengthb4", "detb4", "dailyb4", "whatifb4", "flags"]:
+			(b4[part_name] as Callable).call()
+	elif b4.has(part):
+		(b4[part] as Callable).call()
+	else:
+		for part_name: String in parts.keys():
+			if part == "all" or part == part_name:
+				(parts[part_name] as Callable).call()
 	quit(0)
 
 
@@ -926,3 +939,845 @@ By the Tea Break cards a run picked (all plays, Normal):
 			var list2: Array = _where(_rates[config], func(r: Dictionary) -> bool: return _count(r["picks"], tea) == n if n < 6 else _count(r["picks"], tea) >= 6)
 			if not list2.is_empty():
 				_row([CONFIG_NAMES[config], str(n) if n < 6 else "6 or more", list2.size(), _rate(_won(list2), list2.size())])
+# B4: the bars of RULES 14.8 and 15 (docs/balance/runs-2026-10-25.md).
+
+var _plan_cache: Dictionary = {}
+
+
+func _plan_of(run_seed: int) -> Dictionary:
+	if not _plan_cache.has(run_seed):
+		_plan_cache[run_seed] = _plan(run_seed)
+	return _plan_cache[run_seed]
+
+
+## True when the play ended lost with `wave` or fewer waves started. A play stopped on purpose (stop=N) is not lost.
+func _lost_by(r: Dictionary, wave: int) -> bool:
+	return not bool(r["won"]) and not bool(r.get("stopped", false)) and int(r["reached"]) <= wave
+
+
+## The band 6 pack of a play: the forced one, or the seed's own.
+func _boss_pack_of(r: Dictionary) -> String:
+	if r.has("pack"):
+		return String(r["pack"])
+	return String(_plan_of(int(r["seed"]))["packs"][5])
+
+
+## The pack of a play in a band.
+func _pack_in_band(r: Dictionary, band: int) -> String:
+	if r.has("pack"):
+		for p: Dictionary in _game.run.packs:
+			if String(p["id"]) == String(r["pack"]) and int(p["band"]) == band:
+				return String(r["pack"])
+	return String(_plan_of(int(r["seed"]))["packs"][band - 1])
+
+
+## Strategy id to [wins, plays].
+func _strategy_rates(rows: Array) -> Dictionary:
+	var out: Dictionary = {}
+	for r: Dictionary in rows:
+		var id: String = String(r["strategy"])
+		if not out.has(id):
+			out[id] = [0, 0]
+		out[id][1] = int(out[id][1]) + 1
+		if bool(r["won"]):
+			out[id][0] = int(out[id][0]) + 1
+	return out
+
+
+## [id, wins, plays] of the best strategy.
+func _best_strategy(rows: Array) -> Array:
+	var rates: Dictionary = _strategy_rates(rows)
+	var best: Array = ["", 0, 1]
+	var best_rate: float = -1.0
+	for id: String in rates.keys():
+		var rate: float = float(rates[id][0]) / float(rates[id][1])
+		if rate > best_rate:
+			best_rate = rate
+			best = [id, rates[id][0], rates[id][1]]
+	return best
+
+
+func _rows_of_seeds(rows: Array, first: int, last: int) -> Array:
+	return rows.filter(func(r: Dictionary) -> bool: return int(r["i"]) >= first and int(r["i"]) <= last)
+
+
+## The boss pack table: pack id to {"plays", "started", "won", "boss"}.
+func _boss_pack_stats(rows: Array) -> Dictionary:
+	var out: Dictionary = {}
+	for p: Dictionary in _game.run.packs_of(6):
+		out[String(p["id"])] = {"plays": 0, "started": 0, "won": 0, "boss": String(p["boss"])}
+	for r: Dictionary in rows:
+		var id: String = _boss_pack_of(r)
+		if not out.has(id):
+			continue
+		out[id]["plays"] = int(out[id]["plays"]) + 1
+		if int(r["reached"]) >= 18:
+			out[id]["started"] = int(out[id]["started"]) + 1
+			if bool(r["won"]):
+				out[id]["won"] = int(out[id]["won"]) + 1
+	return out
+
+
+func _boss_b4() -> void:
+	print("\n### The boss: each band 6 pack (Normal, base cards, the 16 named strategies, seeds 1 to 200)\n")
+	var rows: Array = _rates["base_r0"]
+	var stats: Dictionary = _boss_pack_stats(rows)
+	_head(["Pack", "Boss", "Seeds", "Plays", "Started wave 18", "Won of those", "Bar 50% to 75%"])
+	var ids: Array = stats.keys()
+	ids.sort()
+	for id: String in ids:
+		var item: Dictionary = stats[id]
+		var seeds: Dictionary = {}
+		for r: Dictionary in rows:
+			if _boss_pack_of(r) == id:
+				seeds[int(r["i"])] = true
+		var share: float = 100.0 * float(item["won"]) / maxf(float(item["started"]), 1.0)
+		_row([id, item["boss"], seeds.size(), item["plays"], item["started"], _rate(int(item["won"]), int(item["started"])), "met" if share >= 50.0 and share <= 75.0 else "NOT MET"])
+	print("\nBy boss:\n")
+	_head(["Boss", "Plays", "Started wave 18", "Won of those"])
+	for boss: String in ["grumblesack", "ironshell", "moon_moth", "old_tusk"]:
+		var plays: int = 0
+		var started: int = 0
+		var won: int = 0
+		for id: String in ids:
+			if stats[id]["boss"] == boss:
+				plays += int(stats[id]["plays"])
+				started += int(stats[id]["started"])
+				won += int(stats[id]["won"])
+		_row([boss, plays, started, _rate(won, started)])
+	var by_strategy: Dictionary = {}
+	for r: Dictionary in rows:
+		if int(r["reached"]) >= 18:
+			var id2: String = String(r["strategy"])
+			if not by_strategy.has(id2):
+				by_strategy[id2] = [0, 0]
+			by_strategy[id2][1] = int(by_strategy[id2][1]) + 1
+			by_strategy[id2][0] = int(by_strategy[id2][0]) + (1 if bool(r["won"]) else 0)
+	print("\nBy strategy, the runs that started wave 18:\n")
+	_head(["Strategy", "Started wave 18", "Won of those"])
+	for id3: String in by_strategy.keys():
+		_row([id3, by_strategy[id3][1], _rate(int(by_strategy[id3][0]), int(by_strategy[id3][1]))])
+	print()
+
+
+## Fair maps: each segment against all maps, each stack of 4 or more seeds by wave 6, and each pack of bands 1 to 5.
+func _fair_b4() -> void:
+	var rows: Array = _rates["base_r0"]
+	var overall: float = float(_won(rows)) / maxf(float(rows.size()), 1.0)
+	print("\n### Fair maps: each segment against all runs (Normal, base cards, seeds 1 to 200; all runs win %.1f%%)\n" % (100.0 * overall))
+	_head(["Segment", "Seeds", "Plays", "Won", "Times all runs", "Bar 0.75"])
+	for kind: Array in [["top", 0], ["middle", 1], ["bottom", 2]]:
+		var names: Array = []
+		for r: Dictionary in rows:
+			var piece: String = String(r["stack"]).split("|")[int(kind[1])]
+			if not names.has(piece):
+				names.append(piece)
+		names.sort()
+		for piece: String in names:
+			var list: Array = _where(rows, func(r: Dictionary) -> bool: return String(r["stack"]).split("|")[int(kind[1])] == piece)
+			var rate: float = float(_won(list)) / float(list.size())
+			_row([piece, _distinct_seeds(list), list.size(), _pct(_won(list), list.size()), "%.2f" % (rate / overall), "met" if rate / overall >= 0.75 else "NOT MET"])
+	print("\n### Fair maps: stacks that 4 or more seeds use, lost by wave 6 (bar: at most 10%)\n")
+	_head(["Stack (top, middle, bottom)", "Seeds", "Plays", "Won", "Lost by wave 6", "Bar 10%"])
+	var stacks: Array = []
+	for r: Dictionary in rows:
+		if not stacks.has(r["stack"]):
+			stacks.append(r["stack"])
+	stacks.sort()
+	var failing: int = 0
+	var checked: int = 0
+	for stack: String in stacks:
+		var list2: Array = _where(rows, func(r: Dictionary) -> bool: return r["stack"] == stack)
+		var seeds: int = _distinct_seeds(list2)
+		var early: int = list2.filter(func(r: Dictionary) -> bool: return _lost_by(r, 6)).size()
+		var share: float = 100.0 * early / list2.size()
+		if seeds >= 4:
+			checked += 1
+			if share > 10.0:
+				failing += 1
+		_row([stack.replace("|", ", "), seeds, list2.size(), _pct(_won(list2), list2.size()), _pct(early, list2.size()), ("met" if share <= 10.0 else "NOT MET") if seeds >= 4 else "(under 4 seeds)"])
+	var early_all: int = rows.filter(func(r: Dictionary) -> bool: return _lost_by(r, 6)).size()
+	print("\n%d stacks drawn, %d with 4 or more seeds, %d of those above 10%%. All runs: %s lost by wave 6.\n" % [stacks.size(), checked, failing, _pct(early_all, rows.size())])
+	print("\n### Fair packs: bands 1 to 5, the share of runs that reach a pack's first wave and are lost inside it (bar: at most 10%)\n")
+	_head(["Pack", "Seeds", "Runs that reached it", "Lost inside it", "Mean lives lost inside (no early calls)", "Bar 10%"])
+	for band: int in range(1, 6):
+		for pack: Dictionary in _game.run.packs_of(band):
+			var info: Dictionary = _pack_stats(rows, band, String(pack["id"]))
+			var share2: float = 100.0 * int(info["lost"]) / maxf(float(info["reached"]), 1.0)
+			_row([pack["id"], info["seeds"], info["reached"], _pct(int(info["lost"]), int(info["reached"])), ("%.2f" % _mean(info["lives"])) if not (info["lives"] as Array).is_empty() else "-", "met" if share2 <= 10.0 else "NOT MET"])
+	print()
+
+
+## For a pack of a band: seeds that drew it, runs that reached its first wave, runs lost inside it, lives lost in its waves.
+func _pack_stats(rows: Array, band: int, id: String) -> Dictionary:
+	var seeds: Dictionary = {}
+	var reached: int = 0
+	var lost: int = 0
+	var lives_lost: Array = []
+	var first_wave: int = band * 3 - 3
+	for r: Dictionary in rows:
+		if _pack_in_band(r, band) != id:
+			continue
+		seeds[int(r["i"])] = true
+		if int(r["reached"]) <= first_wave:
+			continue
+		reached += 1
+		if not bool(r["won"]) and not bool(r.get("stopped", false)) and int(r["reached"]) <= band * 3:
+			lost += 1
+		if int(r["early"]) == 0 and not bool(r.get("stopped", false)):
+			var sum: int = 0
+			var complete: bool = true
+			for w: int in range(first_wave, band * 3):
+				if (r["lives_at"] as Array).size() <= w:
+					complete = false
+					break
+				sum += int(r["lives_at"][w]) - (int(r["lives_pre"][w + 1]) if (r["lives_pre"] as Array).size() > w + 1 else int(r["lives"]))
+			if complete:
+				lives_lost.append(sum)
+	return {"seeds": seeds.size(), "reached": reached, "lost": lost, "lives": lives_lost}
+
+
+## The forced stack and pack files: every stack or pack that failed a check, played on seeds 1 to 200.
+func _forced_b4() -> void:
+	var stack_rows: Array = _load_rows("force_stack_")
+	if not stack_rows.is_empty():
+		print("\n### Forced stacks: each failing stack on every seed from 1 to 200 (16 strategies a seed, stopped when wave 6 was cleared)\n")
+		_head(["Stack", "Seeds", "Plays", "Lost by wave 6", "Natural: seeds, plays, lost by wave 6", "Bar 10%"])
+		var stacks: Array = []
+		for r: Dictionary in stack_rows:
+			if not stacks.has(r["stack"]):
+				stacks.append(r["stack"])
+		stacks.sort()
+		for stack: String in stacks:
+			var list: Array = _where(stack_rows, func(r: Dictionary) -> bool: return r["stack"] == stack)
+			var early: int = list.filter(func(r: Dictionary) -> bool: return _lost_by(r, 6)).size()
+			var natural: Array = _where(_rates["base_r0"], func(r: Dictionary) -> bool: return r["stack"] == stack)
+			var natural_early: int = natural.filter(func(r: Dictionary) -> bool: return _lost_by(r, 6)).size()
+			_row([stack.replace("|", ", "), _distinct_seeds(list), list.size(), _pct(early, list.size()),
+				"%d, %d, %s" % [_distinct_seeds(natural), natural.size(), _pct(natural_early, natural.size())], "met" if 100.0 * early / list.size() <= 10.0 else "NOT MET (a wall)"])
+	var pack_rows: Array = _load_rows("force_pack_")
+	if not pack_rows.is_empty():
+		print("\n### Forced packs: each failing pack on every seed from 1 to 200 (16 strategies a seed)\n")
+		_head(["Pack", "Seeds", "Plays", "Runs that reached its first wave", "Lost inside it", "Started wave 18, won of those (band 6)", "Natural: runs that reached it, lost inside", "Bar"])
+		var ids: Array = []
+		for r: Dictionary in pack_rows:
+			if not ids.has(r["pack"]):
+				ids.append(r["pack"])
+		ids.sort()
+		for id: String in ids:
+			var list2: Array = _where(pack_rows, func(r: Dictionary) -> bool: return r["pack"] == id)
+			var band: int = 0
+			for p: Dictionary in _game.run.packs:
+				if String(p["id"]) == id:
+					band = int(p["band"])
+			var info: Dictionary = _pack_stats(list2, band, id)
+			var natural_info: Dictionary = _pack_stats(_rates["base_r0"], band, id)
+			if band == 6:
+				var boss: Dictionary = _boss_pack_stats(list2)[id]
+				var share: float = 100.0 * int(boss["won"]) / maxf(float(boss["started"]), 1.0)
+				var nat: Dictionary = _boss_pack_stats(_rates["base_r0"])[id]
+				_row([id, _distinct_seeds(list2), list2.size(), "-", "-", "%d, %s" % [boss["started"], _rate(int(boss["won"]), int(boss["started"]))],
+					"%d started, %s" % [nat["started"], _pct(int(nat["won"]), int(nat["started"]))], "met (50% to 75%)" if share >= 50.0 and share <= 75.0 else "NOT MET"])
+			else:
+				var share2: float = 100.0 * int(info["lost"]) / maxf(float(info["reached"]), 1.0)
+				_row([id, _distinct_seeds(list2), list2.size(), info["reached"], _pct(int(info["lost"]), int(info["reached"])), "-",
+					"%d, %s" % [natural_info["reached"], _pct(int(natural_info["lost"]), int(natural_info["reached"]))], "met (10%)" if share2 <= 10.0 else "NOT MET (a wall)"])
+	print()
+
+
+## Card id to the list of its gains (1 or 0 less the draft's mean) in a pool's card experiment.
+func _card_gains(rows: Array) -> Dictionary:
+	var gains: Dictionary = {}
+	for r: Dictionary in rows:
+		var outcomes: Array = r["outcomes"]
+		var mean: float = 0.0
+		for o: Dictionary in outcomes:
+			mean += 1.0 if bool(o["won"]) else 0.0
+		mean /= outcomes.size()
+		for o: Dictionary in outcomes:
+			var id: String = o["card"]
+			if not gains.has(id):
+				gains[id] = []
+			(gains[id] as Array).append((1.0 if bool(o["won"]) else 0.0) - mean)
+	return gains
+
+
+func _se(list: Array) -> float:
+	var m: float = _mean(list)
+	var variance: float = 0.0
+	for g: float in list:
+		variance += (g - m) * (g - m)
+	return sqrt(variance / maxf(float(list.size() - 1), 1.0) / list.size())
+
+
+## The card experiment against its bar: no perk, gate, economy or risk card above +5 points.
+func _cardbar_b4() -> void:
+	for pool: String in ["base", "all"]:
+		var rows: Array = _load_rows("cardvalue_%s_" % pool)
+		if rows.is_empty():
+			continue
+		var gains: Dictionary = _card_gains(rows)
+		print("\n### The card experiment, %s: %d drafts, seeds 1 to 200\n" % ["base cards" if pool == "base" else "every card", rows.size()])
+		print("Win gain is in points of win rate against the average of the 3 offered cards; SE is the standard error of that mean. Tower cards are reported and not held to the 5 point bar.\n")
+		_head(["Card", "Kind", "Offered", "Win gain (points)", "SE", "Bar +5"])
+		var ids: Array = gains.keys()
+		ids.sort_custom(func(a: String, b: String) -> bool: return _mean(gains[a]) > _mean(gains[b]))
+		for id: String in ids:
+			var list: Array = gains[id]
+			var m: float = _mean(list)
+			var kind: String = String(_game.run.card(StringName(id)).get("kind", ""))
+			var verdict: String = "reported (tower card)" if kind == "tower" else ("NOT MET" if m * 100.0 > 5.0 else "met")
+			_row([id, kind, list.size(), "%+.1f" % (100.0 * m), "%.1f" % (100.0 * _se(list)), verdict])
+	print()
+
+
+const RISK_CARDS: Array[String] = ["crowded_night", "thick_hides", "hurry_night", "gateless_night", "flock", "moonlit_wager", "crasher_escort", "pip_parade"]
+
+
+## Per risk card, extra lives and gold against the same wave with no card: {"early": [lives, gold, pairs], "late": [...]}, the sums.
+func _risk_pairs(rows: Array) -> Dictionary:
+	var none: Dictionary = {}
+	for r: Dictionary in rows:
+		if r["card"] == "none" and not r.has("bad_branch"):
+			none["%d:%d" % [int(r["i"]), int(r["wave"])]] = r
+	var out: Dictionary = {}
+	for card: String in RISK_CARDS:
+		var early: Array = [0.0, 0.0, 0]
+		var late: Array = [0.0, 0.0, 0]
+		for r: Dictionary in rows:
+			if r["card"] != card or r.has("bad_branch"):
+				continue
+			var key: String = "%d:%d" % [int(r["i"]), int(r["wave"])]
+			if not none.has(key):
+				continue
+			var base: Dictionary = none[key]
+			var bucket: Array = early if int(r["wave"]) <= 7 else late
+			bucket[0] = float(bucket[0]) + float(r["lives_lost"]) - float(base["lives_lost"])
+			bucket[1] = float(bucket[1]) + float(r["gold_gain"]) - float(base["gold_gain"])
+			bucket[2] = int(bucket[2]) + 1
+		out[card] = {"early": early, "late": late}
+	return out
+
+
+## {"per_life": card to gold a life in waves 2 to 8, "middle": the median of them, "outside": cards outside half to twice the middle}
+func _risk_summary(rows: Array) -> Dictionary:
+	var pairs: Dictionary = _risk_pairs(rows)
+	var per_life: Dictionary = {}
+	for card: String in RISK_CARDS:
+		var e: Array = pairs[card]["early"]
+		per_life[card] = (float(e[1]) / maxf(float(e[2]), 1.0)) / maxf(float(e[0]) / maxf(float(e[2]), 1.0), 0.001)
+	var values: Array = per_life.values()
+	values.sort()
+	var middle: float = float(values[values.size() / 2])
+	if values.size() % 2 == 0:
+		middle = (float(values[values.size() / 2 - 1]) + float(values[values.size() / 2])) / 2.0
+	var outside: Array = []
+	for card: String in RISK_CARDS:
+		var v: float = float(per_life[card])
+		if v < middle / 2.0 or v > middle * 2.0:
+			outside.append(card)
+	return {"per_life": per_life, "middle": middle, "outside": outside}
+
+
+## The risk replay: each risk card against the same wave with no risk card, waves 2 to 8, and the gold for each life.
+func _riskfair_b4() -> void:
+	var data: Dictionary = _read("risk_economy_wide.json")
+	if data.is_empty():
+		return
+	var rows: Array = data["rows"]
+	print("\n### Risk cards trade fairly: the risk replay (%s on seeds %d to %d, every card, each of waves 2 to 17 played again with each risk card)\n" % [data["strategy"], int(data["first"]), int(data["first"]) + int(data["count"]) - 1])
+	print("Extra lives lost and extra gold gained against the same wave with no risk card, same towers, no more buying. Waves 2 to 8 are the waves where the bar is read; waves 9 to 17 are shown for the shape.\n")
+	_head(["Card", "Waves 2 to 8: pairs", "Extra lives", "Extra gold", "Gold a life", "Waves 9 to 17: extra lives", "Extra gold", "Gold a life"])
+	var pairs: Dictionary = _risk_pairs(rows)
+	var summary: Dictionary = _risk_summary(rows)
+	for card: String in RISK_CARDS:
+		var e: Array = pairs[card]["early"]
+		var l: Array = pairs[card]["late"]
+		var n_e: float = maxf(float(e[2]), 1.0)
+		var n_l: float = maxf(float(l[2]), 1.0)
+		_row([card, e[2], "%+.2f" % (float(e[0]) / n_e), "%+.0f" % (float(e[1]) / n_e), "%.0f" % summary["per_life"][card], "%+.2f" % (float(l[0]) / n_l), "%+.0f" % (float(l[1]) / n_l),
+			"%.0f" % ((float(l[1]) / n_l) / maxf(float(l[0]) / n_l, 0.001))])
+	var middle: float = summary["middle"]
+	print("\nMiddle value of the %d risk cards (the median; an even count takes the mean of the two in the middle): %.1f gold a life. Bar: from %.1f to %.1f. Gateless Night is reported, not held to it.\n" % [RISK_CARDS.size(), middle, middle / 2.0, middle * 2.0])
+	var outside: Array = summary["outside"]
+	print("Outside the range: %s.\n" % (", ".join(PackedStringArray(outside)) if not outside.is_empty() else "none"))
+
+
+## Run length of won runs, grouped by the 12 to 16 minute bar.
+func _length_b4() -> void:
+	print("\n### Run length at 1x (wave time plus 15 s for each build phase), won runs\n")
+	_head(["Setting", "Wins", "Mean min", "10th / 50th / 90th percentile", "Under 12", "12 to 16", "16 to 20", "Over 20", "Bar: mean 12 to 16"])
+	for config: String in CONFIGS:
+		var rows: Array = _where(_rates[config], func(r: Dictionary) -> bool: return bool(r["won"]))
+		if rows.is_empty():
+			continue
+		var mins: Array = rows.map(func(r: Dictionary) -> float: return _minutes(r))
+		var mean: float = _mean(mins)
+		_row([CONFIG_NAMES[config], rows.size(), "%.1f" % mean, "%.1f / %.1f / %.1f" % [_quant(mins, 0.1), _quant(mins, 0.5), _quant(mins, 0.9)],
+			_pct(mins.filter(func(m: float) -> bool: return m < 12.0).size(), mins.size()), _pct(mins.filter(func(m: float) -> bool: return m >= 12.0 and m < 16.0).size(), mins.size()),
+			_pct(mins.filter(func(m: float) -> bool: return m >= 16.0 and m < 20.0).size(), mins.size()), _pct(mins.filter(func(m: float) -> bool: return m >= 20.0).size(), mins.size()),
+			("met" if mean >= 12.0 and mean <= 16.0 else "NOT MET") if config == "base_r0" else "-"])
+	print("\nNormal, base cards, won runs by early calls:\n")
+	_head(["Kind", "Wins", "Mean min", "Wave time only, mean min", "Build phases (mean)", "Early calls (mean)", "Mean min at 30 s a build phase"])
+	for group: Array in [["no early calls", false], ["early calls", true]]:
+		var rows2: Array = _where(_rates["base_r0"], func(r: Dictionary) -> bool: return bool(r["won"]) and String(r["strategy"]).ends_with("_early") == bool(group[1]))
+		if rows2.is_empty():
+			continue
+		_row([group[0], rows2.size(), "%.1f" % _mean(rows2.map(func(r: Dictionary) -> float: return _minutes(r))), "%.1f" % _mean(rows2.map(func(r: Dictionary) -> float: return _wave_minutes(r))),
+			"%.1f" % _mean(rows2.map(func(r: Dictionary) -> float: return float(r["builds"]))), "%.1f" % _mean(rows2.map(func(r: Dictionary) -> float: return float(r["early"]))),
+			"%.1f" % _mean(rows2.map(func(r: Dictionary) -> float: return (float(r["ticks"]) / 20.0 + 30.0 * int(r["builds"])) / 60.0))])
+	print()
+
+
+## Same seed, same run, with the save checks.
+func _det_b4() -> void:
+	print("\n### Same seed, same run (with the save checks of RunSession.from_data)\n")
+	var files: Array = [["det.json", "Seeds 1 to 50, first 50 days"], ["det_more.json", "Seeds 51 to 200, days 50 to 149"]]
+	_head(["Set", "Runs", "Same map twice", "Played twice equal", "Save in a wave equal", "Save with a draft open equal", "Saves really made (wave, draft)", "Dailies", "Played twice equal", "Wave save equal", "Draft save equal", "Saves refused by a load"])
+	var refused: Array = []
+	for item: Array in files:
+		var d: Dictionary = _read(String(item[0]))
+		if d.is_empty():
+			continue
+		var rows: Array = d["rows"]
+		var days: Array = d["daily_rows"]
+		var counts: Dictionary = {}
+		for key: String in ["map_equal", "again_equal", "wave_restore_equal", "draft_restore_equal", "wave_restored", "draft_restored"]:
+			counts[key] = rows.filter(func(r: Dictionary) -> bool: return bool(r.get(key, false))).size()
+		var day_counts: Dictionary = {}
+		for key: String in ["again_equal", "wave_restore_equal", "draft_restore_equal"]:
+			day_counts[key] = days.filter(func(r: Dictionary) -> bool: return bool(r.get(key, false))).size()
+		var refusals: int = 0
+		var both: Array = rows.duplicate()
+		both.append_array(days)
+		for r: Dictionary in both:
+			for key: String in ["wave_refused", "draft_refused"]:
+				if String(r.get(key, "")) != "":
+					refusals += 1
+					refused.append("%s %s (%s)" % [str(r.get("i", r.get("day", ""))), r.get("strategy", ""), r[key]])
+		_row([item[1], rows.size(), counts["map_equal"], counts["again_equal"], counts["wave_restore_equal"], counts["draft_restore_equal"], "%d, %d" % [counts["wave_restored"], counts["draft_restored"]],
+			days.size(), day_counts["again_equal"], day_counts["wave_restore_equal"], day_counts["draft_restore_equal"], refusals])
+	var first: Dictionary = _read("det.json")
+	var again: Dictionary = _read("det_again.json")
+	if not first.is_empty():
+		print("\nFailures in det.json: %s. Failures in det_more.json: %s. Chain hash of the first process %d, of a second process %s: %s." % [str(first["failures"]), str(_read("det_more.json").get("failures", "missing")), int(first["chain_hash"]),
+			("%d" % int(again["chain_hash"])) if again.has("chain_hash") else "missing", "equal" if again.has("chain_hash") and int(again["chain_hash"]) == int(first["chain_hash"]) else "NOT EQUAL"])
+	print("Saves refused by a load: %s.\n" % (", ".join(PackedStringArray(refused)) if not refused.is_empty() else "none"))
+	var wins: int = 0
+	var total: int = 0
+	for item2: Array in files:
+		for r: Dictionary in _read(String(item2[0])).get("rows", []):
+			total += 1
+			wins += 1 if bool(r["won"]) else 0
+	print("%d of the %d runs were wins, so the checks cover wins and losses.\n" % [wins, total])
+
+
+## The daily against RULES 15's bar.
+func _daily_b4() -> void:
+	var days: Array = _load_rows("daily_")
+	if days.is_empty():
+		print("(no daily files)")
+		return
+	print("\n### The daily: %d days from %s (RULES 15)\n" % [days.size(), days[0]["day"]])
+	var named: int = 0
+	var extra_won: int = 0
+	var unwon: Array = []
+	var tried: Array = []
+	var flags: Array = []
+	for d: Dictionary in days:
+		var won_named: bool = false
+		for p: Dictionary in d["plays"]:
+			won_named = won_named or bool(p["won"])
+		var any: bool = won_named
+		if won_named:
+			named += 1
+		elif d.has("extra"):
+			tried.append(int(d["extra"]["tried"]))
+			if bool(d["extra"]["won"]):
+				extra_won += 1
+				any = true
+			else:
+				unwon.append(d)
+		else:
+			unwon.append(d)
+		flags.append(any)
+	var longest_lost: int = 0
+	var run_lost: int = 0
+	for any_day: bool in flags:
+		run_lost = 0 if any_day else run_lost + 1
+		longest_lost = maxi(longest_lost, run_lost)
+	var named_share: float = 100.0 * named / days.size()
+	var all_share: float = 100.0 * (named + extra_won) / days.size()
+	_head(["Measure", "Days", "Bar"])
+	_row(["Won by at least one of the 16 named strategies", _rate(named, days.size()), "at least 60%: " + ("met" if named_share >= 60.0 else "NOT MET")])
+	_row(["Not won by a named strategy, won by up to 400 random strategies", _rate(extra_won, days.size() - named), ""])
+	_row(["Won by some strategy in all", _rate(named + extra_won, days.size()), "at least 98%: " + ("met" if all_share >= 98.0 else "NOT MET")])
+	_row(["Not won by any strategy tried", _rate(unwon.size(), days.size()), ""])
+	_row(["Longest run of days in a row that none won", longest_lost, "no two in a row: " + ("met" if longest_lost <= 1 else "NOT MET")])
+	if not tried.is_empty():
+		_row(["Random strategies tried on a day no named strategy won (median / 90th percentile / most)", "%d / %d / %d" % [_quant(tried, 0.5), _quant(tried, 0.9), int(tried.max())], ""])
+	print("\nPer strategy, the share of the %d days won:\n" % days.size())
+	_head(["Strategy", "Days won"])
+	var ids: Array = []
+	for p: Dictionary in days[0]["plays"]:
+		ids.append(p["strategy"])
+	for id: String in ids:
+		var won: int = 0
+		for d: Dictionary in days:
+			for p: Dictionary in d["plays"]:
+				if p["strategy"] == id and bool(p["won"]):
+					won += 1
+		_row([id, _rate(won, days.size())])
+	var every: Array = []
+	for d: Dictionary in days:
+		for p: Dictionary in d["plays"]:
+			every.append(p)
+	_row(["**All 16**", _rate(_won(every), every.size())])
+	print("\nBy boss:\n")
+	_head(["Boss", "Days", "Won by a named strategy", "Won by any tried", "Share of the 16 plays that won"])
+	for boss: String in ["grumblesack", "ironshell", "moon_moth", "old_tusk"]:
+		var list: Array = _where(days, func(d: Dictionary) -> bool: return d["boss"] == boss)
+		var any_named: int = 0
+		var any_all: int = 0
+		var plays: Array = []
+		for d: Dictionary in list:
+			var won_named: bool = false
+			for p: Dictionary in d["plays"]:
+				won_named = won_named or bool(p["won"])
+				plays.append(p)
+			any_named += 1 if won_named else 0
+			any_all += 1 if (won_named or (d.has("extra") and bool(d["extra"]["won"]))) else 0
+		_row([boss, list.size(), _rate(any_named, list.size()), _rate(any_all, list.size()), _pct(_won(plays), plays.size())])
+	var hard: Array = days.filter(func(d: Dictionary) -> bool: return d.has("extra"))
+	if not hard.is_empty():
+		print("\nDays no named strategy won, and what the random strategies did (%d days):\n" % hard.size())
+		_head(["Day", "Stack", "Boss", "Most waves cleared by a named strategy", "Random strategies tried", "Won", "Lives left if won"])
+		for d: Dictionary in hard:
+			var best: int = 0
+			for p: Dictionary in d["plays"]:
+				best = maxi(best, int(p["cleared"]))
+			var e: Dictionary = d["extra"]
+			_row([d["day"], String(d["stack"]).replace("|", ", "), d["boss"], best, int(e["tried"]), "yes" if bool(e["won"]) else "no (best %d waves)" % int(e["cleared"]), int(e["lives"]) if bool(e["won"]) else "-"])
+	print()
+
+
+## What-ifs on the bots and on the pool, one row for each set of chunks, against the main run on the same seeds.
+func _whatif_b4() -> void:
+	var files: Array[String] = _files("whatif_")
+	if files.is_empty():
+		return
+	var groups: Dictionary = {}
+	var order: Array = []
+	for file: String in files:
+		var key: String = file.trim_suffix(".json")
+		key = key.substr(0, key.rfind("_"))
+		if not groups.has(key):
+			groups[key] = []
+			order.append(key)
+		(groups[key] as Array).append(file)
+	print("
+### What-ifs on the bots and the pool (Normal; the main run's numbers are for the same seeds)
+")
+	_head(["What-if", "Bots", "Pool", "Seeds", "Plays", "Won (16 together)", "Main run, same seeds", "Difference (points)", "Best strategy", "Main run", "Started wave 18, won of those", "Main run", "Lost by wave 6", "Main run"])
+	for key: String in order:
+		var rows: Array = []
+		var main: Array = []
+		var data: Dictionary = {}
+		var low: int = 100000
+		var high: int = 0
+		for file: String in groups[key]:
+			data = _read(file)
+			if (data["rows"] as Array).is_empty():
+				continue
+			rows.append_array(data["rows"])
+			var config: String = "%s_r%d" % ["all" if data["pool"] == "all" else "base", 1 if bool(data["relaxed"]) else 0]
+			var first: int = int(data["first"])
+			var last: int = first + int(data["count"]) - 1
+			low = mini(low, first)
+			high = maxi(high, last)
+			main.append_array(_rows_of_seeds(_rates[config], first, last))
+		if rows.is_empty():
+			continue
+		var bots: Dictionary = data["bots"]
+		var label: String = "Bakery from wave %d, perks %s%s" % [int(bots["bakery_from"]), ["blind", "fit", "all sidegrades passed"][int(bots["perk_fit"])], ", boss aim" if int(bots["boss_aim"]) == 1 else ""]
+		var best: Array = _best_strategy(rows)
+		var best_main: Array = _best_strategy(main)
+		var boss: Array = rows.filter(func(r: Dictionary) -> bool: return int(r["reached"]) >= 18)
+		var boss_main: Array = main.filter(func(r: Dictionary) -> bool: return int(r["reached"]) >= 18)
+		var diff: float = 100.0 * _won(rows) / rows.size() - 100.0 * _won(main) / main.size()
+		_row([key.trim_prefix("whatif_"), label, data["pool"], "%d to %d" % [low, high], rows.size(), _rate(_won(rows), rows.size()), _rate(_won(main), main.size()), "%+.1f" % diff,
+			"%s %s" % [best[0], _pct(int(best[1]), int(best[2]))], "%s %s" % [best_main[0], _pct(int(best_main[1]), int(best_main[2]))],
+			"%d, %s" % [boss.size(), _pct(_won(boss), boss.size())], "%d, %s" % [boss_main.size(), _pct(_won(boss_main), boss_main.size())],
+			_pct(rows.filter(func(r: Dictionary) -> bool: return _lost_by(r, 6)).size(), rows.size()), _pct(main.filter(func(r: Dictionary) -> bool: return _lost_by(r, 6)).size(), main.size())])
+	print()
+
+
+## Phase B job lines: what to force (stacks and packs that fail a check), the seeds the search must try, and two fixed stacks.
+func _flags_b4() -> void:
+	var rows: Array = _rates["base_r0"]
+	var out_dir: String = "OUTDIR"
+	var lines: Array = []
+	# Seeds 1 to 50 that no named strategy won.
+	var won_seed: Dictionary = {}
+	for r: Dictionary in rows:
+		if int(r["i"]) <= 50:
+			won_seed[int(r["i"])] = bool(won_seed.get(int(r["i"]), false)) or bool(r["won"])
+	var search: Array = []
+	for i: int in range(1, 51):
+		if not bool(won_seed.get(i, false)):
+			search.append(str(i))
+	if not search.is_empty():
+		lines.append("mode=search list=%s n=100 pool=base relaxed=0 out=%s/search_base_r0_list.json" % [",".join(PackedStringArray(search)), out_dir])
+	# Stacks of 4 or more seeds above 10% lost by wave 6, and the two mid_merge stacks of 3.4a.
+	var stacks: Array = []
+	for r: Dictionary in rows:
+		if not stacks.has(r["stack"]):
+			stacks.append(r["stack"])
+	stacks.sort()
+	var forced: Array = ["top_fork|mid_merge|bot_square", "top_twin|mid_merge|bot_square"]
+	for stack: String in stacks:
+		var list: Array = _where(rows, func(r: Dictionary) -> bool: return r["stack"] == stack)
+		if _distinct_seeds(list) >= 4 and 100.0 * list.filter(func(r: Dictionary) -> bool: return _lost_by(r, 6)).size() / list.size() > 10.0 and not forced.has(stack):
+			forced.append(stack)
+	for stack: String in forced:
+		for first: int in [1, 51, 101, 151]:
+			lines.append("mode=rates first=%d count=50 pool=base relaxed=0 stack=%s stop=6 out=%s/force_stack_%s_%d.json" % [first, stack.replace("|", ","), out_dir, stack.replace("|", "_"), first])
+	# Packs of bands 1 to 5 above 10% lost inside, and band 6 packs outside 50% to 75%.
+	for band: int in range(1, 6):
+		for pack: Dictionary in _game.run.packs_of(band):
+			var info: Dictionary = _pack_stats(rows, band, String(pack["id"]))
+			if 100.0 * int(info["lost"]) / maxf(float(info["reached"]), 1.0) > 10.0:
+				for first: int in [1, 51, 101, 151]:
+					lines.append("mode=rates first=%d count=50 pool=base relaxed=0 pack=%s stop=%d out=%s/force_pack_%s_%d.json" % [first, pack["id"], band * 3, out_dir, pack["id"], first])
+	var boss: Dictionary = _boss_pack_stats(rows)
+	for id: String in boss.keys():
+		var share: float = 100.0 * int(boss[id]["won"]) / maxf(float(boss[id]["started"]), 1.0)
+		if share < 50.0 or share > 75.0:
+			for first: int in [1, 51, 101, 151]:
+				lines.append("mode=rates first=%d count=50 pool=base relaxed=0 pack=%s out=%s/force_pack_%s_%d.json" % [first, id, out_dir, id, first])
+	for line: String in lines:
+		print(line)
+
+
+## Every bar of RULES 14.8 and 15 in one table, with the numbers read from the files.
+func _bars() -> void:
+	print("\n### Every bar of RULES 14.8 and 15\n")
+	_head(["Check", "Bar", "Result", "Met"])
+	var base: Array = _rates["base_r0"]
+	var relaxed: Array = _rates["base_r1"]
+	# Every run can be won, seeds 1 to 50.
+	var won_seed: Dictionary = {}
+	for r: Dictionary in base:
+		if int(r["i"]) <= 50:
+			won_seed[int(r["i"])] = bool(won_seed.get(int(r["i"]), false)) or bool(r["won"])
+	var named_seeds: int = 0
+	for i: int in range(1, 51):
+		named_seeds += 1 if bool(won_seed.get(i, false)) else 0
+	var search_won: int = 0
+	var search_tried: int = 0
+	var search_miss: Array = []
+	for r: Dictionary in _load_rows("search_base_r0_"):
+		search_tried += 1
+		if bool(r["best_won"]):
+			search_won += 1
+		else:
+			search_miss.append(int(r["i"]))
+	_row(["Every run can be won", "seeds 1 to 50: a named strategy or one of 100 random", "%d of 50 seeds won by a named strategy; random strategies won %d of the other %d (seeds with no win: %s)" % [named_seeds, search_won, search_tried, str(search_miss) if not search_miss.is_empty() else "none"],
+		"met" if named_seeds + search_won >= 50 else "NOT MET"])
+	# Normal.
+	var best: Array = _best_strategy(base)
+	var all_rate: float = 100.0 * _won(base) / maxf(float(base.size()), 1.0)
+	var best_rate: float = 100.0 * int(best[1]) / maxf(float(best[2]), 1.0)
+	_row(["Normal, best strategy", "55% to 75%", "%s %s" % [best[0], _rate(int(best[1]), int(best[2]))], "met" if best_rate >= 55.0 and best_rate <= 75.0 else "NOT MET"])
+	_row(["Normal, the 16 together", "35% to 55%", _rate(_won(base), base.size()), "met" if all_rate >= 35.0 and all_rate <= 55.0 else "NOT MET"])
+	var best_r: Array = _best_strategy(relaxed)
+	var best_r_rate: float = 100.0 * int(best_r[1]) / maxf(float(best_r[2]), 1.0)
+	var all_r_rate: float = 100.0 * _won(relaxed) / maxf(float(relaxed.size()), 1.0)
+	_row(["Relaxed, best strategy", "at least 90%", "%s %s" % [best_r[0], _rate(int(best_r[1]), int(best_r[2]))], "met" if best_r_rate >= 90.0 else "NOT MET"])
+	_row(["Relaxed, the 16 together", "at least 80%", _rate(_won(relaxed), relaxed.size()), "met" if all_r_rate >= 80.0 else "NOT MET"])
+	# Every card unlocked.
+	for item: Array in [["Every card unlocked, Normal", "base_r0", "all_r0"], ["Every card unlocked, Relaxed", "base_r1", "all_r1"]]:
+		var a: Array = _rates[item[1]]
+		var b: Array = _rates[item[2]]
+		if b.is_empty():
+			continue
+		var diff: float = 100.0 * _won(b) / b.size() - 100.0 * _won(a) / a.size()
+		_row([item[0], "within 5 points of no unlocks", "%+.1f points (%s against %s)" % [diff, _pct(_won(b), b.size()), _pct(_won(a), a.size())], "met" if absf(diff) <= 5.0 else "NOT MET"])
+	# The boss.
+	var boss: Dictionary = _boss_pack_stats(base)
+	var low: String = ""
+	var high: String = ""
+	var low_v: float = 1000.0
+	var high_v: float = -1.0
+	var failing: Array = []
+	for id: String in boss.keys():
+		var share: float = 100.0 * int(boss[id]["won"]) / maxf(float(boss[id]["started"]), 1.0)
+		if share < low_v:
+			low_v = share
+			low = id
+		if share > high_v:
+			high_v = share
+			high = id
+		if share < 50.0 or share > 75.0:
+			failing.append("%s %.1f%%" % [id, share])
+	_row(["The boss, each band 6 pack", "50% to 75% of runs that start wave 18 win", "lowest %s %.1f%%, highest %s %.1f%%" % [low, low_v, high, high_v], "met" if failing.is_empty() else "NOT MET: " + ", ".join(PackedStringArray(failing))])
+	# Fair maps.
+	var overall: float = float(_won(base)) / maxf(float(base.size()), 1.0)
+	var worst_name: String = ""
+	var worst_ratio: float = 100.0
+	var below: Array = []
+	for kind: int in 3:
+		var names: Array = []
+		for r: Dictionary in base:
+			var piece: String = String(r["stack"]).split("|")[kind]
+			if not names.has(piece):
+				names.append(piece)
+		for piece: String in names:
+			var list: Array = _where(base, func(r: Dictionary) -> bool: return String(r["stack"]).split("|")[kind] == piece)
+			var ratio: float = float(_won(list)) / float(list.size()) / overall
+			if ratio < worst_ratio:
+				worst_ratio = ratio
+				worst_name = piece
+			if ratio < 0.75:
+				below.append("%s %.2f" % [piece, ratio])
+	_row(["Fair maps, each segment", "at least 0.75 times all runs", "lowest %s %.2f times" % [worst_name, worst_ratio], "met" if below.is_empty() else "NOT MET: " + ", ".join(PackedStringArray(below))])
+	var stacks: Array = []
+	for r: Dictionary in base:
+		if not stacks.has(r["stack"]):
+			stacks.append(r["stack"])
+	var stack_fail: Array = []
+	var stack_worst: String = ""
+	var stack_worst_v: float = -1.0
+	for stack: String in stacks:
+		var list2: Array = _where(base, func(r: Dictionary) -> bool: return r["stack"] == stack)
+		if _distinct_seeds(list2) < 4:
+			continue
+		var share2: float = 100.0 * list2.filter(func(r: Dictionary) -> bool: return _lost_by(r, 6)).size() / list2.size()
+		if share2 > stack_worst_v:
+			stack_worst_v = share2
+			stack_worst = stack
+		if share2 > 10.0:
+			stack_fail.append("%s %.1f%%" % [stack.replace("|", ", "), share2])
+	var forced_rows: Array = _load_rows("force_stack_")
+	var forced_fail: Array = []
+	var forced_stacks: Array = []
+	var forced_worst: String = ""
+	var forced_worst_v: float = -1.0
+	for r: Dictionary in forced_rows:
+		if not forced_stacks.has(r["stack"]):
+			forced_stacks.append(r["stack"])
+	for stack: String in forced_stacks:
+		var list3: Array = _where(forced_rows, func(r: Dictionary) -> bool: return r["stack"] == stack)
+		var share4: float = 100.0 * list3.filter(func(r: Dictionary) -> bool: return _lost_by(r, 6)).size() / list3.size()
+		if share4 > forced_worst_v:
+			forced_worst_v = share4
+			forced_worst = stack
+		if share4 > 10.0:
+			forced_fail.append("%s %.1f%%" % [stack.replace("|", ", "), share4])
+	_row(["Fair maps, each stack of 4 or more seeds, natural seeds", "at most 10% lost by wave 6", "worst %s %.1f%%; %d stacks above 10%%" % [stack_worst.replace("|", ", "), stack_worst_v, stack_fail.size()],
+		"met" if stack_fail.is_empty() else "NOT MET: " + "; ".join(PackedStringArray(stack_fail))])
+	if not forced_stacks.is_empty():
+		_row(["Fair maps, every stack forced onto seeds 1 to 200 (%d stacks, %d plays each)" % [forced_stacks.size(), _where(forced_rows, func(r: Dictionary) -> bool: return r["stack"] == forced_stacks[0]).size()], "at most 10% lost by wave 6", "worst %s %.1f%%; %d stacks above 10%%" % [forced_worst.replace("|", ", "), forced_worst_v, forced_fail.size()],
+			"met" if forced_fail.is_empty() else "NOT MET: " + "; ".join(PackedStringArray(forced_fail))])
+	# Fair packs.
+	var pack_fail: Array = []
+	var pack_worst: String = ""
+	var pack_worst_v: float = -1.0
+	for band: int in range(1, 6):
+		for pack: Dictionary in _game.run.packs_of(band):
+			var info: Dictionary = _pack_stats(base, band, String(pack["id"]))
+			var share3: float = 100.0 * int(info["lost"]) / maxf(float(info["reached"]), 1.0)
+			if share3 > pack_worst_v:
+				pack_worst_v = share3
+				pack_worst = String(pack["id"])
+			if share3 > 10.0:
+				pack_fail.append("%s %.1f%%" % [pack["id"], share3])
+	_row(["Fair packs, bands 1 to 5", "at most 10% of runs that reach a pack lost inside it", "worst %s %.1f%%" % [pack_worst, pack_worst_v], "met" if pack_fail.is_empty() else "NOT MET on natural seeds: " + ", ".join(PackedStringArray(pack_fail)) + " (forced: see Forced packs)"])
+	# No card decides a run.
+	for pool: String in ["base", "all"]:
+		var rows: Array = _load_rows("cardvalue_%s_" % pool)
+		if rows.is_empty():
+			continue
+		var gains: Dictionary = _card_gains(rows)
+		var top_card: String = ""
+		var top_gain: float = -100.0
+		var over: Array = []
+		var tower_top: String = ""
+		var tower_gain: float = -100.0
+		for id: String in gains.keys():
+			var m: float = 100.0 * _mean(gains[id])
+			var kind: String = String(_game.run.card(StringName(id)).get("kind", ""))
+			if kind == "tower":
+				if m > tower_gain:
+					tower_gain = m
+					tower_top = id
+				continue
+			if m > top_gain:
+				top_gain = m
+				top_card = id
+			if m > 5.0:
+				over.append("%s %+.1f (SE %.1f)" % [id, m, 100.0 * _se(gains[id])])
+		_row(["No card decides a run (%s cards, %d drafts)" % ["base" if pool == "base" else "every", rows.size()], "no perk, gate, economy or risk card above +5 points",
+			"best %s %+.1f (SE %.1f); best tower card %s %+.1f (reported)" % [top_card, top_gain, 100.0 * _se(gains[top_card]), tower_top, tower_gain], "met" if over.is_empty() else "NOT MET: " + ", ".join(PackedStringArray(over))])
+	# Risk cards.
+	var risk_data: Dictionary = _read("risk_economy_wide.json")
+	if not risk_data.is_empty():
+		var summary: Dictionary = _risk_summary(risk_data["rows"])
+		var lo: float = 100000.0
+		var hi: float = 0.0
+		var outside: Array = []
+		for card: String in RISK_CARDS:
+			if card == "gateless_night":
+				continue
+			lo = minf(lo, float(summary["per_life"][card]))
+			hi = maxf(hi, float(summary["per_life"][card]))
+			if (summary["outside"] as Array).has(card):
+				outside.append(card)
+		_row(["Risk cards trade fairly", "between half and twice the middle value", "middle %.1f, so %.1f to %.1f; held cards run %.0f to %.0f; Gateless Night %.0f (reported)" % [float(summary["middle"]), float(summary["middle"]) / 2.0, float(summary["middle"]) * 2.0, lo, hi, float(summary["per_life"]["gateless_night"])],
+			"met" if outside.is_empty() else "NOT MET: " + ", ".join(PackedStringArray(outside))])
+	# Length.
+	var won: Array = _where(base, func(r: Dictionary) -> bool: return bool(r["won"]))
+	var mins: Array = won.map(func(r: Dictionary) -> float: return _minutes(r))
+	var quiet: Array = _where(won, func(r: Dictionary) -> bool: return int(r["early"]) == 0).map(func(r: Dictionary) -> float: return _minutes(r))
+	_row(["Length", "won runs average about 12 to 16 minutes at 1x", "%.1f minutes (%d wins; %.1f with no early calls)" % [_mean(mins), won.size(), _mean(quiet)], "met" if _mean(mins) >= 12.0 and _mean(mins) <= 16.0 else "NOT MET"])
+	# Same seed.
+	var det: Dictionary = _read("det.json")
+	var more: Dictionary = _read("det_more.json")
+	var again: Dictionary = _read("det_again.json")
+	if not det.is_empty():
+		var bad: int = (det["failures"] as Array).size() + (more.get("failures", []) as Array).size()
+		var hash_ok: bool = again.has("chain_hash") and int(again["chain_hash"]) == int(det["chain_hash"])
+		_row(["Same seed, same run", "equal across a save and load in a wave or with a draft open", "%d runs and %d dailies checked, %d failures; second process chain hash %s" % [(det["rows"] as Array).size() + (more.get("rows", []) as Array).size(), (det["daily_rows"] as Array).size() + (more.get("daily_rows", []) as Array).size(), bad, "equal" if hash_ok else "NOT EQUAL"],
+			"met" if bad == 0 and hash_ok else "NOT MET"])
+	# The daily.
+	var days: Array = _load_rows("daily_")
+	if not days.is_empty():
+		var named: int = 0
+		var any_won: int = 0
+		var longest: int = 0
+		var run_lost: int = 0
+		for d: Dictionary in days:
+			var w: bool = false
+			for p: Dictionary in d["plays"]:
+				w = w or bool(p["won"])
+			named += 1 if w else 0
+			var anyw: bool = w or (d.has("extra") and bool(d["extra"]["won"]))
+			any_won += 1 if anyw else 0
+			run_lost = 0 if anyw else run_lost + 1
+			longest = maxi(longest, run_lost)
+		var dn: float = 100.0 * named / days.size()
+		var da: float = 100.0 * any_won / days.size()
+		_row(["The daily (RULES 15)", "at least 98%% of %d days won by a named or one of up to 400 random strategies; no two unwon in a row; named alone at least 60%%" % days.size(), "%s won by some strategy, %s by the named alone, longest run unwon %d" % [_rate(any_won, days.size()), _rate(named, days.size()), longest],
+			"met" if da >= 98.0 and longest <= 1 and dn >= 60.0 else "NOT MET"])
+	print()
+
+
+## Phase C job lines: every stack that fits (top, a middle under it, a bottom under that), forced onto seeds 1 to 200, stopped at wave 6.
+func _allstacks_b4() -> void:
+	var data: RunData = _game.run
+	for top: Dictionary in data.segments_of(&"top"):
+		for middle: Dictionary in data.segments_under(top["id"]):
+			for bottom: Dictionary in data.segments_under(middle["id"]):
+				var name: String = "%s_%s_%s" % [top["id"], middle["id"], bottom["id"]]
+				for first: int in [1, 51, 101, 151]:
+					print("mode=rates first=%d count=50 pool=base relaxed=0 stack=%s,%s,%s stop=6 out=OUTDIR/force_stack_%s_%d.json" % [first, top["id"], middle["id"], bottom["id"], name, first])
