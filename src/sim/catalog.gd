@@ -248,7 +248,7 @@ func _read_enemies(data: Variant, chk: DataCheck) -> void:
 		paths[type.id] = path
 	# Cross references, once every id is known. A released creature never releases
 	# others itself, so releases cannot chain, and a flyer releases only flyers
-	# (a walker needs a road step to start from, RULES 6.2).
+	# (a walker needs a road step to start from, RULES 6.2). A summoned creature never heals.
 	for id: StringName in _enemy_ids:
 		var type: EnemyType = _enemies[id]
 		var path: String = paths[id]
@@ -256,6 +256,11 @@ func _read_enemies(data: Variant, chk: DataCheck) -> void:
 			_check_released(type, type.split_into, DataCheck.join(path, "split_into"), chk)
 		if not type.summon.is_empty():
 			_check_released(type, type.summon["enemy"], DataCheck.join(path, "summon.enemy"), chk)
+			# Summons come for as long as the boss lives, so a save could not bound
+			# the healers they bring (Battle.MAX_HEALERS).
+			var summoned: EnemyType = _enemies.get(type.summon["enemy"], null)
+			if summoned != null and summoned.heal > 0:
+				chk.fail(DataCheck.join(path, "summon.enemy"), "a summoned creature cannot heal")
 		if not type.release.is_empty():
 			_check_released(type, type.release["enemy"], DataCheck.join(path, "release.enemy"), chk)
 

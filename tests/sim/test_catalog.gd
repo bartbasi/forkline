@@ -225,6 +225,16 @@ func test_ids_text_and_shapes_are_checked() -> void:
 		_expect_problem("case %d" % i)
 
 
+## Summons come for as long as the boss lives, so a save could not bound the healers
+## they would bring (Battle.MAX_HEALERS).
+func test_a_summoned_creature_cannot_heal() -> void:
+	_enemy("grumblesack")["summon"]["enemy"] = "mender"
+	var problems: PackedStringArray = _problems()
+	assert_eq(problems.size(), 1)
+	assert_eq(problems[0], "enemies.json: enemies[11].summon.enemy: a summoned creature cannot heal")
+	assert_null(Catalog.from_data(files[0], files[1], files[2]))
+
+
 func test_wrong_top_level_types_never_crash() -> void:
 	for bad: Variant in [null, 1, "x", [], {}, [{}], {"format": 1}]:
 		assert_false(Catalog.check(bad, files[1], files[2]).is_empty(), "towers %s" % str(bad))

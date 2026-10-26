@@ -17,15 +17,25 @@ const DONE: StringName = &"done"                       # a command was carried o
 const PHASE_NAMES: PackedStringArray = ["build", "wave", "won", "lost"]
 const AIM_NAMES: PackedStringArray = ["first", "last", "strong"]
 ## Load ceilings against tampered saves (contract 5.6). MAX_ENEMIES also holds the live
-## creatures plus every creature still to come from releases. Play stays far below it:
-## one wave spawns at most 120 counting Puffs, at most 2 waves run at once, a release
-## holds at most 4, and boss summons add a few dozen while a boss lives.
+## creatures plus every creature still to come from releases, each counted with what it
+## can still let out (a Puffball as 4, an Old Tusk that has not released as 5). Play
+## stays far below it: one wave spawns at most 120 counting Puffs, at most 2 waves run
+## at once, a release holds at most 4, and boss summons add a few dozen while a boss lives.
 const MAX_ENEMIES: int = 4000
 const MAX_RELEASES: int = 1000
-## Creatures that summon, live or still to come from releases. Play has at most 2: one
-## boss per level or run, two under Double Trouble, and nothing releases a boss. 8 leaves
-## room for a bigger boss wave and still stops a save from loading a summoning swarm.
+## Creatures that summon, and creatures that heal, that can be on the map at once after
+## load. Each wave's tally holds its live creatures, its creatures still to come from
+## releases and from its groups, each with what it can let out; a wave not started holds
+## all of its groups. At most max_waves_running waves are on the map at once, so the
+## largest that many tallies must stay within the ceiling. Play stays far below both:
+## the two largest waves of any level hold 2 summoners (Double Trouble) and 12 healers
+## (r4_l2), and of a run, with any risk card or every pack doubled, 2 and 14. A heal
+## checks every creature on the map, so MAX_HEALERS keeps a heal tick cheap: 40 Menders
+## among 4,000 creatures cost about 150 ms on the dev PC.
 const MAX_SUMMONERS: int = 8
+const MAX_HEALERS: int = 40
+## The ids one heal event lists: the first in id order. The map marks at most 6.
+const HEAL_EVENT_IDS: int = 6
 const MAX_LIVES: int = 1000000
 const ID_CEILING: int = 2147483648                     # 2^31
 const BIG: int = 1000000000
@@ -748,7 +758,7 @@ func _timer_step() -> void:
 
 
 ## 6.2: every other creature within reach gains the heal, up to its max health. The
-## event lists the creatures that gained health.
+## event lists the first HEAL_EVENT_IDS creatures that gained health, in id order.
 func _heal(mender: EnemyState) -> void:
 	var type: EnemyType = catalog.enemy(mender.type)
 	mender.heal_at += type.heal_ms / Sim.MS_PER_TICK
@@ -763,7 +773,8 @@ func _heal(mender: EnemyState) -> void:
 		if d.x * d.x + d.y * d.y > reach_sq:
 			continue
 		other.health = mini(other.health + amount, other.max_health)
-		ids.append(other.id)
+		if ids.size() < HEAL_EVENT_IDS:
+			ids.append(other.id)
 	if not ids.is_empty():
 		_emit({"kind": &"healed", "id": mender.id, "ids": ids})
 
@@ -1711,9 +1722,13 @@ func _load(data: Variant, stats: Catalog, chk: DataCheck) -> bool:
 	if not chk.ok():
 		return false
 	_refresh_dist()
-	# In a wave the closed set is the unbroken gates, or none under gates_open. It only
-	# ever opens from a build phase's set, which never seals, so play never fails this.
-	if map.seals(closed_cells()):
+	# Every placed gate, broken or not, whatever gates_open says: when the next build
+	# phase begins they all close again (7.6, 14.5). In play they all come from a build
+	# phase, where placing or moving a gate never seals, so play never fails this.
+	var placed: Array[Vector2i] = []
+	for gate: GateState in gates:
+		placed.append(gate.cell)
+	if map.seals(placed):
 		chk.fail("gates", "seal every road")
 	_load_towers(top["towers"], chk)
 	_next_id = chk.integer(top, "next_id", "", 0, ID_CEILING)
@@ -1999,23 +2014,77 @@ func _load_releases(data: Variant, chk: DataCheck) -> void:
 
 
 ## Each creature and release can be in range while together they would freeze the game,
-## so the crowd as a whole has a ceiling too (contract 5.6).
+## so the crowd as a whole has a ceiling too (contract 5.6). The crowd is the live
+## creatures and the creatures still to come from releases. Summoners and healers are
+## counted per wave, the level's waves to come included, so play after load cannot pass
+## their ceilings either.
 func _check_crowd(chk: DataCheck) -> void:
 	if not chk.ok():
 		return
-	var crowd: int = enemies.size()
-	var summoners: int = 0
+	var tallies: Array[Array] = []                     # per wave: [creatures, healers, summoners]
+	for w: int in level.waves.size():
+		tallies.append([0, 0, 0] as Array[int])
 	for enemy: EnemyState in enemies:
-		if not catalog.enemy(enemy.type).summon.is_empty():
-			summoners += 1
+		_tally(tallies[enemy.wave], enemy.type, 1, not enemy.released)
 	for release: Release in _releases:
-		crowd += release.left
-		if not catalog.enemy(release.enemy).summon.is_empty():
-			summoners += release.left
+		_tally(tallies[release.wave], release.enemy, release.left, true)
+	var crowd: int = 0
+	for tally: Array[int] in tallies:
+		crowd += tally[0]
 	if crowd > MAX_ENEMIES:
 		chk.fail("releases", "live creatures and creatures still to come pass %d" % MAX_ENEMIES)
-	if summoners > MAX_SUMMONERS:
-		chk.fail("enemies", "more than %d creatures summon" % MAX_SUMMONERS)
+	for w: int in running:
+		var elapsed: int = tick - _wave_start[w]
+		for group: WaveGroup in (_wave_mods[w] as WaveMods).groups:
+			_tally(tallies[w], group.enemy, _left_to_spawn(group, elapsed), true)
+	for w: int in range(waves_started, level.waves.size()):
+		for group: WaveGroup in _mods_for(w).groups:
+			_tally(tallies[w], group.enemy, group.count, true)
+	if _at_once(tallies, 1) > MAX_HEALERS:
+		chk.fail("enemies", "more than %d creatures that heal can be on the map at once" % MAX_HEALERS)
+	if _at_once(tallies, 2) > MAX_SUMMONERS:
+		chk.fail("enemies", "more than %d creatures that summon can be on the map at once" % MAX_SUMMONERS)
+
+
+## The most of tally entry `k` that the waves on the map at once can hold: the sum of the
+## max_waves_running largest.
+func _at_once(tallies: Array[Array], k: int) -> int:
+	var values: Array[int] = []
+	for tally: Array[int] in tallies:
+		values.append(tally[k])
+	values.sort()
+	var total: int = 0
+	for i: int in mini(catalog.rules.max_waves_running, values.size()):
+		total += values[values.size() - 1 - i]
+	return total
+
+
+## Adds `count` creatures of `type` to tally ([creatures, healers, summoners]), each with
+## what it can still let out: a split, and a health release unless it has begun
+## (`release`). Released creatures let out nothing (2.6), so this goes one level deep.
+## Summons are left out: they come for as long as the boss lives, and MAX_SUMMONERS
+## bounds the bosses. A summoned creature never heals (2.6).
+func _tally(tally: Array[int], type: StringName, count: int, release: bool) -> void:
+	var data: EnemyType = catalog.enemy(type)
+	var n: int = mini(count, ID_CEILING)                # a far cap, so no sum can overflow
+	tally[0] += n
+	if data.heal > 0:
+		tally[1] += n
+	if not data.summon.is_empty():
+		tally[2] += n
+	if data.split_into != &"":
+		_tally(tally, data.split_into, n * data.split_count, false)
+	if release and not data.release.is_empty():
+		_tally(tally, data.release["enemy"], n * int(data.release["count"]), false)
+
+
+## Creatures of `group` still to spawn `elapsed` ticks after its wave began. It spawns on
+## the ticks at_tick + k * every_ticks after the start (8.1), and every tick before
+## `elapsed` has run.
+static func _left_to_spawn(group: WaveGroup, elapsed: int) -> int:
+	if elapsed <= group.at_tick:
+		return group.count
+	return maxi(group.count - ((elapsed - 1 - group.at_tick) / group.every_ticks + 1), 0)
 
 
 func _load_record(data: Variant, chk: DataCheck) -> void:

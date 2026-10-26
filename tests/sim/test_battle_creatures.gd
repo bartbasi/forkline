@@ -129,6 +129,29 @@ func test_menders_heal_bosses_and_each_heals_on_its_own_rules_6_2_and_8_7() -> v
 	assert_eq(boss.health, 100 + 2 * mender.heal, "two Menders, two heals")
 
 
+## A heal still reaches every creature in reach, but its event lists only the first
+## Battle.HEAL_EVENT_IDS of them in id order, the most the map marks (contract 3.1).
+func test_a_heal_event_lists_at_most_heal_event_ids_creatures() -> void:
+	var wide: Catalog = Fx.catalog_with_enemy("mender", {"heal_reach": 1000})
+	var mender: EnemyType = wide.enemy(&"mender")
+	var every: int = mender.heal_ms / Sim.MS_PER_TICK
+	var hurt: int = Battle.HEAL_EVENT_IDS + 4
+	var b: Battle = _battle(Fx.LINE_GRID, [{"groups": [Fx.group("mender", 1), Fx.group("shellback", hurt, 0, 50)]}], {}, wide)
+	b.start_next_wave()
+	Fx.steps(b, every)
+	assert_eq(b.enemies.size(), hurt + 1)
+	for e: EnemyState in b.enemies:
+		e.health = 1
+	var healed: Array = Fx.of_kind(Fx.log_ticks(b, 1), &"healed")
+	assert_eq(healed.size(), 1)
+	var ids: Array[int] = []
+	for id: int in range(1, Battle.HEAL_EVENT_IDS + 1):
+		ids.append(id)
+	assert_eq(healed[0][1], {"kind": &"healed", "id": 0, "ids": ids}, "the first %d in id order" % Battle.HEAL_EVENT_IDS)
+	for id: int in range(1, hurt + 1):
+		assert_eq(b.enemy_with_id(id).health, 1 + mender.heal, "creature %d healed all the same" % id)
+
+
 # Gate breakers.
 
 ## Ticks for a creature to walk n tiles from a cell center at full speed: it gets there
