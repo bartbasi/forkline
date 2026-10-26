@@ -197,7 +197,7 @@ Clearing the final wave is not enough on its own. After an early call (4.9), an 
 | Selling | 4.6. |
 
 - There is no other income in the campaign. Runs add card effects (14.5).
-- There is no gold cap.
+- There is no gold cap a player can reach. The sim holds gold at 1,000,000,000, the most a save holds.
 
 ### 4.6 Building, upgrading and selling
 

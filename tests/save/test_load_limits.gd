@@ -657,3 +657,122 @@ func test_real_waves_bring_far_fewer_healers_and_summoners_at_once_than_a_save_m
 	assert_true(_at_once(healers) * 2 <= Battle.MAX_HEALERS, "a run: %d healers at once" % _at_once(healers))
 	assert_true(_at_once(summoners) * 4 <= Battle.MAX_SUMMONERS, "a run: %d summoners at once" % _at_once(summoners))
 	print("    save: at once, levels %d healers and %d summoners; runs %d and %d" % [most[0], most[1], _at_once(healers), _at_once(summoners)])
+
+
+## The per-group count ceiling (5.6) sits far above real play. Every campaign level, with
+## and without its Twist, loads at its start, and so does a run battle with each real risk
+## card waiting. Every group of every level (with and without its Twist) and of every run
+## pack (with no risk card or any real one) stays at most a tenth of MAX_ENEMIES.
+func test_no_real_group_comes_near_the_count_ceiling() -> void:
+	var most: int = 0
+	for level_id: StringName in game.levels:
+		var level: LevelData = game.levels[level_id]
+		for twist: bool in [false, true]:
+			var effects: Array[Dictionary] = level.twist_effects if twist else ([] as Array[Dictionary])
+			for w: int in level.waves.size():
+				for group: WaveGroup in level.waves[w].groups:
+					var flying: bool = game.catalog.enemy(group.enemy).flying
+					most = maxi(most, Modifiers.group_count(effects, group.count, flying, w == level.waves.size() - 1))
+			var b: Battle = Battle.create(level, game.catalog, false, effects)
+			assert_not_null(Battle.from_data(Fx.through_json(b.to_data()), game.catalog), "%s twist %s loads" % [level_id, twist])
+	var risks: Array = []
+	for card: Dictionary in game.run.cards:
+		if String(card["kind"]) == "risk":
+			risks.append(Modifiers.normalize_all(card["effects"]))
+	assert_true(risks.size() >= 1, "risk cards: %d" % risks.size())
+	var choices: Array = [[] as Array[Dictionary]]
+	choices.append_array(risks)
+	var packs: int = 0
+	for band: int in range(1, 7):
+		for pack: Dictionary in game.run.packs_of(band):
+			packs += 1
+			for wave: Dictionary in pack["waves"]:
+				for group: Dictionary in wave["groups"]:
+					var flying: bool = game.catalog.enemy(StringName(String(group["enemy"]))).flying
+					for effects: Array[Dictionary] in choices:
+						most = maxi(most, Modifiers.group_count(effects, int(group["count"]), flying, false))
+	assert_true(packs >= 6, "run packs: %d" % packs)
+	assert_true(most * 10 <= Battle.MAX_ENEMIES, "the largest real group: %d" % most)
+	var session: RunSession = Fx.session(game, 1)
+	assert_not_null(session, "a run starts")
+	for risk: Array[Dictionary] in risks:
+		var b: Battle = Battle.from_data(Fx.through_json(session.battle.to_data()), game.catalog)
+		assert_eq(b.add_effects(risk, true), Battle.DONE, "a real risk card is taken")
+		assert_not_null(Battle.from_data(Fx.through_json(b.to_data()), game.catalog), "a run battle with a real risk card waiting loads")
+	print("    save: the largest real group is %d, the ceiling %d" % [most, Battle.MAX_ENEMIES])
+
+
+## The speed and max health ceilings (5.6) sit far above real play: every level's Twist
+## with any real risk card stays at a quarter of MAX_SPEED_PCT or less, and the catalog's
+## largest health at the largest strength data allows (1,000 percent), with any real risk
+## card, at a hundredth of BIG or less.
+func test_no_real_speed_or_health_comes_near_its_ceiling() -> void:
+	var twists: Array = [[] as Array[Dictionary]]
+	for level_id: StringName in game.levels:
+		twists.append((game.levels[level_id] as LevelData).twist_effects)
+	var risks: Array = [[] as Array[Dictionary]]
+	for card: Dictionary in game.run.cards:
+		if String(card["kind"]) == "risk":
+			risks.append(Modifiers.normalize_all(card["effects"]))
+	var most_health: int = 1
+	for id: StringName in game.catalog.enemy_ids():
+		most_health = maxi(most_health, game.catalog.enemy(id).health)
+	var speed: int = 0
+	var health: int = 0
+	for twist: Array[Dictionary] in twists:
+		for risk: Array[Dictionary] in risks:
+			var effects: Array[Dictionary] = []
+			effects.append_array(twist)
+			effects.append_array(risk)
+			speed = maxi(speed, Modifiers.speed_pct(effects))
+			health = maxi(health, Modifiers.scale_all(effects, "health_pct", Sim.pct_half_up(most_health, 1000)))
+	assert_true(speed > 100, "some real effect speeds creatures up: %d" % speed)
+	assert_true(speed * 4 <= Battle.MAX_SPEED_PCT, "the fastest real speed: %d percent" % speed)
+	assert_true(health * 100 <= Battle.BIG, "the most real max health: %d" % health)
+	print("    save: real speed at most %d percent (ceiling %d), max health at most %d (ceiling %d)" % [speed, Battle.MAX_SPEED_PCT, health, Battle.BIG])
+
+
+## The kept card effect ceilings (5.6) sit far above real play. Every real card that is
+## not a risk card, stacked as play allows (a once card once, any other card on all 17
+## picks), keeps every tower stat at a tenth of MAX_TOWER_STAT or less, and the catalog's
+## largest bounty and the last run wave's clear bonus, at the largest strength data allows
+## (1,000 percent), at a hundredth of MAX_GAIN or less. A run battle that picked them all
+## takes every card and loads.
+func test_no_real_card_stack_comes_near_a_ceiling() -> void:
+	var stack: Array[Dictionary] = []
+	var cards: Array[Dictionary] = []
+	for card: Dictionary in game.run.cards:
+		if String(card["kind"]) == "risk":
+			continue
+		for i: int in (1 if bool(card["once"]) else 17):
+			cards.append(card)
+			for effect: Dictionary in Modifiers.normalize_all(card["effects"]):
+				if not Modifiers.INSTANT.has(String(effect["type"])):
+					stack.append(effect)
+	assert_true(stack.size() <= Modifiers.MAX_KEPT, "the stack fits the kept effects: %d" % stack.size())
+	var most_stat: int = 0
+	for id: StringName in game.catalog.tower_ids():
+		var type: TowerType = game.catalog.tower(id)
+		for step: Array in [[1, -1], [2, -1], [3, 0], [3, 1]]:
+			var base: TowerStats = type.stats(step[0], step[1])
+			if base == null:
+				continue
+			for first_step: bool in [true, false]:
+				var t: TowerStats = Modifiers.tower_stats(base, id, stack, first_step)
+				for value: int in [t.cost, t.reach, t.damage, t.reload_ms, t.splash, t.targets, t.boost_pct, t.boost_damage]:
+					most_stat = maxi(most_stat, value)
+	var most_bounty: int = 1
+	for id: StringName in game.catalog.enemy_ids():
+		most_bounty = maxi(most_bounty, game.catalog.enemy(id).bounty)
+	var rules: GameRules = game.catalog.rules
+	var bounty: int = Modifiers.scale_all(stack, "bounty_pct", Sim.pct_half_up(most_bounty, 1000))
+	var bonus: int = Modifiers.scale_all(stack, "clear_bonus_pct", Sim.pct_half_up(rules.clear_bonus + rules.clear_bonus_per_wave * 18, 1000))
+	assert_true(most_stat * 10 <= Battle.MAX_TOWER_STAT, "the largest real tower stat: %d" % most_stat)
+	assert_true(maxi(bounty, bonus) * 100 <= Battle.MAX_GAIN, "the largest real gold gain: bounty %d, clear bonus %d" % [bounty, bonus])
+	var session: RunSession = Fx.session(game, 1)
+	var b: Battle = Battle.from_data(Fx.through_json(session.battle.to_data()), game.catalog)
+	for card: Dictionary in cards:
+		assert_eq(b.add_effects(Modifiers.normalize_all(card["effects"]), false), Battle.DONE, "card %s is taken" % card["id"])
+	assert_eq(b.card_effects.size(), stack.size(), "every kept effect is kept")
+	assert_not_null(Battle.from_data(Fx.through_json(b.to_data()), game.catalog), "the battle with every card loads")
+	print("    save: real cards stacked: tower stat at most %d (ceiling %d), gain at most %d (ceiling %d)" % [most_stat, Battle.MAX_TOWER_STAT, maxi(bounty, bonus), Battle.MAX_GAIN])

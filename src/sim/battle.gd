@@ -21,7 +21,25 @@ const AIM_NAMES: PackedStringArray = ["first", "last", "strong"]
 ## can still let out (a Puffball as 4, an Old Tusk that has not released as 5). Play
 ## stays far below it: one wave spawns at most 120 counting Puffs, at most 2 waves run
 ## at once, a release holds at most 4, and boss summons add a few dozen while a boss lives.
+## It is also the most one group can hold with the Twist and its wave's risk card. Real
+## groups stay at a tenth of it or less, with any real Twist or risk card (tests/save/).
 const MAX_ENEMIES: int = 4000
+## The most a wave's speed_pct effects (Twist and risk card) can make together: 10 times.
+## A creature then moves at most (data speed plus speed ups) times 100 sub-units a tick,
+## a few cells, and the move step's product stays near 10^10, far inside an int. Real
+## play reaches 150 (tests/save/).
+const MAX_SPEED_PCT: int = 1000
+## The most any number of a tower's stat block may reach with the kept card effects:
+## cost, reach, damage, reload_ms, splash, targets, boost_pct and boost_damage. Reach and
+## splash times 200 are sub-units: 2 times 10^8 still fits a Vector2i, and its square an
+## int. reload_ms times 100 is a saved reload timer, 10^8. Data allows at most 100,000
+## and 64 tower_add effects at most 64,000 more, so only stacked tower_pct effects can
+## pass it. Real cards stay at a tenth of it or less (tests/save/).
+const MAX_TOWER_STAT: int = 1000000
+## The most one gold gain may be with the kept card effects: the catalog's largest bounty,
+## or a wave's clear bonus, at the wave's strength. Real play stays at a hundredth of it
+## or less (tests/save/). Gold itself is held at most BIG, the most a save holds.
+const MAX_GAIN: int = 1000000
 const MAX_RELEASES: int = 1000
 ## Creatures that summon, and creatures that heal, that can be on the map at once after
 ## load. Each wave's tally holds its live creatures, its creatures still to come from
@@ -284,7 +302,7 @@ func sell_tower(cell: Vector2i) -> StringName:
 	if _no_selling:
 		return &"no_selling"
 	var refund: int = sell_value(cell)
-	gold += refund
+	gold = mini(gold + refund, BIG)
 	towers.erase(tower)
 	_refresh_boosts()
 	_emit({"kind": &"sold", "cell": cell, "tower": tower.type, "tier": tower.tier, "spec": tower.spec, "gold": refund})
@@ -374,7 +392,7 @@ func start_next_wave() -> StringName:
 		return refusal
 	var early: bool = phase == Phase.WAVE
 	if early:
-		gold += _early_bonus()
+		gold = mini(gold + _early_bonus(), BIG)
 		_early_calls += 1
 	_max_gates_at_start = maxi(_max_gates_at_start, gates.size())
 	if gates.size() < level.gates:
@@ -407,8 +425,11 @@ func start_next_wave() -> StringName:
 
 
 ## A picked card: its effects, checked first (contract 2.8). risk: a risk card, whose
-## effects wait for the next wave that starts. Instant effects change the state once;
-## the rest are kept for the rest of the battle.
+## effects wait for the next wave that starts; a risk card that would take that wave past
+## a ceiling of 5.6 (MAX_ENEMIES, MAX_SPEED_PCT, max health BIG) is a bad effect. Instant
+## effects change the state once; the rest are kept for the rest of the battle. A card
+## whose kept effects would take a tower stat past MAX_TOWER_STAT or a gold gain past
+## MAX_GAIN is a bad effect.
 func add_effects(effects: Array[Dictionary], risk: bool) -> StringName:
 	if _over():
 		return &"over"
@@ -420,7 +441,7 @@ func add_effects(effects: Array[Dictionary], risk: bool) -> StringName:
 	if risk:
 		if not risk_waiting.is_empty():
 			return &"risk_waiting"
-		if clean.size() > Modifiers.MAX_WAITING:
+		if clean.size() > Modifiers.MAX_WAITING or _wave_effects_problem(waves_started, clean) != "":
 			return &"bad_effect"
 		risk_waiting = clean
 		return DONE
@@ -429,6 +450,10 @@ func add_effects(effects: Array[Dictionary], risk: bool) -> StringName:
 		if not Modifiers.INSTANT.has(String(effect["type"])):
 			kept.append(effect)
 	if card_effects.size() + kept.size() > Modifiers.MAX_KEPT:
+		return &"bad_effect"
+	var all_kept: Array[Dictionary] = card_effects.duplicate()
+	all_kept.append_array(kept)
+	if _card_effects_problem(all_kept) != "":
 		return &"bad_effect"
 	for effect: Dictionary in clean:
 		match String(effect["type"]):
@@ -937,7 +962,7 @@ func _defeat_step() -> void:
 			watched = true
 		if enemy.health > 0:
 			continue
-		gold += enemy.bounty
+		gold = mini(gold + enemy.bounty, BIG)
 		_removed = true
 		_emit({"kind": &"defeated", "id": enemy.id, "enemy": enemy.type, "pos": enemy.pos, "gold": enemy.bounty})
 		var type: EnemyType = catalog.enemy(enemy.type)
@@ -980,7 +1005,7 @@ func _wave_step() -> void:
 			continue
 		running.erase(w)
 		var bonus: int = _clear_bonus(w)
-		gold += bonus
+		gold = mini(gold + bonus, BIG)
 		_wave_risk.erase(w)
 		_wave_mods.erase(w)
 		_waves_cleared += 1
@@ -1249,6 +1274,62 @@ func _mods_for(w: int) -> WaveMods:
 	if w == waves_started:
 		return _make_mods(w, risk_waiting)
 	return _make_mods(w, [])
+
+
+## "" when wave w, with the Twist and a risk card, stays inside the ceilings of 5.6: no
+## group above MAX_ENEMIES, speed effects at most MAX_SPEED_PCT, and no creature's max
+## health above BIG (what a saved creature may hold), judged by the catalog's largest
+## health so splits, releases and summons are covered. Play never comes near them; a
+## tampered save or bad card data does.
+func _wave_effects_problem(w: int, risk: Array) -> String:
+	if w < 0 or w >= level.waves.size():
+		return ""
+	var effects: Array[Dictionary] = []
+	effects.append_array(twist_effects)
+	for effect: Dictionary in risk:
+		effects.append(effect)
+	for group: WaveGroup in level.waves[w].groups:
+		if Modifiers.group_count(effects, group.count, catalog.enemy(group.enemy).flying, w == level.waves.size() - 1) > MAX_ENEMIES:
+			return "a group passes %d creatures" % MAX_ENEMIES
+	if Modifiers.speed_pct(effects) > MAX_SPEED_PCT:
+		return "speed passes %d percent" % MAX_SPEED_PCT
+	var most: int = 1
+	for id: StringName in catalog.enemy_ids():
+		most = maxi(most, catalog.enemy(id).health)
+	if Modifiers.scale_all(effects, "health_pct", _scaled(most, w)) > BIG:
+		return "max health passes %d" % BIG
+	return ""
+
+
+## "" when the kept card effects stay inside the ceilings of 5.6: every stat block of
+## every tower in the catalog, as a build price and as an upgrade price, at most
+## MAX_TOWER_STAT in each number; and in every wave, the catalog's largest bounty and the
+## clear bonus at most MAX_GAIN. Interest needs no check: each effect gains at most its
+## max, 1,000.
+func _card_effects_problem(effects: Array[Dictionary]) -> String:
+	for id: StringName in catalog.tower_ids():
+		var type: TowerType = catalog.tower(id)
+		for step: Array in [[1, -1], [2, -1], [3, 0], [3, 1]]:
+			var base: TowerStats = type.stats(step[0], step[1])
+			if base == null:
+				continue
+			for first_step: bool in [true, false]:
+				var s: TowerStats = Modifiers.tower_stats(base, id, effects, first_step)
+				for value: int in [s.cost, s.reach, s.damage, s.reload_ms, s.splash, s.targets, s.boost_pct, s.boost_damage]:
+					if value > MAX_TOWER_STAT:
+						return "a %s stat passes %d" % [id, MAX_TOWER_STAT]
+	var most: int = 1
+	for id: StringName in catalog.enemy_ids():
+		most = maxi(most, catalog.enemy(id).bounty)
+	var rules: GameRules = catalog.rules
+	for w: int in level.waves.size():
+		var strength: int = level.waves[w].strength
+		var bounty: int = Modifiers.scale_all(effects, "bounty_pct", _scaled(most, w))
+		var bonus: int = Modifiers.scale_all(effects, "clear_bonus_pct",
+			Sim.pct_half_up(rules.clear_bonus + rules.clear_bonus_per_wave * (w + 1), strength))
+		if maxi(bounty, bonus) > MAX_GAIN:
+			return "a gold gain in wave %d passes %d" % [w, MAX_GAIN]
+	return ""
 
 
 ## Every add_group names an entrance of this map.
@@ -1679,6 +1760,10 @@ func _load(data: Variant, stats: Catalog, chk: DataCheck) -> bool:
 	relaxed = chk.boolean(top, "relaxed", "")
 	if not _load_effects(top, chk):
 		return false
+	var card_problem: String = _card_effects_problem(card_effects)
+	if card_problem != "":
+		chk.fail("effects", card_problem)
+		return false
 	tick = chk.integer(top, "tick", "", 0, BIG)
 	var phase_value: Variant = top["phase"]
 	if not DataCheck.is_string(phase_value) or not ["build", "wave"].has(String(phase_value)):
@@ -1708,6 +1793,14 @@ func _load(data: Variant, stats: Catalog, chk: DataCheck) -> bool:
 	_load_wave_risk(top["wave_risk"], chk)
 	if not chk.ok():
 		return false
+	# Before any wave's mods are made: each wave with the Twist and the risk card it took,
+	# or the waiting one for the next wave to start.
+	for w: int in level.waves.size():
+		var risk: Array = _wave_risk.get(w, risk_waiting if w == waves_started else [])
+		var problem: String = _wave_effects_problem(w, risk)
+		if problem != "":
+			chk.fail("risk", "wave %d with the Twist and risk card: %s" % [w, problem])
+			return false
 	for w: int in running:
 		_wave_mods[w] = _make_mods(w, _wave_risk.get(w, []))
 	gates_open = chk.boolean(top, "gates_open", "")

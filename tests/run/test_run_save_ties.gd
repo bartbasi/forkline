@@ -93,6 +93,12 @@ func test_the_reviews_repro_seven_huge_risk_effects_are_refused() -> void:
 	for i: int in 7:
 		risk.append({"type": "count_pct", "pct": 1000, "flyers": false, "last_wave": false})
 	risk.append({"type": "reward_gold", "amount": 100})
+	var huge: Dictionary = (pair[1] as Dictionary).duplicate(true)
+	huge["risk"] = risk
+	assert_null(Battle.from_data(huge, catalog), "the battle itself refuses the repro: a group passes MAX_ENEMIES")
+	for effect: Dictionary in risk:
+		if effect["type"] == "count_pct":
+			effect["pct"] = 150
 	(pair[1] as Dictionary)["risk"] = risk
 	assert_null(_load(pair), "no risk card was picked")
 	# The same save with the risk card removed loads.
@@ -252,6 +258,9 @@ func test_a_running_waves_risk_card_must_be_a_picked_one() -> void:
 		huge.append({"type": "count_pct", "pct": 1000, "flyers": false, "last_wave": false})
 	var forged: Array = pair.duplicate(true)
 	(forged[1] as Dictionary)["wave_risk"] = [{"wave": 0, "effects": huge}]
+	assert_null(Battle.from_data(forged[1], catalog), "the battle itself refuses it: a group passes MAX_ENEMIES")
+	for effect: Dictionary in huge:
+		effect["pct"] = 150
 	assert_null(_load(forged), "made up")
 	var real_card: Array = pair.duplicate(true)
 	(real_card[1] as Dictionary)["wave_risk"] = [{"wave": 0, "effects": _effects_of("crowded_night")}]

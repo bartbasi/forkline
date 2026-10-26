@@ -1,6 +1,6 @@
 # Forkline: Architecture
 
-Owner: architect. Status: revised for phase 7, and brought up to the built sim (S1), the run code (R1, R2), the saves (S2), the run segments (L4), the Twist and run screens (U2), the rules alignment (G1), the run tuning (G3) and the security fixes (S4, R4, S5), 2026-10-25.
+Owner: architect. Status: revised for phase 7, and brought up to the built sim (S1), the run code (R1, R2), the saves (S2), the run segments (L4), the Twist and run screens (U2), the rules alignment (G1), the run tuning (G3), the security fixes (S4, R4, S5) and the ceilings on stacked effects (S6), 2026-10-25.
 
 This is the contract every agent builds against: folders and owners, ids and data files, every public class with its methods and data shapes, routing, saves, resume, orientation, outbound links, the performance budget, the tests and the build plans for phase 5 (section 11) and phase 7 (section 13). Do not invent a public method that another area must call. If you need a change here, put it in your report for the DM.
 
@@ -687,8 +687,11 @@ static func check(effects: Variant, catalog: Catalog, use: StringName) -> Packed
 static func normalize_all(effects: Array) -> Array[Dictionary]   # effects that passed check(), as plain data: ints, bools, Strings, [column, row] cells
 static func group_count(effects: Array[Dictionary], count: int, flying: bool, last_wave: bool) -> int
                                                        # the count of a group in the wave data, with every count_pct of these
-                                                       # normalized effects applied (2.8)
+                                                       # normalized effects applied (2.8); at most Modifiers.COUNT_CEILING
+                                                       # (1,000,000,000), clamped after every step, so no count overflows
 ```
+
+Inside src/sim/, every stacked percent effect but `start_gold_pct` is clamped as it multiplies, so no product overflows: `speed_pct` at 1,000,000,000 percent, health, bounty and clear bonus scaling at 10^12, and each `tower_pct` step in a tower's stats at 10^12. `Battle.create` applies `start_gold_pct` once, with no clamp: a Twist holds at most 8 effects, so its product stays far inside an int.
 
 ```gdscript
 class_name Battle extends RefCounted                   # src/sim/battle.gd: one map being defended
@@ -737,6 +740,8 @@ func move_gate(from: Vector2i, to: Vector2i) -> StringName
 func remove_gate(cell: Vector2i) -> StringName
 func start_next_wave() -> StringName                   # from BUILD: starts the next wave; in WAVE: an early call with its bonus
 func add_effects(effects: Array[Dictionary], risk: bool) -> StringName   # a picked card (phase 7); checked first
+# Gold is held at most 1,000,000,000 (`BIG`, the most a save holds) at every gain: bounty, clear bonus, refund,
+# early call bonus, `add_gold` and interest.
 
 # Queries. Numbers are in the file's units (2.1): the UI divides by 100 for tiles and by 1000 for seconds.
 func tower_at(cell: Vector2i) -> TowerState            # null for none
@@ -842,7 +847,7 @@ Refunds (RULES 4.6): a purchase in a build phase goes into `spent_now`. A purcha
 | `&"still_spawning"` | The newest wave has not spawned all its groups (RULES 4.9). |
 | `&"too_many_waves"` | `max_waves_running` waves are on the map. |
 | `&"risk_waiting"` | A risk card is already waiting. |
-| `&"bad_effect"` | The list is empty or fails `Modifiers.check` (2.8), an `add_group` entrance is not on this map, or the battle would hold more than 64 kept card effects or a risk card of more than 8 effects (5.6). |
+| `&"bad_effect"` | The list is empty or fails `Modifiers.check` (2.8), an `add_group` entrance is not on this map, or the battle would hold more than 64 kept card effects or a risk card of more than 8 effects; or a risk card would take the next wave past a wave effect ceiling of 5.6, or a card's kept effects would take a tower stat or a gold gain past a kept effect ceiling of 5.6, so play never makes a save that will not load. A refused card changes nothing, instant effects included. |
 
 The UI turns every other refusal into plain feedback of its own.
 
@@ -1514,10 +1519,12 @@ Ceilings are far above anything a real player reaches. Counters saturate at thei
 | effects | at most 64 kept card effects, passing `Modifiers.check` for `card`, none of them instant |
 | risk | the waiting risk card: at most 8 effects, passing `Modifiers.check` for `risk`, every `add_group` entrance on the map |
 | wave_risk | at most one entry per running wave, in start order: the risk card that wave took, 1 to 8 effects checked the same way as `risk` |
+| wave effects | each wave with the Twist and its risk card (its `wave_risk` entry while it runs, the waiting risk for the next wave to start, none otherwise): no group of its own above 4,000 (`MAX_ENEMIES`), added groups keeping their card's count; `speed_pct` effects together at most 1,000 percent (`MAX_SPEED_PCT`); and the catalog's largest health at the wave's strength, with its `health_pct` effects, at most 1,000,000,000, so every creature the wave can bring has a max health a save may hold |
+| kept effect ceilings | with the kept card effects: every number of every stat block of every tower in the catalog (`cost` as a build and as an upgrade price, `reach`, `damage`, `reload_ms`, `splash`, `targets`, `boost_pct`, `boost_damage`) at most 1,000,000 (`MAX_TOWER_STAT`); and in every wave, the catalog's largest bounty and the clear bonus, at the wave's strength, at most 1,000,000 (`MAX_GAIN`) |
 | tick | 0 to 1,000,000,000 |
 | phase | `build` or `wave` |
 | waves | waves started 0 to the level's wave count; running waves in start order, at most `max_waves_running`; each start tick 0 to `tick` and not before the one before it |
-| gold | 0 to 1,000,000,000 |
+| gold | 0 to 1,000,000,000. Play holds gold at most 1,000,000,000, so a save made in play always passes. |
 | lives | 1 to 1,000,000, and `start_lives` the same. Lives may be above `start_lives` (a game saved before the cap of 2.8): load keeps them. |
 | gates | each on a socket, at most one per socket; `gates_added` 0 to `max_gates`; placed and in hand add up to the gates given (the level's, or the Twist's `set_gates`) plus `gates_added`, at most `max_gates` in all; every fixed cell of the Twist holds a fixed gate, and any other gate is fixed only under `gates_stay`; a gate is broken only in `wave`; the placed gates do not seal, in `build` and in `wave`, counting every placed gate, broken or not, whatever `gates_open` says |
 | gates_open | false in `build` |
@@ -1821,7 +1828,7 @@ Suggestions, for the DM to decide. They are not part of the contract unless the 
 
 - **A repeatable economy card in the base pool, checked on load** (architect, 2026-10-25). `RunData.check` could require a base card (`unlock` `{}`) of kind `economy` that is not `once`. Today a cards.json without one still loads, and a normal run whose unlocks add no such card cannot start: its pool fails the pool rule of 3.4, so `RunSession.start` returns null. Only tests/run/test_real_data.gd guards against this now, by pinning `gold_purse` and `tea_break`.
 - **Heal marks within the heal event** (architect, 2026-10-25, for the render owner). The render's `MapView.HEAL_MARKS` should never exceed `Battle.HEAL_EVENT_IDS`, since a `healed` event lists no more ids than that (3.1). Both are 6 today. A test in tests/render/ could pin it.
-- **A per-group count ceiling at load** (architect, 2026-10-25, for the sim engineer). `Battle.from_data` takes a Twist of up to 8 effects and a wave's risk card of up to 8 more, so stacked `count_pct` effects can lift one group's count far past any real wave, and 15 of them at 1,000 percent overflow the int in `Sim.pct_up`. `SavedGame.from_data` blocks this today: a saved battle's Twist must be its bundled level's, a campaign level has no risk card, and a run has no Twist. A ceiling on each group's count with its effects, checked in `Battle.from_data`, would close it in the sim itself.
+- **Ceilings on stacked effects** (settled 2026-10-25): count, speed, health, tower stats and gold gains are clamped as they multiply and checked in `Battle.from_data` and `add_effects` (3.1, 5.6). A per-wave ceiling was left out by the DM.
 
 ## 13. Phase 7 build plan
 
@@ -1883,6 +1890,7 @@ From wave 5 the work is the rest of the two loops. The DM starts each step when 
 | **S4** | sim-engineer (done 2026-10-25) | Findings L1 and L2 of the security review (docs/reviews/security-2026-10-25.md) in `Battle.from_data`: live creatures plus creatures still to come from releases at most 4,000, at most 8 creatures that summon, and the seal check in a wave too (4.4, 5.6) | the security review | tests/save/: the review's two tampered saves are refused, and real play at its worst moments still loads |
 | **R4** | roguelite-engineer (done 2026-10-25) | Finding N1 of the security review: `RunSession.from_data` ties the battle's kept card effects, its waiting risk card and each running wave's risk card to the picks (5.6) | the security review | tests/run/: the review's repro and each mismatch are refused, and real run and daily saves at every point load and play on the same |
 | **S5** | sim-engineer (done 2026-10-25) | Findings L5, L6, N7 and N8 of the second security review (docs/reviews/security-2026-10-25-2.md) in `Battle.from_data`: the crowd counted with what each creature can still let out, at most 8 creatures that summon and 40 that heal on the map at once, the saved level's waves included, and the seal check on every placed gate. Also a heal event lists at most 6 ids, and a summoned creature cannot heal (2.4, 2.6, 3.1, 4.4, 5.6) | the second security review | tests/save/: the review's tampered saves are refused, a heal tick at the load ceiling stays cheap, real play at its worst moments still loads, and real levels and runs stay far below both ceilings; tests/sim/: the heal event's ids and the summon rule |
+| **S6** | sim-engineer (done 2026-10-25) | The ceilings on stacked effects (section 12): stacked `count_pct`, `speed_pct`, `health_pct`, `bounty_pct`, `clear_bonus_pct` and `tower_pct` effects clamped as they multiply, so no product overflows; the wave effect and kept effect ceilings checked in `Battle.from_data` and `add_effects`; and gold held at most 1,000,000,000 at every gain (3.1, 5.6) | section 12 | tests/sim/: stacked effects clamp and never overflow; each ceiling is refused past its edge, at load and by `add_effects`, and a refused card gives nothing, not even its instant gold; gold stops at 1,000,000,000 and the save still loads; tests/save/: every real level with and without its Twist, every pack, every risk card and the whole card stack stay far below each ceiling, and they load |
 | **G4** | game-designer | Region 3 tuning from B3 | B3 | as G2 |
 | **L6** | level-designer | Region 3's level changes, then region 4, r4_l1 to r4_l6 with their Twists and tests/levels/ | G4 | tests/levels/ |
 | **B4** | balance-analyst | The pass over all 24 levels and every Twist, and the second run and daily report | L6, S3, R3, L5 | both reports |
