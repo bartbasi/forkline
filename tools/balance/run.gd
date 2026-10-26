@@ -24,7 +24,9 @@ extends SceneTree
 ## mode=det: the same strategies played twice, played again with a save and load in the middle
 ##   of a wave, and the same search run twice, must all match.
 ## mode=need: no play at all. Which attacking towers the "no super tower" check must search on this level (RULES 12.6):
-##   the flyer cost and walker cost in the wave data, and for each attacking tower the reason to skip it, if any.
+##   the flyer cost and walker cost in the wave data, and for each attacking tower the reason to skip it, if any. The tower
+##   a star 3 ban names is skipped, and `all_three_only` is the `only=` value of the "All three stars" search (`any`, or
+##   the towers the ban leaves).
 ## mode=replay from=FILE,FILE pick=best_win|three_star_best|top|all [max_tier=N]: plays strategies saved in search results (or
 ##   from=plain, the plain recipe at every gate placement) again, on the level as it is now, so it can be used
 ##   with level_file=, towers=, enemies=, stat=, tweak= and twist=1 as a what-if. Each row has the saved result and
@@ -673,22 +675,33 @@ func _need(ctx: Dictionary) -> Dictionary:
 				air += group.count * type.lives
 			else:
 				ground += group.count * type.lives
+	# A level whose star 3 bans a tower: that tower can never earn star 3, so it needs no lone search, and the "All three
+	# stars" search may use only the other towers (RULES 12.6 as revised by G4).
+	var banned: StringName = &""
+	if level.star3["kind"] == &"tower_ban":
+		banned = level.star3["tower"]
 	var rows: Array = []
 	var needed: Array = []
+	var allowed: Array[String] = []
 	for id: StringName in ctx["offered"]:
+		if id != banned:
+			allowed.append(String(id))
 		var tower: TowerType = catalog.tower(id)
 		if tower.kind != &"attack":
 			continue
 		var stats: TowerStats = tower.stats(1, -1)
 		var reason: String = ""
-		if not stats.hits_air and air >= 6:
+		if id == banned:
+			reason = "the level's star 3 bans it, so it can never earn star 3"
+		elif not stats.hits_air and air >= 6:
 			reason = "cannot hit flyers, which cost %d lives" % air
 		elif not stats.hits_ground and ground >= 6:
 			reason = "cannot hit walkers, which cost %d lives" % ground
 		rows.append({"tower": String(id), "search": reason == "", "reason": reason})
 		if reason == "":
 			needed.append(String(id))
-	return {"flyer_cost": air, "walker_cost": ground, "attackers": rows, "search_needed": needed}
+	return {"flyer_cost": air, "walker_cost": ground, "attackers": rows, "search_needed": needed, "banned": String(banned),
+		"all_three_only": "any" if banned == &"" else ",".join(PackedStringArray(allowed))}
 
 
 # Replaying saved strategies.

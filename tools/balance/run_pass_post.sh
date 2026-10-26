@@ -7,6 +7,7 @@
 # 1. A pair of lone attacker searches where only one stopped dry (no win in the first 2500 builds) and the other did not:
 #    the dry one is played again in full, as `..._full.json` (RULES 12.6 lets both stop only when neither has won).
 # 2. The determinism jobs again, each in a new process: the chain hashes must match the first set.
+#    And for a Twist whose 1500 build search won nothing, two searches of 6000 builds (`..._search_twist_deep_a.json` and `_b.json`).
 # 3. The timing runs (benchmark.gd), one at a time so the other jobs do not slow them down. Run this part when nothing
 #    else of yours is running.
 # Environment: EVALS_SOLO (default 6000), SEED_SHIFT (as in run_pass.sh), SKIP_BENCH=1 (do 1 and 2 only).
@@ -44,6 +45,11 @@ for LEVEL in $LEVELS; do
   NUM=$(echo "$LEVEL" | sed 's/.*_l//')
   S=$((SHIFT + (REGION * 10 + NUM) * 100))
   echo "mode=det level=$LEVEL seed=$((750000 + S)) out=$OUT/${LEVEL}_det_again.json" >> "$LIST"
+  # A Twist whose 1500 build search won nothing: two searches of 6000 builds with different seeds (RULES 12.6).
+  if [ -f "$OUT/${LEVEL}_search_twist.json" ] && tr -d '[:space:]' < "$OUT/${LEVEL}_search_twist.json" | grep -q '"wins":0[,}]'; then
+    echo "mode=search level=$LEVEL twist=1 seed=$((772000 + S)) evals=$EVALS_SOLO only=any out=$OUT/${LEVEL}_search_twist_deep_a.json" >> "$LIST"
+    echo "mode=search level=$LEVEL twist=1 seed=$((774000 + S)) evals=$EVALS_SOLO only=any out=$OUT/${LEVEL}_search_twist_deep_b.json" >> "$LIST"
+  fi
 done
 run_one() {
   OUTFILE=$(echo "$1" | sed 's/.*out=//')

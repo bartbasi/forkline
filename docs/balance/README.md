@@ -86,6 +86,12 @@ stops the run with exit code 2.
 Two more tools: `benchmark.gd` times each tick, and `run.gd mode=det` plays the same things twice
 (and once with a save and load in the middle of a wave) and checks the results match.
 
+**Added for the 2026-10-26 recheck (B4b, `campaign-2026-10-26.md`).** `mode=need` also reads the level's star 3: a tower it bans gets no lone
+search ("it can never earn star 3"), and `all_three_only` is the `only=` value of the "All three stars" search (`any`, or the towers the ban
+leaves). `run_pass.sh` takes that value from the need file and takes `SKIP_SOLO=1` (no lone searches, for a re-run of levels whose lone searches
+stand). `run_pass_post.sh` adds two 6000 build searches (`ID_search_twist_deep_a/b.json`, bases 772000 and 774000) for a Twist whose 1500 build
+search won nothing, and `summary.gd` reads them. Raw folder `raw/2026-10-26-b4b/`; seeds `SEED_SHIFT=200000`.
+
 ## Runs and the daily (task B2)
 
 Reports: `runs-<date>.md`. Raw numbers: `raw/<date>-b2/`. The run bots drive `RunSession` (ARCHITECTURE 3.3) and

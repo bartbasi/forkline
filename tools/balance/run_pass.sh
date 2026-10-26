@@ -13,23 +13,27 @@
 #   EVALS_SOLO   builds per lone attacker search (default 6000, RULES 12.6 as revised by G2)
 #   STOP_DRY     a lone attacker search stops when this many builds are tried and none has won (default 2500)
 #   SEED_SHIFT   added to every seed (default 0, which gives the seeds of the 2026-10-24 pass; the 2026-10-25 pass used 100000)
+#   SKIP_SOLO=1  no lone attacker searches (a re-run of levels whose lone searches stand)
 #   DRY=1        only write jobs.txt
 # Several copies of this script can work on one folder: a job is taken by making a lock folder, so no job runs twice.
 # If a copy is stopped, remove its lock folders (docs/balance/raw/DATE/.lock_*) before starting it again.
 #
 # Which lone attackers get searches is decided by `mode=need` (RULES 12.6): a tower that cannot hit flyers needs no
-# search on a level whose flyers cost 6 lives or more, and a tower that cannot hit walkers likewise for walkers.
+# search on a level whose flyers cost 6 lives or more, a tower that cannot hit walkers likewise for walkers, and the tower
+# a level's star 3 bans needs none (it can never earn star 3). The same file gives the towers of the "All three stars"
+# search (`all_three_only`): every tower, or on a level with a ban only the towers the ban leaves.
 #
 # Per level L, with key K = 10 * region + level number (11 to 46) and A the attacking tower's
 # number (1 Sling Post, 2 Catapult, 3 Longbow, 4 Firework), every seed is SEED_SHIFT plus a base plus 100 * K + A:
-#   search any tower         base 720000   all three stars, tower use, level length
+#   search any tower         base 720000   all three stars (the towers a ban leaves, if the star 3 bans one), tower use, level length
 #   search one attacker      base 730000 and 760000, two seeds   no super tower: that attacker plus the
 #                            level's Bells and Bakeries (only=solo:...), for each attacking tower that needs it
 #   spread                   base 710000   random play, 250 per style
 #   plain                    no seed       the plain mixed recipe of RULES 12.6 (compare_old=1 on region 1)
 #   det                      base 750000, and again in a new process   same inputs, same result
 # And for the level's Twist (twist=1):
-#   plain, search any (1500 builds, base 770000), det (base 780000).
+#   plain, search any (1500 builds, base 770000), det (base 780000). run_pass_post.sh adds two searches of 6000 builds
+#   (bases 772000 and 774000) for a Twist whose 1500 build search won nothing (RULES 12.6).
 # Then run_pass_post.sh (the dry pairs again, the determinism jobs again, the timing runs). Only processes this
 # script starts are used. Nothing is ended by name. A job whose output file exists is skipped.
 
@@ -66,7 +70,7 @@ for LEVEL in $LEVELS; do
   A=0
   for TOWER in sling_post pumpkin_catapult longbow_loft firework_tower; do
     A=$((A + 1))
-    if echo "$NEEDED" | grep -q "\"$TOWER\""; then
+    if [ -z "$SKIP_SOLO" ] && echo "$NEEDED" | grep -q "\"$TOWER\""; then
       echo "mode=search level=$LEVEL seed=$((730000 + S + A)) evals=$EVALS_SOLO stop_dry=$STOP_DRY only=solo:$TOWER out=$OUT/${LEVEL}_solo_${TOWER}_a.json" >> "$LIST.new"
       echo "mode=search level=$LEVEL seed=$((760000 + S + A)) evals=$EVALS_SOLO stop_dry=$STOP_DRY only=solo:$TOWER out=$OUT/${LEVEL}_solo_${TOWER}_b.json" >> "$LIST.new"
     fi
@@ -78,7 +82,10 @@ for LEVEL in $LEVELS; do
   S=$((SHIFT + (REGION * 10 + NUM) * 100))
   OPT=""
   if [ "$REGION" = "1" ]; then OPT="compare_old=1"; fi
-  echo "mode=search level=$LEVEL seed=$((720000 + S)) evals=$EVALS only=any out=$OUT/${LEVEL}_search_any.json" >> "$LIST.new"
+  # "All three stars": any tower, or on a level whose star 3 bans a tower, only the towers the ban leaves (RULES 12.6, G4).
+  ALL3=$(tr -d '[:space:]' < "$OUT/${LEVEL}_need.json" 2>/dev/null | grep -o '"all_three_only":"[^"]*"' | sed 's/.*:"//; s/"$//')
+  if [ -z "$ALL3" ]; then ALL3="any"; fi
+  echo "mode=search level=$LEVEL seed=$((720000 + S)) evals=$EVALS only=$ALL3 out=$OUT/${LEVEL}_search_any.json" >> "$LIST.new"
   echo "mode=spread level=$LEVEL seed=$((710000 + S)) n=250 out=$OUT/${LEVEL}_spread.json" >> "$LIST.new"
   echo "mode=plain level=$LEVEL $OPT out=$OUT/${LEVEL}_plain.json" >> "$LIST.new"
   echo "mode=det level=$LEVEL seed=$((750000 + S)) out=$OUT/${LEVEL}_det.json" >> "$LIST.new"

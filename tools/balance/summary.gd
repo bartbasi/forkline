@@ -997,12 +997,15 @@ func _pass_twists() -> void:
 			int(s.get("seed", 0)), s.get("evals", "-"), s.get("wins", "-"), best_text, _spread_twist_text(id), "yes" if won_plain or won_search else _deep_twist_text(id)])
 
 
-## A Twist whose 1500 build search won nothing: the longer searches of run_special.sh part 4, if any.
+## A Twist whose 1500 build search won nothing: the longer searches of run_pass_post.sh (ID_search_twist_deep_a/b.json) or
+## run_special.sh part 4, if any.
 func _deep_twist_text(id: String) -> String:
 	var wins: int = 0
 	var builds: int = 0
 	for suffix: String in ["a", "b"]:
 		var d: Dictionary = _read("special/%s_twist_deep_%s.json" % [id, suffix])
+		if d.is_empty():
+			d = _read("%s_search_twist_deep_%s.json" % [id, suffix])
 		wins += int(d.get("wins", 0))
 		builds += int(d.get("evals", 0))
 	if wins > 0:
