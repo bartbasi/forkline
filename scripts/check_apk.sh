@@ -20,8 +20,12 @@
 #      file differs from the one in Godot's export template);
 #   6. every bundled third party part is credited in NOTICE and README.md.
 # With --release, the check also fails if the manifest has android:debuggable
-# set to true. A release APK must be absent or false there. In the default
-# debug mode a debuggable APK is expected, and the script only says so.
+# with any value other than false (absent or an explicit false is fine; true,
+# 0x1, a reference and so on fail), and fails if the APK is signed with the
+# Android debug certificate (CN=Android Debug). The signer is read with
+# apksigner (SDK build-tools, or PATH) or else keytool (PATH or JAVA_HOME). If
+# neither is found, --release fails. In the default debug mode a debuggable,
+# debug-signed APK is expected, and the script only says so.
 # Exit code 0 means every check passed. 1 means a permission, a missing or
 # wrong file or manifest value, or a missing tool. 2 means a bundled part is
 # not credited.
@@ -157,18 +161,24 @@ if [ -z "$manifest" ]; then
 	failed=1
 else
 	printf '%s\n' "$manifest" | grep -E 'android:(icon|appCategory|isGame|allowBackup|debuggable|targetSdkVersion|screenOrientation|resizeableActivity|configChanges)\(' | sed 's/^ *//; s|http://schemas.android.com/apk/res/android:||'
-	# Prints true, false or absent for android:debuggable in the manifest text on stdin.
+	# Prints absent, false, true or unknown for android:debuggable in the manifest
+	# text on stdin. Only an absent attribute, "=false" and "=(type 0x12)0x0" count
+	# as false. "=true" and "=(type 0x12)0xffffffff" are true. Anything else
+	# (0x1, a @ref, a string) is unknown. With several lines, true wins, then
+	# unknown.
 	debuggable_state() {
-		local line
-		line="$(grep -m1 -E 'android:debuggable\(' || true)"
-		if [ -z "$line" ]; then
-			echo absent
-		else
-			case "$line" in
-				*=true*|*0xffffffff*) echo true ;;
-				*) echo false ;;
+		local line value state="absent"
+		while IFS= read -r line; do
+			value="${line#*)=}"
+			value="${value%% (Raw:*}"
+			value="${value%"${value##*[![:space:]]}"}"
+			case "$value" in
+				false|"(type 0x12)0x0") [ "$state" = "absent" ] && state="false" ;;
+				true|"(type 0x12)0xffffffff") state="true" ;;
+				*) [ "$state" != "true" ] && state="unknown" ;;
 			esac
-		fi
+		done < <(grep -E 'android:debuggable\(' || true)
+		echo "$state"
 	}
 	# Prints the value of the first manifest attribute with this name.
 	manifest_value() {
@@ -191,13 +201,19 @@ else
 	expect_value allowBackup false "no backup of saves"
 	debuggable="$(printf '%s
 ' "$manifest" | debuggable_state)"
-	if [ "$debuggable" != "true" ]; then
+	if [ "$debuggable" = "absent" ] || [ "$debuggable" = "false" ]; then
 		echo "OK: debuggable is $debuggable (not debuggable)."
 	elif [ "$release" -eq 1 ]; then
-		echo "FAIL: the manifest has android:debuggable=true. A release APK must not be debuggable."
+		if [ "$debuggable" = "true" ]; then
+			echo "FAIL: the manifest has android:debuggable=true. A release APK must not be debuggable."
+		else
+			echo "FAIL: the manifest has an android:debuggable value that is neither absent nor false. A release APK must have it absent or false."
+		fi
 		failed=1
-	else
+	elif [ "$debuggable" = "true" ]; then
 		echo "Note: this debug APK is debuggable, as expected. Anyone with USB access can read its files through run-as. A release APK must not be (use --release to check)."
+	else
+		echo "Note: android:debuggable has an unrecognized value. A release APK would fail on it (use --release to check)."
 	fi
 	changes="$(manifest_value configChanges)"
 	if [ -n "$changes" ] && [ $(( changes & 0x1d80 )) -eq $(( 0x1d80 )) ]; then
@@ -205,6 +221,72 @@ else
 	else
 		echo "FAIL: configChanges is '$changes', it must include 0x1d80."
 		failed=1
+	fi
+fi
+
+echo
+echo "== Signing certificate =="
+# Prints debug, other or unreadable for the certificate text on stdin (the output of
+# apksigner verify --print-certs, or keytool -printcert -jarfile).
+signer_state() {
+	local dn
+	dn="$(grep -E '(certificate DN|Owner):' || true)"
+	if [ -z "$dn" ]; then
+		echo unreadable
+	elif printf '%s\n' "$dn" | grep -qi 'CN=Android Debug'; then
+		echo debug
+	else
+		echo other
+	fi
+}
+if [ "$release" -ne 1 ]; then
+	echo "Note: not checked in debug mode. Debug builds are signed with the Android debug certificate on purpose. --release fails on it."
+else
+	apksigner=""
+	if [ -f "$tools_dir/apksigner.bat" ]; then
+		apksigner="$tools_dir/apksigner.bat"
+	elif [ -f "$tools_dir/apksigner" ]; then
+		apksigner="$tools_dir/apksigner"
+	else
+		apksigner="$(command -v apksigner 2> /dev/null || true)"
+	fi
+	keytool="$(command -v keytool 2> /dev/null || true)"
+	if [ -z "$keytool" ] && [ -n "${JAVA_HOME:-}" ]; then
+		for k in "$JAVA_HOME/bin/keytool" "$JAVA_HOME/bin/keytool.exe"; do
+			[ -f "$k" ] && keytool="$k" && break
+		done
+	fi
+	signer_rc=-1
+	if [ -n "$apksigner" ]; then
+		echo "Reading the signer with apksigner."
+		"$apksigner" verify --print-certs "$apk" < /dev/null > "$work/certs.txt" 2>&1
+		signer_rc=$?
+	elif [ -n "$keytool" ]; then
+		echo "apksigner was not found. Reading the signer with keytool."
+		"$keytool" -printcert -jarfile "$apk" < /dev/null > "$work/certs.txt" 2>&1
+		signer_rc=$?
+	else
+		echo "FAIL: neither apksigner (Android SDK build-tools) nor keytool (JDK) was found, so the signing certificate cannot be checked. Install one, or set ANDROID_SDK or JAVA_HOME."
+		failed=1
+	fi
+	if [ "$signer_rc" -gt 0 ]; then
+		tr -d '\r' < "$work/certs.txt"
+		echo "FAIL: the signer tool could not read the APK's signing certificate (exit code $signer_rc)."
+		failed=1
+	elif [ "$signer_rc" -eq 0 ]; then
+		certs="$(tr -d '\r' < "$work/certs.txt")"
+		case "$(printf '%s\n' "$certs" | signer_state)" in
+			debug)
+				printf '%s\n' "$certs" | grep -E '(certificate DN|Owner):'
+				echo "FAIL: the APK is signed with the Android debug certificate (CN=Android Debug). A release APK needs the release key."
+				failed=1
+				;;
+			other) echo "OK: the APK is not signed with the Android debug certificate." ;;
+			*)
+				echo "FAIL: no signing certificate could be read from the APK."
+				failed=1
+				;;
+		esac
 	fi
 fi
 

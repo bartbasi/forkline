@@ -64,7 +64,7 @@ PowerShell has `scripts\install.ps1`.
 bash scripts/check_apk.sh --release path/to/forkline-release.apk
 ```
 
-`--release` adds one check: the manifest must not have `android:debuggable` set to true (absent or false is fine). The debug APK is debuggable on purpose, so the default mode only prints a note. Play also refuses debuggable uploads. Release signing is ask first, so no release APK exists yet.
+`--release` adds two checks. First, `android:debuggable` must be absent or an explicit false (`=false` or `(type 0x12)0x0`). True, `0x1`, a reference or any other value fails. Second, the APK must not be signed with the Android debug certificate (`CN=Android Debug`). The signer is read with `apksigner` (SDK build-tools, or on PATH), or else `keytool` (on PATH or in `JAVA_HOME`). If neither is found, the check fails instead of passing. The debug APK is debuggable and debug-signed on purpose, so the default mode only prints notes. Play also refuses debuggable uploads. Release signing is ask first, so no release APK exists yet.
 
 ## Wording for the privacy policy and store listing (phase 9)
 
