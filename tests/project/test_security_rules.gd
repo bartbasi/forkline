@@ -15,13 +15,15 @@ const FORBIDDEN: PackedStringArray = [
 	"str_to_var", "bytes_to_var", "bytes_to_var_with_objects", "get_var",
 	"ConfigFile", "dict_to_inst", "base64_to_variant", "UPNP", "UPNPDevice",
 	"resolve_hostname", "resolve_hostname_addresses", "resolve_hostname_queue_item",
-	"JavaClassWrapper", "JNISingleton",
+	"JavaClassWrapper", "JNISingleton", "decode_var", "to_native", "Expression",
+	"source_code", "load_resource_pack", "shell_show_in_file_manager",
+	"request_permission", "request_permissions",
 ]
 ## Calls the game itself must never make. Tests and tools may load scenes and
 ## run Godot, so these are checked only in the game's own folders.
 const GAME_FORBIDDEN: PackedStringArray = [
 	"ResourceLoader", "OS\\.execute", "OS\\.execute_with_pipe", "OS\\.create_process",
-	"OS\\.create_instance", "Engine\\.get_singleton",
+	"OS\\.create_instance", "Engine\\.get_singleton", "ClassDB\\.instantiate",
 ]
 ## The game's own folders.
 const GAME_DIRS: PackedStringArray = ["res://src/", "res://scenes/"]
@@ -60,6 +62,15 @@ func test_the_game_never_loads_resources_or_runs_programs() -> void:
 			if found != null:
 				fail("%s:%d uses %s" % [path, i + 1, found.get_string(1)])
 	assert_true(checked > 50, "the game's own files were scanned")
+
+
+func test_no_scene_or_resource_holds_a_script() -> void:
+	# A script written inside a scene or resource would dodge the checks above.
+	for path: String in _scripts():
+		if path.get_extension() != "tscn" and path.get_extension() != "tres":
+			continue
+		if FileAccess.get_file_as_string(path).contains("type=\"GDScript\""):
+			fail("%s holds a script; put it in a .gd file" % path)
 
 
 func test_only_the_links_file_opens_addresses() -> void:
