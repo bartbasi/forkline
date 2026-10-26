@@ -37,7 +37,7 @@ Each agent edits only what it owns, plus any path its task brief from the DM exp
 | tools/balance/, docs/balance/ | balance-analyst |
 | src/run/, data/cards/, data/runs/, tests/run/ | roguelite-engineer |
 | src/ui/ (including the app glue in src/ui/app.gd), scenes/ui/, tests/ui/ | ui-engineer |
-| src/render/, shaders/, tests/render/ | render-engineer |
+| src/render/, shaders/, tests/render/, docs/render/ | render-engineer |
 | src/audio/, tests/audio/ | audio-engineer |
 | scripts/, export_presets.cfg, tools/store/, docs/store/, docs/release.md | release-engineer |
 | docs/reviews/qa-*.md | qa-reviewer |
