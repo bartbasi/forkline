@@ -20,7 +20,7 @@
   "gates": 2,
   "strength": 175,
   "towers": ["sling_post", "pumpkin_catapult", "lullaby_bell", "longbow_loft", "firework_tower"],
-  "star3": {"kind": "towers_at_most", "value": 6},
+  "star3": {"kind": "tier_at_most", "value": 2},
   "hint": {"text": "Puffballs burst into three Puffs. Pop them near a Catapult.", "cell": [4, 7]},
   "waves": [
     {"strength": 100, "groups": [{"enemy": "scamp", "count": 10, "entrance": 1, "at_ms": 0, "every_ms": 1400}]},

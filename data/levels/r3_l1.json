@@ -19,7 +19,7 @@
   "gates": 2,
   "strength": 170,
   "towers": ["sling_post", "pumpkin_catapult", "lullaby_bell", "longbow_loft", "firework_tower"],
-  "star3": {"kind": "no_lives_lost"},
+  "star3": {"kind": "tower_ban", "tower": "sling_post"},
   "hint": {"text": "Fireworks hit only flyers, but the whole flock at once.", "cell": [3, 4]},
   "waves": [
     {"strength": 100, "groups": [{"enemy": "scamp", "count": 10, "entrance": 1, "at_ms": 0, "every_ms": 1400}]},

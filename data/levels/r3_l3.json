@@ -20,7 +20,7 @@
   "gates": 3,
   "strength": 180,
   "towers": ["sling_post", "pumpkin_catapult", "lullaby_bell", "longbow_loft", "firework_tower"],
-  "star3": {"kind": "gates_at_most", "value": 2},
+  "star3": {"kind": "towers_at_most", "value": 5},
   "hint": {"text": "Three gates. Try each socket and watch the line.", "cell": [1, 5]},
   "waves": [
     {"strength": 100, "groups": [{"enemy": "scamp", "count": 10, "entrance": 1, "at_ms": 0, "every_ms": 1400}]},

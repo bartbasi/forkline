@@ -9,8 +9,8 @@ const Files: GDScript = preload("res://tests/levels/fixtures/level_files.gd")
 ## RULES 12.3 and 12.4, one row per level in play order:
 ## gates, sockets, waves, strength, Normal starting gold, star 3 kind and value,
 ## and the kind of cell the hint highlights ("none" for a level with no hint).
-## 3-2's star 3 is "Have at most 6 towers" (at 7 Sling Posts alone earned all three stars), and
-## 2-2's is "Use no gates" (TUNING_R2.md, 2026-10-24).
+## Region 3's third stars changed on 2026-10-25 (TUNING_CAMPAIGN.md).
+## 2-2's star 3 is "Use no gates" (TUNING_R2.md, 2026-10-24).
 const PLAN: Dictionary = {
 	"r1_l1": {"gates": 0, "sockets": 0, "waves": 8, "strength": 100, "gold": 200, "star3": ["tier_at_most", 1], "highlight": "spot"},
 	"r1_l2": {"gates": 1, "sockets": 2, "waves": 8, "strength": 100, "gold": 250, "star3": ["tier_at_most", 1], "highlight": "socket"},
@@ -24,12 +24,12 @@ const PLAN: Dictionary = {
 	"r2_l4": {"gates": 2, "sockets": 4, "waves": 11, "strength": 145, "gold": 450, "star3": ["gates_at_most", 1], "highlight": "socket"},
 	"r2_l5": {"gates": 2, "sockets": 4, "waves": 11, "strength": 150, "gold": 450, "star3": ["tower_ban", "longbow_loft"], "highlight": "spot"},
 	"r2_l6": {"gates": 2, "sockets": 5, "waves": 12, "strength": 160, "gold": 500, "star3": ["kinds_at_most", 3], "highlight": "spot"},
-	"r3_l1": {"gates": 2, "sockets": 4, "waves": 11, "strength": 170, "gold": 500, "star3": ["no_lives_lost", 0], "highlight": "spot"},
-	"r3_l2": {"gates": 2, "sockets": 4, "waves": 11, "strength": 175, "gold": 550, "star3": ["towers_at_most", 6], "highlight": "spot"},
-	"r3_l3": {"gates": 3, "sockets": 5, "waves": 12, "strength": 180, "gold": 550, "star3": ["gates_at_most", 2], "highlight": "socket"},
+	"r3_l1": {"gates": 2, "sockets": 4, "waves": 11, "strength": 170, "gold": 500, "star3": ["tower_ban", "sling_post"], "highlight": "spot"},
+	"r3_l2": {"gates": 2, "sockets": 4, "waves": 11, "strength": 175, "gold": 550, "star3": ["tier_at_most", 2], "highlight": "spot"},
+	"r3_l3": {"gates": 3, "sockets": 5, "waves": 12, "strength": 180, "gold": 550, "star3": ["towers_at_most", 5], "highlight": "socket"},
 	"r3_l4": {"gates": 2, "sockets": 5, "waves": 12, "strength": 185, "gold": 600, "star3": ["tower_ban", "sling_post"], "highlight": "spot"},
 	"r3_l5": {"gates": 3, "sockets": 6, "waves": 12, "strength": 190, "gold": 600, "star3": ["tier_at_most", 2], "highlight": "none"},
-	"r3_l6": {"gates": 3, "sockets": 6, "waves": 12, "strength": 200, "gold": 650, "star3": ["no_lives_lost", 0], "highlight": "spot"},
+	"r3_l6": {"gates": 3, "sockets": 6, "waves": 12, "strength": 200, "gold": 650, "star3": ["tower_ban", "sling_post"], "highlight": "spot"},
 	"r4_l1": {"gates": 2, "sockets": 5, "waves": 12, "strength": 210, "gold": 650, "star3": ["towers_at_most", 6], "highlight": "spot"},
 	"r4_l2": {"gates": 2, "sockets": 5, "waves": 12, "strength": 220, "gold": 700, "star3": ["tower_ban", "pumpkin_catapult"], "highlight": "spot"},
 	"r4_l3": {"gates": 3, "sockets": 6, "waves": 12, "strength": 230, "gold": 700, "star3": ["gates_whole", 0], "highlight": "socket"},
