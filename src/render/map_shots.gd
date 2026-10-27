@@ -27,25 +27,39 @@ enum Hue { HEAL, RELEASE, GATE }
 
 ## Per look: speed in cells a second, the shortest and longest flight in seconds, the arc height
 ## in cells.
-const SPEED: Array[float] = [22.0, 18.0, 12.0, 12.0, 34.0, 30.0, 20.0, 20.0, 24.0, 12.0]
-const SHORTEST: Array[float] = [0.05, 0.05, 0.16, 0.16, 0.05, 0.05, 0.05, 0.05, 0.05, 0.16]
-const LONGEST: Array[float] = [0.16, 0.18, 0.24, 0.24, 0.14, 0.16, 0.22, 0.22, 0.2, 0.24]
+const SPEED: Array[float] = [22.0, 18.0, 18.0, 18.0, 34.0, 30.0, 28.0, 28.0, 24.0, 16.0]
+const SHORTEST: Array[float] = [0.05, 0.05, 0.11, 0.11, 0.05, 0.05, 0.05, 0.05, 0.05, 0.12]
+const LONGEST: Array[float] = [0.16, 0.18, 0.16, 0.16, 0.14, 0.16, 0.13, 0.13, 0.2, 0.17]
 const ARC: Array[float] = [0.08, 0.1, 0.9, 0.9, 0.0, 0.0, 0.1, 0.15, 0.05, 1.1]
 ## Per Fx: how long it lasts, in seconds.
-const LIFE: Array[float] = [0.24, 0.28, 0.5, 0.6, 0.55, 0.35, 0.45, 0.26, 0.75]
+const LIFE: Array[float] = [0.18, 0.28, 0.5, 0.6, 0.55, 0.35, 0.45, 0.26, 0.75]
 const BURST_COLORS: Array[Color] = [Palette.HONEY, Palette.ROOF_CLAY, Palette.SPARKLE, Palette.SPARKLE_LILAC]
 const HUES: Array[Color] = [Palette.HP_FILL, Palette.SPARKLE_LILAC, Palette.SPARKLE]
+## How far the picture of a pumpkin or rocket landing may slide toward its creature, which walks on
+## while the shot flies, as a fraction of the true splash radius. The splash area itself never moves.
+const AIM_REACH: float = 0.35
+## The farthest a single-target hit mark reaches from the creature's center at its peak, in cells.
+## A heavy hit (Giant Bow, Skyrocket) reaches a little more. Twice the heavy reach is still less than
+## the smallest creature (a Pip or a Puff, 0.4 of a cell), so a mark never hides one or its health bar.
+const HIT_REACH: float = 0.15
+const HIT_REACH_HEAVY: float = 0.19
+## The ink edge makes a ring this much wider than the radius it is drawn at.
+const RING_INK: float = 1.07
 
 
 class Shot:
 	extends RefCounted
 	var look: int = 0
 	var from: Vector2 = Vector2.ZERO
+	## Where the picture of the shot ends. It follows its creature while the creature is on the map.
 	var to: Vector2 = Vector2.ZERO
+	## Where the sim hit, for the shots that land on a spot. The splash area stays centered here.
+	var spot: Vector2 = Vector2.ZERO
 	var t0: float = 0.0
 	var t1: float = 0.0
 	var target: int = -1
-	## A lobbed shot: the splash radius in pixels, drawn on the ground while it flies.
+	## A shot that lands on a spot: the splash radius in pixels. A lobbed shot draws it on the ground
+	## while it flies.
 	var radius: float = 0.0
 
 
@@ -65,6 +79,9 @@ class Flash:
 	var dir: float = 1.0
 	## HIT, MUZZLE: the direction the shot flew, in radians.
 	var ang: float = 0.0
+	## SPLASH, BURST: where the shot's picture landed, on the creature. It stays within AIM_REACH of
+	## `at`, which is the center of the true splash area.
+	var aim: Vector2 = Vector2.ZERO
 
 
 ## The sheet the pictures are cut from (set by MapView). Nothing draws without it.
@@ -148,10 +165,11 @@ func launch(look: int, from: Vector2, to: Vector2, target: int, at_time: float, 
 	s.look = look
 	s.from = from
 	s.to = to
+	s.spot = to
 	s.t0 = at_time
 	s.t1 = at_time + flight
 	s.target = target
-	s.radius = splash if is_lobbed(look) else 0.0
+	s.radius = splash if lands_on_spot(look) else 0.0
 	shots.append(s)
 	launched[look] += 1
 	_add_flash(Fx.MUZZLE, from, at_time, 1.0, look, 1.0, (to - from).angle())
@@ -162,11 +180,6 @@ func launch(look: int, from: Vector2, to: Vector2, target: int, at_time: float, 
 ## A bubble pop ring.
 func add_ring(at: Vector2, at_time: float) -> void:
 	_add_flash(Fx.RING, at, at_time, 1.0, 0, 1.0)
-
-
-## A firework burst of `radius` pixels (the tower's splash). `wide` is the Star Bloom's.
-func add_burst(at: Vector2, at_time: float, radius: float, wide: bool) -> void:
-	_add_flash(Fx.BURST, at, at_time, radius, 1 if wide else 0, 1.0)
 
 
 ## A "+" that rises from a creature that was healed.
@@ -193,6 +206,15 @@ func add_pulse(at: Vector2, at_time: float, radius: float, hue: Hue) -> void:
 ## direction the shot flew) pick its shape.
 func add_hit(at: Vector2, at_time: float, big: float = 1.0, look: int = Look.PEBBLE, angle: float = 0.0) -> void:
 	_add_flash(Fx.HIT, at, at_time, big, look, 1.0, angle)
+
+
+## Points the picture of a shot at where its creature is now. A shot that lands on a spot slides at
+## most AIM_REACH of its splash radius from the spot the sim hit, so the splash area stays honest.
+func aim_at(s: Shot, p: Vector2) -> void:
+	if lands_on_spot(s.look):
+		s.to = s.spot + (p - s.spot).limit_length(s.radius * AIM_REACH)
+	else:
+		s.to = p
 
 
 ## Moves the clock on, ends the shots that arrived and starts their landing marks.
@@ -229,17 +251,22 @@ func _wake() -> void:
 	_drawn_last = true
 
 
-## The mark a shot makes where it lands: a splash for the catapult, else a hit mark.
+## The mark a shot makes where it lands: a splash for the catapult, a burst and a hit mark for the
+## small fireworks, else a hit mark. The splash and the burst are centered on the spot the sim hit
+## and show its true radius. What flies out of them lands on the creature.
 func _land(s: Shot) -> void:
+	var radius: float = s.radius if s.radius > 0.0 else CELL * 0.75
 	if is_lobbed(s.look):
 		var hue: int = 1 if s.look == Look.JAM else (2 if s.look == Look.PRIZE else 0)
-		_add_flash(Fx.SPLASH, s.to, s.t1, s.radius if s.radius > 0.0 else CELL * 0.75, hue, 1.0)
+		_add_flash(Fx.SPLASH, s.spot, s.t1, radius, hue, 1.0).aim = s.to
 		return
-	var big: float = 1.8 if (s.look == Look.GIANT_ARROW or s.look == Look.SKYROCKET) else 1.0
-	_add_flash(Fx.HIT, s.to, s.t1, big, s.look, 1.0, (s.to - s.from).angle())
+	if s.look == Look.ROCKET or s.look == Look.BLOOM:
+		_add_flash(Fx.BURST, s.spot, s.t1, radius, 1 if s.look == Look.BLOOM else 0, 1.0).aim = s.to
+	var heavy: float = 1.8 if (s.look == Look.GIANT_ARROW or s.look == Look.SKYROCKET) else 1.0
+	_add_flash(Fx.HIT, s.to, s.t1, heavy, s.look, 1.0, (s.to - s.from).angle())
 
 
-func _add_flash(kind: int, at: Vector2, t0: float, size: float, hue: int, dir: float, ang: float = 0.0) -> void:
+func _add_flash(kind: int, at: Vector2, t0: float, size: float, hue: int, dir: float, ang: float = 0.0) -> Flash:
 	if flashes.size() >= MAX_FLASHES:
 		flashes.remove_at(0)
 	var f: Flash = Flash.new()
@@ -251,9 +278,11 @@ func _add_flash(kind: int, at: Vector2, t0: float, size: float, hue: int, dir: f
 	f.hue = hue
 	f.dir = dir
 	f.ang = ang
+	f.aim = at
 	flashes.append(f)
 	marked[kind] += 1
 	_wake()
+	return f
 
 
 func _point(s: Shot, u: float) -> Vector2:
@@ -433,49 +462,58 @@ func _draw_muzzle(f: Flash, k: float) -> void:
 
 # Where it lands.
 
-## Per look, a hit mark: a flash on the creature, a star, and chips, a ring, a stuck arrow or a
-## bang to suit the shot.
+## How far a single-target hit mark reaches from the creature's center, in pixels, `k` of the way
+## through its life (0 to 1). Every part of it (flash, star, ring, chips, puffs) stays inside this
+## radius, ink edge included.
+static func hit_reach(heavy: bool, k: float) -> float:
+	var e: float = 1.0 - (1.0 - k) * (1.0 - k)
+	return CELL * (HIT_REACH_HEAVY if heavy else HIT_REACH) * (0.6 + 0.4 * e)
+
+
+## Per look, a hit mark: a small flash on the creature, a star, and chips, a ring, a stuck arrow or
+## a bang to suit the shot. It is smaller than the smallest creature and quick, so it never hides a
+## creature or its health bar for long.
 func _draw_hit(f: Flash, k: float) -> void:
 	var a: float = 1.0 - k
 	var e: float = 1.0 - (1.0 - k) * (1.0 - k)
-	var sz: float = f.size
 	var heavy: bool = f.hue == Look.GIANT_ARROW or f.hue == Look.SKYROCKET
-	_disc(f.at, CELL * 0.3 * sz * (0.6 + 0.4 * e), Color(Palette.SPARKLE, 0.7 * a))
+	var r: float = hit_reach(heavy, k)
+	_disc(f.at, r * 0.8, Color(Palette.SPARKLE, 0.55 * a))
 	var col: Color = Palette.LANTERN if f.hue == Look.SKYROCKET else Palette.SPARKLE
-	var reach: float = CELL * (0.24 + 0.2 * e) * sz
-	if f.hue == Look.ROCKET or f.hue == Look.BLOOM:
-		reach *= 0.7
-	_star(f.at, reach, heavy or f.hue == Look.STONE, PI / 4.0, Color(col, a))
+	# A star's drawn tips reach 1.11 times the size given.
+	_star(f.at, r / 1.11, heavy or f.hue == Look.STONE, PI / 4.0, Color(col, a))
 	match f.hue:
 		Look.PEBBLE:
 			for j: int in 4:
 				var d: Vector2 = Vector2.from_angle(TAU * float(j) / 4.0 + 0.2)
-				var cp: Vector2 = f.at + d * CELL * (0.12 + 0.2 * e) + Vector2(0.0, -sin(PI * k) * CELL * 0.08)
+				var cp: Vector2 = f.at + d * (r - CELL * 0.045) + Vector2(0.0, -sin(PI * k) * CELL * 0.04)
 				_bead(cp, CELL * 0.022, Color(Palette.PLASTER, a))
 		Look.STONE:
 			for j: int in 4:
 				var d: Vector2 = Vector2.from_angle(TAU * float(j) / 4.0 + 0.5)
-				var cp: Vector2 = f.at + d * CELL * (0.1 + 0.26 * e) + Vector2(0.0, -sin(PI * k) * CELL * 0.1)
-				_bead(cp, CELL * 0.04, Color(Palette.STONE, a))
-			_ring(f.at, CELL * (0.12 + 0.22 * e), Color(Palette.STONE, 0.9 * a))
+				var cp: Vector2 = f.at + d * maxf(r - CELL * 0.075, 0.0) + Vector2(0.0, -sin(PI * k) * CELL * 0.03)
+				_bead(cp, CELL * 0.035, Color(Palette.STONE, a))
+			_ring(f.at, r / RING_INK, Color(Palette.STONE, 0.9 * a))
 		Look.ARROW, Look.GIANT_ARROW:
 			var wob: float = sin(k * 38.0) * 0.14 * a
-			var big: float = 1.7 if f.hue == Look.GIANT_ARROW else 1.0
+			var big: float = 1.15 if f.hue == Look.GIANT_ARROW else 1.0
 			var fade: float = 1.0 if k < 0.65 else 1.0 - (k - 0.65) / 0.35
 			_q(ShotPieces.Piece.ARROW, f.at, big, big, Color(1, 1, 1, fade), f.ang + wob)
 			if heavy:
-				_ring(f.at, CELL * (0.2 + 0.4 * e), Color(Palette.SPARKLE, a))
+				_ring(f.at, r / RING_INK, Color(Palette.SPARKLE, a))
 		Look.SKYROCKET:
-			_disc(f.at, CELL * 0.22 * (1.0 - 0.6 * k), Color(Palette.LANTERN_CORE, a))
-			_ring(f.at, CELL * (0.25 + 0.5 * e), Color(Palette.GLOW, a))
+			_disc(f.at, r * 0.5 * (1.0 - 0.6 * k), Color(Palette.LANTERN_CORE, a))
+			_ring(f.at, r / RING_INK, Color(Palette.GLOW, a))
 			for j: int in 3:
-				var off: Vector2 = Vector2((float(j) - 1.0) * 0.22, -0.1 - 0.3 * e) * CELL
-				_puff(f.at + off, CELL * (0.07 + 0.08 * k), 0.7 * a)
+				var off: Vector2 = Vector2((float(j) - 1.0) * 0.4 * r, -(0.35 + 0.2 * e) * r)
+				_puff(f.at + off, r * 0.26, 0.7 * a)
 
 
-## A lobbed shot lands: the splash area spreads out to its true radius (a filled disc with a ring
-## on its edge), chunks fly out, sparkles twinkle, and a splat marks the middle. A jam splash
-## leaves a sticky puddle that fades slowly, as its jam slows what it touches.
+## A lobbed shot lands: the splash area spreads out to its true radius around the spot the sim hit
+## (a filled disc with a ring on its edge). The splat, the chunks and the sparkles are centered on
+## where the pumpkin came down on its creature (`aim`, inside the area), so it reads as a hit even
+## though the creature walked on while the pumpkin flew. A jam splash leaves a sticky puddle that
+## fades slowly, as its jam slows what it touches.
 func _draw_splash(f: Flash, k: float) -> void:
 	var radius: float = f.size
 	var jam: bool = f.hue == 1
@@ -487,21 +525,23 @@ func _draw_splash(f: Flash, k: float) -> void:
 	_disc(f.at, r, Color(main, 0.3 * fade))
 	_disc(f.at, r * 0.6, Color(light, 0.2 * fade))
 	_ring(f.at, r, Color(light, fade))
-	# The splat in the middle.
-	var splat: float = radius * 0.34 * (0.4 + 0.6 * grow)
+	# The splat where the pumpkin came down. It stays inside the area.
+	var centre: Vector2 = f.aim
+	var room: float = maxf(radius - f.at.distance_to(centre), 0.0)
+	var splat: float = minf(radius * 0.34, room * 0.9) * (0.4 + 0.6 * grow)
 	var puddle: float = 1.0 if jam else maxf(1.0 - k * 1.8, 0.0)
 	if puddle > 0.0:
 		var s: float = splat / (0.34 * CELL)
-		_q(ShotPieces.Piece.SPLAT, f.at, s, s, Color(main, puddle * fade))
+		_q(ShotPieces.Piece.SPLAT, centre, s, s, Color(main, puddle * fade))
 	# Chunks fly out and fall.
 	if k < 0.62:
 		var kc: float = k / 0.62
 		var n: int = 14 if f.hue == 2 else 10
 		for j: int in n:
 			var ang: float = TAU * float(j) / float(n) + 0.35 * float(j % 3)
-			var reach: float = radius * (0.5 + 0.4 * float(j % 3) / 2.0) * (1.0 - pow(1.0 - kc, 2.0))
+			var reach: float = room * (0.5 + 0.4 * float(j % 3) / 2.0) * (1.0 - pow(1.0 - kc, 2.0))
 			var up: float = sin(PI * kc) * CELL * (0.3 + 0.14 * float(j % 2))
-			var pos: Vector2 = f.at + Vector2.from_angle(ang) * reach + Vector2(0.0, -up)
+			var pos: Vector2 = centre + Vector2.from_angle(ang) * reach + Vector2(0.0, -up)
 			var cr: float = CELL * (0.055 + 0.025 * float(j % 2)) * (1.0 - 0.4 * kc)
 			var col: Color = main if j % 2 == 0 else (light if jam else Palette.BONE)
 			_bead(pos, cr, Color(col, 1.0 - kc * kc))
@@ -510,19 +550,20 @@ func _draw_splash(f: Flash, k: float) -> void:
 		var tw: float = sin(PI * (k - 0.08) / 0.52)
 		for j: int in 5:
 			var v: Vector2 = Vector2.from_angle(TAU * float(j) / 5.0 + 0.9)
-			var pos: Vector2 = f.at + v * radius * (0.5 + 0.1 * float(j)) + Vector2(0.0, -CELL * 0.2 * k)
+			var pos: Vector2 = centre + v * room * (0.5 + 0.1 * float(j)) + Vector2(0.0, -CELL * 0.2 * k)
 			_star(pos, CELL * 0.1 * tw, false, PI / 4.0, Color(Palette.SPARKLE, tw))
 
 
-## Spokes that reach the splash radius at the end, with a bead on each tip, a bright flash at the
-## middle and a faint disc of the true splash area. The Star Bloom has more spokes and a second ring.
+## Spokes that reach the splash radius at the end, with a bead on each tip, and a faint disc of the
+## true splash area, all around the spot the sim hit. The bright flash is where the rocket came down
+## on its creature (`aim`). The Star Bloom has more spokes and a second ring.
 func _draw_burst(f: Flash, k: float) -> void:
 	var fade: float = 1.0 - k * k
 	var reach: float = f.size * (0.5 + 0.5 * (1.0 - pow(1.0 - minf(k / 0.5, 1.0), 2.0)))
 	var spokes: int = 12 if f.hue == 1 else 8
 	_disc(f.at, reach, Color(Palette.SPARKLE, 0.16 * fade))
 	if k < 0.4:
-		_disc(f.at, CELL * 0.22 * (1.0 - k / 0.4), Color(Palette.LANTERN_CORE, 1.0 - k / 0.4))
+		_disc(f.aim, CELL * 0.22 * (1.0 - k / 0.4), Color(Palette.LANTERN_CORE, 1.0 - k / 0.4))
 	for j: int in spokes:
 		var d: Vector2 = Vector2.from_angle(TAU * float(j) / float(spokes) + 0.2)
 		var col: Color = BURST_COLORS[j % BURST_COLORS.size()]

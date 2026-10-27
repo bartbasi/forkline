@@ -29,12 +29,13 @@ extends ScreenFrame
 ## taps on the map do nothing while it is open and the back button opens Pause. A waiting risk
 ## card shows first in the wave preview. A Twist shows its rule as the first hint and in Pause.
 
-## The game should be saved: a build phase began, or the game was paused.
+## The game should be saved: a build phase began, a wave started or was called early, a card
+## was picked, or the game was paused.
 signal save_requested()
 ## Progress changed (a first sight was recorded).
 signal progress_changed()
 ## The level was won, lost or abandoned. `result` is Battle.result() plus
-## "abandoned" and "relaxed".
+## "abandoned", "relaxed" and "twist".
 signal ended(result: Dictionary)
 ## "Back to menu" in Pause. The game stays saved.
 signal left()
@@ -245,6 +246,7 @@ func _connect_panels() -> void:
 	hud.speed_selected.connect(func(speed: int) -> void: clock.speed = speed)
 	hud.pause_requested.connect(freeze)
 	hud.resume_requested.connect(resume)
+	hud.wave_started.connect(func() -> void: save_requested.emit())
 	pause_strip.menu_requested.connect(_on_strip_menu)
 	hint_banner.closed.connect(_on_hint_closed)
 	preview.build_began.connect(_start_fit)

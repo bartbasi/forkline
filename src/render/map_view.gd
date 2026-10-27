@@ -740,21 +740,16 @@ func _on_fired(e: Dictionary) -> void:
 			away = -1.0
 		v.kick_lean = KICK_LEAN[look] * away
 		tier = v.tier
-	var burst_radius: float = 0.0
 	var splash_px: float = 0.0
 	if MapShots.lands_on_spot(look):
 		# A burst or a splash shows the tower's real splash, card effects included.
 		var state: TowerState = battle.tower_at(cell)
 		var splash: int = state.stats.splash if state != null and state.stats != null else 75
 		splash_px = float(splash) / 100.0 * CELL
-		if not MapShots.is_lobbed(look):
-			burst_radius = splash_px
 	for i: int in ids.size():
 		var id: int = int(ids[i])
 		var to: Vector2 = Vector2(ats[i] as Vector2i) * PX_PER_SUB
 		var arrives: float = _shots.launch(look, MapShots.muzzle(tower, cell, tier, spec, i), to, id, _fx_time, splash_px)
-		if burst_radius > 0.0:
-			_shots.add_burst(to, arrives, burst_radius, look == MapShots.Look.BLOOM)
 		_arrival_ids[id] = maxf(float(_arrival_ids.get(id, 0.0)), arrives)
 		_arrival_pos.append(to)
 		_arrival_time.append(arrives)
@@ -939,10 +934,10 @@ func _note_breaker(e: EnemyState) -> void:
 
 
 func _sync_layers() -> void:
+	if not _shots.shots.is_empty():
+		_track_shots()
 	_shots.advance(_fx_time)
 	_leaks.advance(_fx_time)
-	if _shots.is_busy():
-		_track_shots()
 	_routes.advance(_real_dt)
 	if _marks.is_animated():
 		_marks.set_pulse(0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.006))
@@ -959,14 +954,14 @@ func _sync_layers() -> void:
 	_status.set_items(_status_items, _boosted)
 
 
-## A shot follows its target while the target is still on the map.
+## A shot follows its target while the target is still on the map. A pumpkin or a rocket comes down
+## on its creature, which walks on while the shot flies, but never far from the spot the sim hit, so
+## its splash area stays true (MapShots.aim_at).
 func _track_shots() -> void:
 	for s: MapShots.Shot in _shots.shots:
-		if MapShots.lands_on_spot(s.look):
-			continue
 		var v: CreatureView = _creatures.get(s.target)
 		if v != null:
-			s.to = v.center
+			_shots.aim_at(s, v.center)
 
 
 func _acquire_sprite() -> Sprite2D:

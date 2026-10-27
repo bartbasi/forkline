@@ -17,6 +17,8 @@ signal speed_selected(speed: int)
 signal pause_requested()
 ## The pause button was tapped while the game is paused.
 signal resume_requested()
+## A wave was started or called early. The battle has already started it.
+signal wave_started()
 
 var lives_label: Label
 var gold_label: Label
@@ -315,3 +317,4 @@ func _on_call() -> void:
 		if early:
 			_called_early = true
 		refresh()
+		wave_started.emit()

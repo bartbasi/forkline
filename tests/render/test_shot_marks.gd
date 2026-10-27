@@ -88,7 +88,7 @@ func test_every_shot_has_a_mark_where_it_leaves_and_where_it_lands() -> void:
 		shots.free()
 
 
-func test_a_lobbed_shot_lands_where_the_hit_was_worked_out() -> void:
+func test_a_lobbed_shot_keeps_its_splash_where_the_hit_was_worked_out() -> void:
 	var b: Battle = Fx.arena([[Fx.group("scamp", 6, 200)]], 1000)
 	assert_true(Fx.build(b, Vector2i(4, 2), &"pumpkin_catapult", 1))
 	var v: MapView = _view(b)
@@ -96,11 +96,133 @@ func test_a_lobbed_shot_lands_where_the_hit_was_worked_out() -> void:
 	b.start_next_wave()
 	assert_true(_until_fired(b, v))
 	var shot: MapShots.Shot = shots.shots[0]
-	var spot: Vector2 = shot.to
-	for i: int in 3:
+	var spot: Vector2 = shot.spot
+	assert_eq(shot.to, spot, "it starts aimed at the hit")
+	var slid: bool = false
+	var guard: int = 0
+	while not shots.shots.is_empty() and guard < 200:
 		v.sync(1.0)
 		Fx.tick(b)
-	assert_eq(shot.to, spot, "it does not follow the creature, which walks on")
+		v.sync(1.0)
+		guard += 1
+		if shot.to != spot:
+			slid = true
+		assert_eq(shot.spot, spot, "the spot the sim hit never moves")
+		assert_true(shot.to.distance_to(spot) <= shot.radius * MapShots.AIM_REACH + 0.01, "the picture stays near it")
+		if shots.now >= shot.t1 - 0.001:
+			break
+		v.advance_effects(0.02)
+	assert_true(slid, "the pumpkin came down on the creature that walked on")
+	v.advance_effects(0.3)
+	var found: bool = false
+	for f: MapShots.Flash in shots.flashes:
+		if f.kind == MapShots.Fx.SPLASH:
+			found = true
+			assert_eq(f.at, spot, "the splash area is centered on the real hit")
+			assert_near(f.size, shot.radius, 0.01, "and has the real radius")
+			assert_true(f.aim.distance_to(spot) <= shot.radius * MapShots.AIM_REACH + 0.01, "the burst of chunks is inside it")
+	assert_true(found, "a splash")
+
+
+func test_a_lobbed_shot_and_a_rocket_come_down_on_their_creature_inside_the_true_area() -> void:
+	for look: int in [MapShots.Look.PUMPKIN, MapShots.Look.JAM, MapShots.Look.PRIZE, MapShots.Look.ROCKET, MapShots.Look.BLOOM]:
+		var shots: MapShots = MapShots.new()
+		var from: Vector2 = Vector2(2.0, 2.0) * MapShots.CELL
+		var spot: Vector2 = Vector2(5.0, 4.0) * MapShots.CELL
+		var radius: float = 96.0
+		var arrives: float = shots.launch(look, from, spot, 7, 0.0, radius)
+		var shot: MapShots.Shot = shots.shots[0]
+		assert_eq(shot.spot, spot, "look %d: the real spot" % look)
+		assert_near(shot.radius, radius, 0.01, "look %d: the real radius" % look)
+		# The creature walked a little way: the picture follows it all the way.
+		var near: Vector2 = spot + Vector2(0.0, 20.0)
+		shots.aim_at(shot, near)
+		assert_eq(shot.to, near, "look %d: it follows a short step" % look)
+		# The creature walked far: the picture stops inside the true area.
+		var far: Vector2 = spot + Vector2(0.0, 300.0)
+		shots.aim_at(shot, far)
+		assert_near(shot.to.distance_to(spot), radius * MapShots.AIM_REACH, 0.01, "look %d: it stops short" % look)
+		assert_true(shot.to.y > spot.y, "look %d: toward the creature" % look)
+		shots.advance(arrives + 0.01)
+		var kind: int = MapShots.Fx.SPLASH if MapShots.is_lobbed(look) else MapShots.Fx.BURST
+		var area: MapShots.Flash = null
+		var hit: MapShots.Flash = null
+		for f: MapShots.Flash in shots.flashes:
+			if f.kind == kind:
+				area = f
+			elif f.kind == MapShots.Fx.HIT:
+				hit = f
+		assert_not_null(area, "look %d: the splash or burst" % look)
+		if area != null:
+			assert_eq(area.at, spot, "look %d: its area stays on the real spot" % look)
+			assert_near(area.size, radius, 0.01, "look %d: with the real radius" % look)
+			assert_eq(area.aim, shot.to, "look %d: its flash lands on the creature" % look)
+		if not MapShots.is_lobbed(look):
+			assert_not_null(hit, "look %d: a hit mark on the creature" % look)
+			if hit != null:
+				assert_eq(hit.at, shot.to, "look %d: the hit mark is on the creature" % look)
+		shots.free()
+
+
+func test_shots_that_follow_their_creature_still_end_on_it() -> void:
+	for look: int in [MapShots.Look.PEBBLE, MapShots.Look.STONE, MapShots.Look.ARROW, MapShots.Look.GIANT_ARROW, MapShots.Look.SKYROCKET]:
+		var shots: MapShots = MapShots.new()
+		shots.launch(look, Vector2.ZERO, Vector2(500.0, 0.0), 3, 0.0)
+		var shot: MapShots.Shot = shots.shots[0]
+		shots.aim_at(shot, Vector2(500.0, 300.0))
+		assert_eq(shot.to, Vector2(500.0, 300.0), "look %d: no limit on a single target" % look)
+		shots.free()
+
+
+func test_catapult_and_rocket_flights_are_short_enough_to_read_as_instant() -> void:
+	var longest: float = 6.0 * MapShots.CELL
+	for look: int in MapShots.Look.values():
+		var shots: MapShots = MapShots.new()
+		var arrives: float = shots.launch(look, Vector2.ZERO, Vector2(longest, 0.0), 1, 0.0, 96.0)
+		if MapShots.is_lobbed(look):
+			assert_true(arrives <= 0.17, "look %d: lobbed flight %.3f s" % [look, arrives])
+			assert_true(arrives >= 0.1, "look %d: still long enough to show its arc, %.3f s" % [look, arrives])
+		elif look == MapShots.Look.ROCKET or look == MapShots.Look.BLOOM:
+			assert_true(arrives <= 0.13, "look %d: rocket flight %.3f s" % [look, arrives])
+		shots.free()
+
+
+func test_a_single_target_hit_mark_is_smaller_than_the_smallest_creature() -> void:
+	var smallest: float = 99.0
+	for id: StringName in Silhouettes.ENEMY_SIZE:
+		smallest = minf(smallest, Silhouettes.ENEMY_SIZE[id])
+	assert_near(smallest, 0.4, 0.001, "the smallest creature is 0.4 of a cell")
+	for heavy: bool in [false, true]:
+		for i: int in 21:
+			var k: float = float(i) / 20.0
+			var reach: float = MapShots.hit_reach(heavy, k)
+			assert_true(reach * 2.0 < smallest * MapShots.CELL, "heavy %s at %.2f: %.1f px across" % [heavy, k, reach * 2.0])
+			assert_true(reach > 0.0, "heavy %s at %.2f: it shows" % [heavy, k])
+	assert_true(MapShots.hit_reach(true, 1.0) > MapShots.hit_reach(false, 1.0), "a heavy hit still reads bigger")
+	assert_true(MapShots.LIFE[MapShots.Fx.HIT] <= 0.2, "and it is quick")
+
+
+func test_every_hit_mark_lands_on_the_creature_and_ends_quickly() -> void:
+	for look: int in [MapShots.Look.PEBBLE, MapShots.Look.STONE, MapShots.Look.ARROW, MapShots.Look.GIANT_ARROW, MapShots.Look.SKYROCKET, MapShots.Look.ROCKET, MapShots.Look.BLOOM]:
+		var shots: MapShots = MapShots.new()
+		var to: Vector2 = Vector2(4.0, 3.0) * MapShots.CELL
+		var arrives: float = shots.launch(look, Vector2.ZERO, to, 1, 0.0, 96.0)
+		shots.advance(arrives + 0.001)
+		var hits: int = 0
+		for f: MapShots.Flash in shots.flashes:
+			if f.kind == MapShots.Fx.HIT:
+				hits += 1
+				assert_eq(f.at, to, "look %d: on the creature" % look)
+				var heavy: bool = look == MapShots.Look.GIANT_ARROW or look == MapShots.Look.SKYROCKET
+				assert_eq(f.size > 1.0, heavy, "look %d: heavy only for the Giant Bow and Skyrocket" % look)
+		assert_eq(hits, 1, "look %d: one hit mark" % look)
+		shots.advance(arrives + 0.25)
+		var left: int = 0
+		for f: MapShots.Flash in shots.flashes:
+			if f.kind == MapShots.Fx.HIT:
+				left += 1
+		assert_eq(left, 0, "look %d: the hit mark is gone in a quarter second" % look)
+		shots.free()
 
 
 func test_a_tower_kicks_back_when_it_fires_and_settles() -> void:

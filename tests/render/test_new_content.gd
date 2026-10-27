@@ -112,6 +112,8 @@ func test_longbow_and_firework_shots_have_their_own_look() -> void:
 			v.sync(1.0)
 			v.play_events(events)
 			ticks += 1
+		# The burst is made when its rocket lands, so let the last ones land.
+		v.advance_effects(0.5)
 		var look: int = c[4]
 		assert_true(shots.launched[look] > 0, "%s: shots of look %d" % [label, look])
 		var total: int = 0
