@@ -1,8 +1,8 @@
 # Forkline expansion: the look of regions 5 to 8
 
-Art director, 2026-10-27. A proposal next to docs/design/EXPANSION.md, for Bart's review. Nothing here is in src/theme/ yet. The game designer folds the agreed names into NAMES.md and RULES.md later.
+Art director, 2026-10-27. Written next to docs/design/EXPANSION.md. Bart approved it as shown on 2026-10-27, with the Snoozer renamed Yawner. The names are now in NAMES.md. Bart also chose that regions 2 to 4 get their own grounds and scenery while play stays the same. That part ("Regions 2 to 4" in section 3) is new, from the same day, and waits for his review. The cast (section 2) and the status marks (section 5) are in src/theme/ since build step A2 (`Silhouettes`, `Palette`). The grounds and map features come next, in step A3.
 
-The concept art is drawn in code by a throwaway script that uses the same `InkPen` style as src/theme/. The script is not committed. The pictures are in `%TEMP%\forkline_expansion\`:
+The concept art is drawn in code by throwaway scripts that use the same `InkPen` style as src/theme/. The scripts are not committed. The pictures are in `%TEMP%\forkline_expansion\`:
 
 | File | What it shows |
 |---|---|
@@ -14,6 +14,8 @@ The concept art is drawn in code by a throwaway script that uses the same `InkPe
 | 6_regions.png, 6_regions_deuteranope.png | A 7 x 7 patch of each new region and of Lantern Hill, with towers, creatures, gates and routes; the same as a deuteranope sees it |
 | 7_true_size_cover.png | Each region at true size on the Fold5 cover (one cell 129 px), and at one pixel per dp (one cell 48 px) |
 | 8_status_marks.png | The marks for the new statuses |
+| 9_all_regions.png, 9_all_regions_deuteranope.png | All 8 region grounds side by side, each a 7 x 7 patch with its own era's towers, creatures, a gate and route lines, and its swatches; the same as a deuteranope sees it |
+| 9_true_size_regions_2_to_4.png | Millbrook, Willow Fen and Moonspire Keep at true size on the Fold5 cover (one cell 129 px) and at one pixel per dp (one cell 48 px) |
 
 ## 1. Names
 
@@ -34,7 +36,7 @@ Checked the way NAMES.md was: does it fit a clear cozy silhouette, does it read 
 | Glimmertoad | Fine as a name. "Glimmer" sounds like "Gleamer", but Glimmertoad does not dazzle. Its card says what it does. Kept. |
 | Scarecrow | A common folk object. Draw a field scarecrow on a post, never a walking straw man with a face like a famous film character. |
 | Bramble Cottage, Hollow Lanes | Together they sit near a well known picture book series about mice living in a hedgerow. The names differ and the look must too: no animals in clothes, no homes inside tree trunks or hedges. |
-| Starfall (level 8-5) | A plain word, but also a well known spell name in a big online game. Optional spare: "Stone Circle", which fits Starglen's standing stones. Bart or the designer decides. |
+| Starfall (level 8-5) | A plain word, but also a well known spell name in a big online game. Level 8-5 is now "Stone Circle", my spare, which fits Starglen's standing stones (the DM accepted it, 2026-10-27). |
 
 All other names are kept as proposed: Hollow Lanes, Russet Orchards, Frostpine Ridge, Starglen; Bramble Cottage, Wild Bramble, Holly Crown, Scarecrow, Tall Scarecrow, Crow Keeper, Snow Fort, Big Snowball, Moth Lantern, Beacon Lantern, Lantern Garland; Mossbud, Mistwisp, Gleamer, Sleepyhead, Snowroller, Hootling; Burrowbelly, Old Hayrick, Snowsnore; the card ids and names Thorn Tips, Big Hat, Packed Snow, Bright Wick. I found none of them used by another game, character, brand or product, as far as I know.
 
@@ -62,7 +64,7 @@ Same rules as THEME.md. Every tower is a lantern-lit building with one signature
 | Snow Fort | A wide wall of warm cream snow bricks with round merlons, a glowing door, a flag at one end and a snowball resting on top | Big Snowball: one huge snowball | Flurry: a stack of six small snowballs |
 | Moth Lantern | A lamplighter's booth with a tall post that curls over at the top, a big lantern hanging from the curl: a question mark over a hut | Beacon Lantern: one big lantern standing on a straight post | Lantern Garland: three small lanterns on a string draped from the curl to a short post |
 
-Our snow is warm cream (`SNOW_WARM`). The creatures' snow is blue-white (`C_SNOWBALL`). So a Snow Fort's snowball and a Snowroller's never share a color.
+Our snow is warm cream (`SNOW_WARM`). The creatures' snow is blue-white (`CREATURE_SNOWBALL`). So a Snow Fort's snowball and a Snowroller's never share a color.
 
 ### Creatures
 
@@ -165,15 +167,92 @@ Flyers fly over the ground, so the ground decides how they stand out. Today's pa
 
 Text: no text sits on the map ground. Map labels have an ink outline (TEXT_LIGHT on INK_LINE 14.20), and entrance letters sit on a cream sign (TEXT_DARK on CARD 12.59). Those pairs do not change with the region, so text contrast still passes everywhere.
 
+### Regions 2 to 4
+
+Bart chose on 2026-10-27 that Millbrook, Willow Fen and Moonspire Keep get their own ground colors and scenery. Play does not change. Lantern Hill stays as it is. The rules above hold: each ground keeps about the meadow's luminance, roads stay light warm sand, no buildings inside the map, nothing glows cool on the ground, and THEME.md's warm for ours, cool for theirs and ink outlines.
+
+The pictures are 9_all_regions.png, its deuteranope view, and 9_true_size_regions_2_to_4.png (see the list at the top).
+
+| Region | Ground | Road | Scenery away from roads | Near roads (small and flat only) |
+|---|---|---|---|---|
+| 2 Millbrook | Water meadow teal `#2d6168`, light `#38757d`, dark `#26535a` | Today's sand `#e2c18e` and pebbles, border `#856143` | Millponds: a dark pool `#24506a` in a darker grass bank, two ripple arcs `#a3cad6`, kingcups `#f2c14e`. Tall narrow poplars `#24483c` and `#356550`. Alder clumps | Water mint tufts, kingcups, meadowsweet `#f3e6d0` |
+| 3 Willow Fen | Misty sage grey `#505c57`, light `#616e68`, dark `#444e4a` | The same road and border laid as a boardwalk: two thin seams `#c4a06c` run along the road, no pebbles | Weeping willows `#617556` and `#93a67c` with long open fronds. Peat pools `#29332b` with lily pads `#7f9a55` and a cream flower `#f3d9c4`. Reed clumps `#c3a565` with cattail heads `#6e4b33` | Sedge tufts, marsh marigolds `#f2b544` |
+| 4 Moonspire Keep | Old rose stone `#634749`, light `#866164`, dark `#553c3e` | The same road and border | Broken lengths of old wall in `STONE` with ivy `#557a4a`. Clipped yew cones `#2b4636` and `#3b5e47`. Rose bushes `#f0a58f` | Old flagstones `#765759` set flat in the turf, rose petals, tufts |
+
+The castle town, the mills and the river's big bridge are buildings, so they stay off the map, like Russet Orchards' barns. On the map, the town shows in its walls, flagstones and clipped yews.
+
+#### Apart from every other region
+
+Each ground takes a hue no other region uses: teal water meadow, grey-green fen, rose stone. The scenery also differs from regions 5 to 8: Millbrook's dark rippled ponds are nothing like Frostpine's pale ice, Willow Fen's willows and reeds nothing like Hollow Lanes' hedges, and Moonspire's low, wide broken walls nothing like Starglen's tall single standing stones.
+
+Measured as color difference (CIEDE2000, where about 10 is plainly different side by side), the closest pairs of all 8 grounds:
+
+| Pair | Normal vision | Deuteranope |
+|---|---|---|
+| Lantern Hill and Hollow Lanes (both approved) | 7.8 | 7.7 |
+| Millbrook and Willow Fen | 10.9 | 10.2 |
+| Lantern Hill and Willow Fen | 11.6 | 6.2 |
+| Frostpine Ridge and Starglen (both approved) | 13.5 | 6.8 |
+| Lantern Hill and Millbrook | 14.6 | 16.9 |
+
+Every new ground is at least 10.9 from every other ground.
+
+#### Rules special to regions 2 to 4
+
+- **No moons, stars or lanterns in scenery.** A crescent is the stump `P`, the Lullaby Bell and the nap mark. A star is the stump `Q`. Lanterns belong to towers and gates.
+- **No mist in the fen.** A curl of mist is the Mistwisp's hidden mark.
+- **Water is dark, with arcs.** Ripples are short arcs, never pale dots, which read as eyes. Water never has chevrons, which mean an ice slide.
+- **No millstones and no flour sacks.** A round grey stone on grass looks like an empty build spot, and a tied sack looks like the Grumblesack.
+- **Walls are broken, with a sloping top.** No merlons, which belong to the Longbow Loft and the Snow Fort.
+- **The willow is open strands, not a solid dome.** A solid green dome with a fringe read as a bell, next to the Lullaby Bell. I redrew it with a round crown over a visible trunk and separate hanging fronds.
+- **Tall things only away from roads.** Willows, reeds, poplars, yews and walls only grow on ground cells with no road beside them, as on every map today.
+
+#### Millbrook, the region 6 bridge and gates
+
+Millbrook's setting is "river, mills and fords" (DM, 2026-10-27; it was "bridges"), and level 2-4 is "Two Fords". On the map its water is millponds and pools, each inside one ground cell. No water ever touches a road, so no road ever needs a bridge, and no bridge of any kind is drawn on a Millbrook map cell. The river's old stone bridge stays off the map with the mill.
+
+So on the map, three wooden or crossing things can never be mixed up:
+
+| Thing | Where | Look |
+|---|---|---|
+| The bridge feature (`X`) | Only on an `X` tile: a road tile with a road crossing it. Used in regions 6 to 8 and on run maps, on those regions' grounds (EXPANSION.md 9.3), never on Millbrook's teal ground | A whole-cell plank deck seen from above, boards across it, rails and posts on both long sides, stone feet. One route line runs over it, the other is cut under it |
+| A gate | Only on a socket (`G`) | A narrow plank across the road between two lantern posts. An open socket shows a dashed ring, a ghost gate and two stone stubs |
+| Willow Fen's boardwalk | Every road in region 3 | Two thin, faint seams that run along the road, never across it. No rails, posts or lanterns. A gate's plank and a deck's boards both lie across the road, so a seam never looks like either |
+
+#### Contrast
+
+WCAG 2, from the script. Every graphic pair passes 3:1 and the text pair 4.5:1, in normal vision and again with both colors as a deuteranope sees them (Machado, Oliveira and Fernandes 2009, full strength).
+
+| Pair | Lantern Hill | Millbrook | Willow Fen | Moonspire Keep |
+|---|---|---|---|---|
+| ROAD on GROUND | 3.91 | 4.06 | 4.07 | 4.85 |
+| ROAD on GROUND_LIGHT | 2.96 * | 3.06 | 3.11 | 3.14 |
+| ROAD_EDGE on ROAD | 3.04 | 3.23 | 3.23 | 3.23 |
+| INK_LINE on ROAD | 9.79 | 9.79 | 9.79 | 9.79 |
+| INK_LINE on GROUND_LIGHT | 3.31 | 3.20 | 3.15 | 3.12 |
+| PAD on GROUND | 3.96 | 4.11 | 4.12 | 4.91 |
+| PLASTER on GROUND | 5.23 | 5.43 | 5.45 | 6.49 |
+| ROUTE on GROUND | 6.08 | 6.31 | 6.33 | 7.54 |
+| TIMBER on ROAD | 4.73 | 4.73 | 4.73 | 4.73 |
+| TEXT_LIGHT on GROUND (text) | 5.67 | 5.88 | 5.91 | 7.03 |
+
+\* As above, the one place Lantern Hill is under 3:1. Its road border is also 2.99:1 for a deuteranope. That is why regions 2 to 4 use a slightly darker border, `#856143` (3.23:1, and 3.19:1 for a deuteranope). Regions 5 to 8 pass both in both views.
+
+Flyers over the ground (for comparison, as above): CREATURE_FLY is 2.69 on Millbrook, 2.70 on Willow Fen and 3.21 on Moonspire Keep, all above Lantern Hill's 2.59. Over Millbrook's ponds it is 3.34 and over the fen's peat pools 5.07, so the water never hides a flyer.
+
+#### For color blind players
+
+In the deuteranope picture, roads, borders, outlines, build spots, gates, route lines and every creature and tower still read on all 8 grounds. The grounds themselves do not all stay apart: Lantern Hill, Willow Fen and Moonspire Keep all look olive grey (4.3 to 6.2 apart), and Millbrook's teal looks slate blue, close to Starglen (6.1). There the regions differ by scenery: ponds and poplars, willows and reeds, walls and yews. That is fine because the region is never a game signal.
+
 ### Proposed tokens
 
-Per region: `GROUND`, `GROUND_LIGHT`, `GROUND_DARK`, `ROAD`, `ROAD_EDGE`, `ROAD_DOT`, plus the scenery colors above. Features: `MOUND #6c9150`, `MOUND_LIGHT #86a964`; `ICE #d3eaf6`, `ICE_EDGE #5e7fae`, `ICE_DEEP #4f6fa0`; `BARK #9a6a45`, `BARK_TOP #d9bf98`. Ours: `THATCH #d2a35a`, `SNOW_WARM #f6efe2`, `HOLLY #4f7d4c`, `CROW #4f3f46`. Theirs: one or two cool fills per new creature, all periwinkle, mint, lilac, slate, teal or blue-white. The exact values are in the concept script and can move into `Palette` with the rest.
+Per region: `GROUND`, `GROUND_LIGHT`, `GROUND_DARK`, `ROAD`, `ROAD_EDGE`, `ROAD_DOT`, plus the scenery colors above. Regions 2 to 4 share `ROAD` and `ROAD_DOT` with Lantern Hill and use the border `#856143`. Features: `MOUND #6c9150`, `MOUND_LIGHT #86a964`; `ICE #d3eaf6`, `ICE_EDGE #5e7fae`, `ICE_DEEP #4f6fa0`; `BARK #9a6a45`, `BARK_TOP #d9bf98`. Ours: `THATCH #d2a35a`, `SNOW_WARM #f6efe2`, `HOLLY #4f7d4c`, `CROW #4f3f46`. Theirs: one or two cool fills per new creature, all periwinkle, mint, lilac, slate, teal or blue-white. Since step A2 the cast's tokens are in `Palette`: ours as above plus `SNOW_WARM_SHADE`, theirs as `CREATURE_*` and `BOSS_*` (for example `CREATURE_MOSS`, `BOSS_TOAD`), and `DIRT #856143` for the dug mound. Each body fill is checked against its ink outline at 3:1, except `CROW`: the Crow Keeper's two crows are dark on purpose and read by shape. The region and feature tokens come in step A3.
 
 ## 4. Map features
 
 | Feature | Look | Reads by shape |
 |---|---|---|
-| Tunnel (`T`) | A grassy mound over the run of tunnel tiles, lighter than the ground, with an ink outline and tufts. The near mouth is a stone arch with a dark opening. The far mouth is a dark slot under the mound's lip. A run going across shows a dark oval mouth in a stone ring at each end. | Arches and a hump over the road. The route line goes under the mound and out of the other mouth. |
+| Tunnel (`T`) | A grassy mound over the run of tunnel tiles, lighter than the ground, with an ink outline and tufts. The near mouth is a stone arch with a dark opening. The far mouth is a dark slot under the mound's lip. A run going across shows a dark oval mouth in a stone ring at each end. A tunnel is always a straight run of 1 to 4 tiles, never a turn, so its two mouths face each other. | Arches and a hump over the road. The route line goes under the mound and out of the other mouth. |
 | Bridge (`X`) | The east-west road crosses on a plank deck as wide as the road's border and longer than the cell, with a rail and posts on both long sides and stone feet at both ends. The north-south road runs underneath and gets a soft shadow below the deck. | The deck cuts the under-route line; the over-route line runs on top of the deck. |
 | Ice slide (`^ v < >`) | The road becomes pale ice with a blue border, with two big carved chevrons per tile, as wide as the road, pointing the way. | Chevrons peek out on both sides of the route line and point the same way as its arrows. |
 | Hollow stumps (`P`, `Q`) | A wide short stump standing on the road: bark sides, a pale ringed top with a dark hollow, roots, and a big carved crescent (`P`) or five point star (`Q`) on its front in moon cream with a soft glow. | The pair matches by symbol shape, and a crescent never looks like a star. When a walker steps through, a few sparkles show at the stump it entered. |
@@ -182,16 +261,18 @@ The grayscale picture shows all four still read with no color at all.
 
 ## 5. Marks for the new statuses
 
-| Status | Mark |
-|---|---|
-| Hidden (near a Mistwisp) | The Mistwisp's own curl, small, above the head. It teaches the link. |
-| Napping | Lying on its side with a small crescent moon above |
-| Frightened | Two small zigzag shiver lines on each side |
-| Low (lured flyer) | It flies just above its shadow, with a pale ring at the shadow |
-| Awake (near a Hootling) | A small open eye above |
-| Dozing tower | One big "z" over the tower, so it differs from a slowed creature's smaller "z z" |
-| Dug under (Burrowbelly) | A moving dirt mound with claw tips showing |
-| In a stump | A few sparkles around the stump it entered |
+| Status | Mark id | Mark |
+|---|---|---|
+| Hidden (near a Mistwisp) | `hidden` | The Mistwisp's own curl, small, above the head. It teaches the link. |
+| Napping | `napping` | Lying on its side with a small crescent moon above. The render lays the creature down |
+| Frightened | `fright` | Two small zigzag shiver lines on each side |
+| Low (lured flyer) | `low` | It flies just above its shadow, with a pale ring at the shadow |
+| Awake (near a Hootling) | `awake` | A small open eye above |
+| Dozing tower | `doze` | One big "z" at the tower's top right, inside the tower's box, so it differs from a slowed creature's smaller "z z" |
+| Dug under (Burrowbelly) | `dug` | A moving dirt mound with claw tips showing, in place of the creature |
+| In a stump | none | A few sparkles around the stump it entered, drawn by the render |
+
+The marks are `Silhouettes.MARKS` and `Silhouettes.draw_mark()` (contract 14.9). The `doze` z sits a little lower than in the concept picture, so it stays inside the tower's box and never reaches past the top of the map.
 
 ## 6. Hard to draw readably, and risks
 
@@ -200,8 +281,8 @@ The grayscale picture shows all four still read with no color at all.
 3. **Twin stumps far apart.** Players match them by symbol only. With two pairs on a map, the crescent and star must stay big; at one pixel per dp they still read, but only just. If playtests show trouble, a dotted link between twins during the build phase would help (a suggestion, not in the brief).
 4. **Mist in a crowd.** A curl over every hidden creature can clutter a crowded road. The cap of 6 Mistwisps per wave keeps it in check; the render should draw the mark small.
 5. **Growth.** A Snowroller at 1.5 times and Snowsnore at 1.5 times are big. Snowsnore at full size covers most of a cell and a half. Fine on the road, but tight next to towers on narrow maps.
-6. **Regions for color blind players.** For a deuteranope, Lantern Hill, Hollow Lanes and Russet Orchards all look olive brown (6_regions_deuteranope.png). Roads, outlines and features still read. The regions then differ by scenery and features, not by ground color. That is acceptable, because the region is never a game signal.
-7. **Regions 1 to 4 share one meadow today.** Next to four new grounds, the first four regions will look plainer. Giving Millbrook, Willow Fen and Moonspire Keep their own grounds is outside this proposal. A question for Bart.
+6. **Regions for color blind players.** For a deuteranope, Lantern Hill, Hollow Lanes and Russet Orchards all look olive brown (6_regions_deuteranope.png), and so do Willow Fen and Moonspire Keep (9_all_regions_deuteranope.png). Roads, outlines and features still read. The regions then differ by scenery and features, not by ground color. That is acceptable, because the region is never a game signal.
+7. **Regions 2 to 4.** Bart chose on 2026-10-27 to give them their own grounds (section 3, "Regions 2 to 4"). The risk there: the fen's boardwalk seams are faint at one pixel per dp, so on a small phone its roads may just look like sand. That is harmless to play.
 8. **Ten towers on the build panel.** All ten tier 1 silhouettes are distinct in one flat color (4_whole_cast_flat.png). At card size on the cover screen the Bramble Cottage, Firework Tower and Snow Fort are the three busiest; watch them on the phone.
 9. **Burrowbelly's claws** read a little like spikes in the flat drawing. It still reads as a digger in color; watch it in the playtest.
 10. **Originality.** Every shape is drawn for Forkline from simple primitives: a bud, a curl of mist, a feather fan, a nightcap, a rider on a snowball, a quilt, a hopper, an owl, a mole, a haystack, a snail-like beast, a toad. No game, film or book character is copied, and none of the names show on screen next to another work's look.

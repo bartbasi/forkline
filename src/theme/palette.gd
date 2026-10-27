@@ -54,6 +54,13 @@ const TREE_DARK: Color = Color("2a4a3e")
 const INK_LINE: Color = Color("211a2e")
 const SMOKE: Color = Color("c9c0dc")
 const SHADOW: Color = Color(0.05, 0.03, 0.1, 0.28)
+# The expansion towers (docs/art/EXPANSION_LOOK.md 2). Our snow is warm cream,
+# so a Snow Fort's snowball never shares a color with a creature's.
+const THATCH: Color = Color("d2a35a")
+const SNOW_WARM: Color = Color("f6efe2")
+const SNOW_WARM_SHADE: Color = Color("d9cdb8")
+const HOLLY: Color = Color("4f7d4c")
+const CROW: Color = Color("4f3f46")
 
 # Night creatures and their sparkles.
 const CREATURE_BASIC: Color = Color("8a93d8")
@@ -72,6 +79,32 @@ const BOSS_SACK: Color = Color("9a8fcf")
 const BOSS_SHELL: Color = Color("4c5470")
 const BOSS_MOON: Color = Color("b9c6f4")
 const BOSS_TUSK: Color = Color("7a80a8")
+# The expansion creatures and bosses: periwinkle, mint, lilac, slate, teal and
+# blue-white, all cool.
+const CREATURE_MOSS: Color = Color("68ab95")
+const CREATURE_MOSS_BUD: Color = Color("c4a8ec")
+const CREATURE_MIST: Color = Color("a9b6ea")
+const CREATURE_MIST_CURL: Color = Color("e4e9ff")
+const CREATURE_GLEAM: Color = Color("80b8d8")
+const CREATURE_GLEAM_FAN: Color = Color("a6dbe8")
+const CREATURE_SLEEPY: Color = Color("989ee2")
+const CREATURE_SLEEPY_CAP: Color = Color("c9b8f0")
+const CREATURE_SNOWBALL: Color = Color("e2ebfb")
+const CREATURE_ROLLER: Color = Color("7b98e0")
+const CREATURE_YAWN: Color = Color("7c86bc")
+const CREATURE_QUILT: Color = Color("b0a2de")
+const CREATURE_BLINK: Color = Color("6fcac4")
+const CREATURE_HOOT: Color = Color("9799c8")
+const CREATURE_HOOT_FACE: Color = Color("dcdff4")
+const BOSS_BURROW: Color = Color("7a76a8")
+const BOSS_BURROW_NOSE: Color = Color("d6a7d8")
+const BOSS_HAY: Color = Color("b4bbd2")
+const BOSS_HAY_DARK: Color = Color("858caa")
+const BOSS_SNORE: Color = Color("8a97cf")
+const BOSS_TOAD: Color = Color("5c8aaf")
+const BOSS_TOAD_SPOT: Color = Color("c4f4ff")
+## The dirt mound a digging Burrowbelly shows instead of itself.
+const DIRT: Color = Color("856143")
 const BONE: Color = Color("efe6d2")
 const EYE: Color = Color("f4fff6")
 const SPARKLE: Color = Color("fff6d6")
@@ -144,13 +177,39 @@ static func graphic_pairs() -> Array[PackedStringArray]:
 		PackedStringArray(["INK_LINE", "HONEY", "primary button border"]),
 		PackedStringArray(["LANTERN", "INK_LINE", "lantern windows in their frames"]),
 		PackedStringArray(["HP_FILL", "HP_BACK", "creature health bar"]),
-		PackedStringArray(["BUBBLE", "INK_LINE", "a Bubbler's bubble ring in its casing"]),
-		PackedStringArray(["FLOUR", "INK_LINE", "the drowsy mark in its casing"]),
+		PackedStringArray(["BUBBLE", "INK_LINE", "a Bubbler's bubble ring and the low mark's ring in their casing"]),
+		PackedStringArray(["FLOUR", "INK_LINE", "the drowsy, fright, awake and doze marks in their casing"]),
 		PackedStringArray(["HEART", "INK_LINE", "the refused gate cross in its casing"]),
 		PackedStringArray(["TIMBER", "ROAD", "an open gate's arch and posts over the road"]),
 		PackedStringArray(["EYE", "INK_LINE", "creature eyes"]),
 		PackedStringArray(["TEXT_LIGHT", "PANEL_RAISED", "icons on buttons"]),
 		PackedStringArray(["TEXT_DARK", "CARD", "tower silhouettes on cards"]),
+		# The expansion's marks (Silhouettes.MARKS).
+		PackedStringArray(["CREATURE_MIST_CURL", "INK_LINE", "the hidden mark's curl in its casing"]),
+		PackedStringArray(["MOON", "INK_LINE", "the napping mark's moon in its outline"]),
+		PackedStringArray(["DIRT", "ROAD", "the dug mound on the road"]),
+		PackedStringArray(["BONE", "INK_LINE", "the dug mound's claw tips in their outline"]),
+		# The expansion's cast: each body against the ink outline that holds it.
+		PackedStringArray(["INK_LINE", "THATCH", "the Scarecrow's straw"]),
+		PackedStringArray(["INK_LINE", "SNOW_WARM", "the Snow Fort's walls and snowballs"]),
+		PackedStringArray(["INK_LINE", "HOLLY", "the Holly Crown's leaves"]),
+		PackedStringArray(["INK_LINE", "CREATURE_MOSS", "the Mossbud"]),
+		PackedStringArray(["INK_LINE", "CREATURE_MIST", "the Mistwisp"]),
+		PackedStringArray(["INK_LINE", "CREATURE_MIST_CURL", "the Mistwisp's curl"]),
+		PackedStringArray(["INK_LINE", "CREATURE_GLEAM", "the Gleamer"]),
+		PackedStringArray(["INK_LINE", "CREATURE_GLEAM_FAN", "the Gleamer's fan"]),
+		PackedStringArray(["INK_LINE", "CREATURE_SLEEPY", "the Sleepyhead"]),
+		PackedStringArray(["INK_LINE", "CREATURE_SLEEPY_CAP", "the Sleepyhead's nightcap"]),
+		PackedStringArray(["INK_LINE", "CREATURE_SNOWBALL", "the Snowroller's and Snowsnore's snowballs"]),
+		PackedStringArray(["INK_LINE", "CREATURE_ROLLER", "the Snowroller"]),
+		PackedStringArray(["INK_LINE", "CREATURE_YAWN", "the Yawner"]),
+		PackedStringArray(["INK_LINE", "CREATURE_QUILT", "the Yawner's quilt"]),
+		PackedStringArray(["INK_LINE", "CREATURE_BLINK", "the Blinker"]),
+		PackedStringArray(["INK_LINE", "CREATURE_HOOT", "the Hootling"]),
+		PackedStringArray(["INK_LINE", "BOSS_BURROW", "Burrowbelly"]),
+		PackedStringArray(["INK_LINE", "BOSS_HAY", "Old Hayrick"]),
+		PackedStringArray(["INK_LINE", "BOSS_SNORE", "Snowsnore"]),
+		PackedStringArray(["INK_LINE", "BOSS_TOAD", "Glimmertoad"]),
 	]
 
 
