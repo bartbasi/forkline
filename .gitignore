@@ -16,6 +16,8 @@
 *.pk8
 *.pem
 *.key
+*.password
+*.csr
 keystore.properties
 export_credentials.cfg
 

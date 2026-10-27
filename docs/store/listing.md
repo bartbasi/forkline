@@ -101,7 +101,7 @@ All made by code. Rerun the tools to change them (see docs/release.md).
 
 The order puts the fork and the gate first, because that is what is new: the build phase with its route line (steer them with gates), the wave (watch it play out), the campaign (24 levels, three stars each), the mode screen (campaign, roguelite and daily), and the front door.
 
-The screenshots are the real app, run in a window at phone size with its real data and the sound off. The gold on the build and wave screens was topped up so the picture shows a full defense. Screenshot 5 shows the Buy me a coffee row on the front door. Bart decides whether to keep it (see the known risk below).
+The screenshots are the real app, run in a window at phone size with its real data and the sound off. The gold on the build and wave screens was topped up so the picture shows a full defense. Screenshot 5 shows the Buy me a coffee row on the front door. Bart decided on 2026-10-27 to keep it there (see the known risk below). The wave picture (slot 2) is the busiest frame of a wave, picked by the tool: creatures on the road, tower shots in the air and sparkles from beaten creatures, so the new shot effects show.
 
 Phone screenshots are 1080 x 2160, the tallest shape Play accepts (twice as tall as wide). The app has no separate tablet layout beyond its landscape layout, so no tablet screenshots are listed. If Play Console asks for large screen screenshots, take them on the Fold5's inner screen (see docs/release.md).
 
@@ -112,13 +112,17 @@ Phone screenshots are 1080 x 2160, the tallest shape Play accepts (twice as tall
 - Users can talk to each other: no. Location: none. Permissions: none. The APK requests no permissions at all (checked by scripts/check_apk.sh).
 - Target audience: 13 and over. This keeps Google's Families policy and its payment link rules out.
 - Government, financial, health, news: no.
-- Content rating: answer the questionnaire honestly. See the notes below.
+- Content rating: answer the questionnaire as written in the notes below. Bart decided on 2026-10-27: mild fantasy violence.
 
 ### Content rating notes
 
-- Aim: Everyone. The look is a cozy storybook. There is no blood, no gore, no real people, no gambling, no strong language, no drugs, no sexual content, and no way for players to talk to each other.
-- One honest point. Towers shoot night creatures, and a beaten creature puffs into sparkles. The questionnaire asks about violence, including cartoon and fantasy violence. If Bart answers yes to mild cartoon or fantasy violence, the result may come out as Everyone 10+ (ESRB) or PEGI 7 instead of Everyone and PEGI 3. That is fine for a 13 and over audience, but it differs from the playbook's "expect Everyone". Bart decides how to answer. The answer must match what the game shows.
-- Digital purchases: none. Real money: none.
+Bart decided on 2026-10-27 to answer with mild fantasy violence. The answer must match what the game shows, and this does.
+
+- The violence question: yes, mild fantasy violence. Cartoon creatures are hit by towers (arrows, pebbles, pumpkins, fireworks) and puff into sparkles. There is no blood, no gore, no injury, no dead bodies, no realistic people and no violence against people or animals that look real.
+- Everything else: no. No sexual content, no nudity, no strong language, no drugs, alcohol or tobacco, no gambling or simulated gambling, no real money, no horror, no user generated content, no way for players to talk to each other, no sharing of location.
+- Digital purchases: none. The app has no ads and no in-app purchases.
+- Expected result: a low rating that allows a 13 and over audience. Most likely Everyone 10+ in the ESRB, PEGI 7, USK 6 and IARC Generic 7+. Everyone and PEGI 3 are possible if the questionnaire treats the creatures as too mild to count, but do not count on it. Whatever Play Console shows is what stands. Record the actual result here after the questionnaire is done.
+- If the result is higher than expected (for example Teen), stop and ask Bart before accepting it. Check that each answer matches the list above first.
 
 ## Known risk: the Buy me a coffee button
 

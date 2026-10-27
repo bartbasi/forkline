@@ -18,7 +18,11 @@
 #      allowBackup false;
 #   5. the launcher icons are Forkline's, not Godot's stock icon (each icon
 #      file differs from the one in Godot's export template);
-#   6. every bundled third party part is credited in NOTICE and README.md.
+#   6. every bundled third party part is credited in NOTICE and README.md;
+#   7. the package is io.github.bartbasi.forkline and the version code and name
+#      match export_presets.cfg.
+# A Gradle build shortens resource paths, so the icon check finds each icon
+# through the resource table (aapt2 dump resources) and works on both builds.
 # With --release, the check also fails if the manifest has android:debuggable
 # with any value other than false (absent or an explicit false is fine; true,
 # 0x1, a reference and so on fail), and fails if the APK is signed with the
@@ -225,6 +229,22 @@ else
 fi
 
 echo
+echo "== Package and version =="
+want_package="io.github.bartbasi.forkline"
+want_code="$(sed -n 's/^version\/code=//p' "$root/export_presets.cfg" | head -n 1 | tr -d '\r')"
+want_name="$(sed -n 's/^version\/name="\(.*\)"$/\1/p' "$root/export_presets.cfg" | head -n 1 | tr -d '\r')"
+badge="$("$aapt2" dump badging "$apk" 2> /dev/null | tr -d '\r' | grep -m1 '^package:' || true)"
+got_package="$(printf '%s\n' "$badge" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")"
+got_code="$(printf '%s\n' "$badge" | sed -n "s/.*versionCode='\([^']*\)'.*/\1/p")"
+got_name="$(printf '%s\n' "$badge" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")"
+if [ "$got_package" = "$want_package" ] && [ -n "$want_code" ] && [ "$got_code" = "$want_code" ] && [ -n "$want_name" ] && [ "$got_name" = "$want_name" ]; then
+	echo "OK: package $got_package, version code $got_code, version name $got_name (the code and name match export_presets.cfg)."
+else
+	echo "FAIL: package '$got_package' code '$got_code' name '$got_name'. Expected $want_package, code '$want_code', name '$want_name' (from export_presets.cfg)."
+	failed=1
+fi
+
+echo
 echo "== Signing certificate =="
 # Prints debug, other or unreadable for the certificate text on stdin (the output of
 # apksigner verify --print-certs, or keytool -printcert -jarfile).
@@ -281,7 +301,11 @@ else
 				echo "FAIL: the APK is signed with the Android debug certificate (CN=Android Debug). A release APK needs the release key."
 				failed=1
 				;;
-			other) echo "OK: the APK is not signed with the Android debug certificate." ;;
+			other)
+				echo "OK: the APK is not signed with the Android debug certificate."
+				printf '%s
+' "$certs" | grep -E '(certificate DN|SHA-256 digest|Owner|SHA256):' | head -n 3
+				;;
 			*)
 				echo "FAIL: no signing certificate could be read from the APK."
 				failed=1
@@ -299,24 +323,38 @@ if [ ! -f "$tpl" ]; then
 	echo "FAIL: Godot's export template was not found at $tpl, so the icons cannot be compared."
 	failed=1
 else
-	icon_files="$(unzip -Z1 "$tpl" | grep -E '^res/mipmap-[a-z0-9-]+/icon(_background|_foreground|_monochrome)?\.webp$' || true)"
+	icon_files="$(unzip -Z1 "$tpl" | grep -E '^res/mipmap(-[a-z0-9]+-v4)?/icon(_background|_foreground|_monochrome)?\.webp$' || true)"
+	# A Gradle build shortens resource paths (res/eu.webp), so find each icon
+	# through the resource table: "resource ... mipmap/icon_foreground", then
+	# "(hdpi) (file) res/xx.webp".
+	res_table="$("$aapt2" dump resources "$apk" 2> /dev/null | tr -d '\r')"
+	icon_path() { # resource name, density ("" for the default)
+		printf '%s\n' "$res_table" | awk -v want="mipmap/$1" -v dens="($2)" '
+			$1 == "resource" { on = ($3 == want); next }
+			on && $1 == dens && $2 == "(file)" { print $3; exit }'
+	}
 	icon_count=0
 	icon_bad=0
 	while IFS= read -r f; do
 		[ -n "$f" ] || continue
 		icon_count=$((icon_count + 1))
-		mine="$(unzip -p "$apk" "$f" 2> /dev/null | md5sum | cut -d' ' -f1)"
+		name="$(basename "$f" .webp)"
+		dens="$(printf '%s\n' "$f" | sed -n 's|^res/mipmap-\([a-z0-9]*\)-v4/.*|\1|p')"
+		in_apk="$(icon_path "$name" "$dens")"
 		stock="$(unzip -p "$tpl" "$f" | md5sum | cut -d' ' -f1)"
-		if ! printf '%s\n' "$entries" | grep -qxF "$f"; then
-			echo "FAIL: $f is missing from the APK."
+		if [ -z "$in_apk" ] || ! printf '%s\n' "$entries" | grep -qxF "$in_apk"; then
+			echo "FAIL: the $name icon for '${dens:-default}' is missing from the APK."
 			icon_bad=1
-		elif [ "$mine" = "$stock" ]; then
-			echo "FAIL: $f is Godot's stock icon (md5 $stock)."
-			icon_bad=1
+		else
+			mine="$(unzip -p "$apk" "$in_apk" 2> /dev/null | md5sum | cut -d' ' -f1)"
+			if [ "$mine" = "$stock" ]; then
+				echo "FAIL: $in_apk ($name, ${dens:-default}) is Godot's stock icon (md5 $stock)."
+				icon_bad=1
+			fi
 		fi
 	done <<< "$icon_files"
-	if ! printf '%s\n' "$entries" | grep -qx 'res/mipmap-anydpi-v26/icon.xml'; then
-		echo "FAIL: res/mipmap-anydpi-v26/icon.xml (the adaptive icon) is missing."
+	if [ -z "$(icon_path icon anydpi-v26)" ]; then
+		echo "FAIL: the adaptive icon (mipmap/icon for anydpi-v26) is missing."
 		icon_bad=1
 	fi
 	if [ "$icon_count" -eq 0 ]; then

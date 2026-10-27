@@ -23,7 +23,7 @@ const SCREENS: Array[String] = ["front_door", "modes", "levels", "build", "wave"
 ## The stars shown on the level list: level id to star bits.
 const STARS: Dictionary[StringName, int] = {&"r1_l1": 7, &"r1_l2": 7, &"r1_l3": 7, &"r1_l4": 7, &"r1_l5": 1}
 ## How many waves are played out of sight before the pictures are taken.
-const WAVE_AT: int = 3
+const WAVE_AT: int = 4
 const WAVE_SECONDS: float = 25.0
 ## Gold given before each round of building, for the picture only.
 const SHOT_GOLD: int = 700
@@ -143,16 +143,27 @@ func _battle() -> void:
 		return
 	b.start_next_wave()
 	screen.clock.speed = 2
+	# Look at every frame of the wave and keep the busiest one: creatures on the road, shots
+	# in the air and sparkles from beaten creatures.
+	var best: Image = null
+	var best_score: int = -1
 	var started: int = Time.get_ticks_usec()
-	var held: int = 0
 	while b.phase == Battle.Phase.WAVE:
-		await process_frame
+		await RenderingServer.frame_post_draw
 		var elapsed: float = float(Time.get_ticks_usec() - started) / 1000000.0
-		var ready: bool = b.enemies.size() >= 4 and screen.map_view.projectile_count() >= 1 and screen.map_view.sparkles().active_count() >= 1
-		held = held + 1 if ready else 0
-		if held >= 2 or elapsed > WAVE_SECONDS:
+		if elapsed > WAVE_SECONDS:
 			break
-	await _shoot("screen_5_wave.png")
+		var map: MapView = screen.map_view
+		var score: int = mini(b.enemies.size(), 6) + 3 * mini(map.projectile_count(), 5) + mini(map.sparkles().active_count(), 4)
+		if b.enemies.size() >= 3 and map.projectile_count() >= 2 and score > best_score:
+			best_score = score
+			best = _host.get_texture().get_image()
+	if best == null:
+		printerr("No frame of the wave showed shots in the air.")
+		_failed += 1
+		return
+	print("wave picture score: %d" % best_score)
+	_save(best, "screen_5_wave.png")
 
 
 ## Builds and upgrades through the screen's own panels. The gold is topped up first, so the
@@ -186,7 +197,10 @@ func _build(screen: BattleScreen, cell: Vector2i, type: StringName) -> bool:
 
 func _shoot(file_name: String) -> void:
 	await RenderingServer.frame_post_draw
-	var img: Image = _host.get_texture().get_image()
+	_save(_host.get_texture().get_image(), file_name)
+
+
+func _save(img: Image, file_name: String) -> void:
 	img.convert(Image.FORMAT_RGB8)
 	var path: String = OUT_DIR.path_join(file_name)
 	var err: Error = img.save_png(path)

@@ -64,7 +64,88 @@ PowerShell has `scripts\install.ps1`.
 bash scripts/check_apk.sh --release path/to/forkline-release.apk
 ```
 
-`--release` adds two checks. First, `android:debuggable` must be absent or an explicit false (`=false` or `(type 0x12)0x0`). True, `0x1`, a reference or any other value fails. Second, the APK must not be signed with the Android debug certificate (`CN=Android Debug`). The signer is read with `apksigner` (SDK build-tools, or on PATH), or else `keytool` (on PATH or in `JAVA_HOME`). If neither is found, the check fails instead of passing. The debug APK is debuggable and debug-signed on purpose, so the default mode only prints notes. Play also refuses debuggable uploads. Release signing is ask first, so no release APK exists yet.
+`--release` adds two checks. First, `android:debuggable` must be absent or an explicit false (`=false` or `(type 0x12)0x0`). True, `0x1`, a reference or any other value fails. Second, the APK must not be signed with the Android debug certificate (`CN=Android Debug`). The signer is read with `apksigner` (SDK build-tools, or on PATH), or else `keytool` (on PATH or in `JAVA_HOME`). If neither is found, the check fails instead of passing. The debug APK is debuggable and debug-signed on purpose, so the default mode only prints notes. Play also refuses debuggable uploads. The release build below is signed with the upload key.
+
+## The release build (signed AAB and APK)
+
+Bart approved Play App Signing on 2026-10-27. Google holds the app signing key. We hold only an upload key, and Play checks every upload against it.
+
+```bash
+bash scripts/build_release.sh     # build/forkline-release.aab and build/forkline-release.apk
+bash scripts/check_aab.sh         # the checks for the bundle
+bash scripts/check_apk.sh --release build/forkline-release.apk
+bash scripts/check_secrets.sh     # no key or password in the repo
+```
+
+The script does what `build.sh` does (version check, import with retries, a private temp folder), then installs Godot's Android build template into `android/` the first time, and exports two files with Godot's Gradle build:
+
+| File | What it is |
+|---|---|
+| build/forkline-release.aab | The app bundle that Play Console takes. Signed with the upload key. |
+| build/forkline-release.apk | A release APK for side loading and the GitHub release. Same key, native code compressed. |
+
+Both have package `io.github.bartbasi.forkline`, version code and name from `export_presets.cfg` (now 1 and 0.1), arm64-v8a only, no permissions, and the same immersive and portrait settings as the debug APK. The bundle keeps the game files in an install time asset pack (`assetPackInstallTime/assets/`), which is how Godot lays out a Gradle bundle.
+
+Raise `version/code` in all three presets of `export_presets.cfg` for every upload. Play refuses a code it has seen. The version name is what players read.
+
+What you need on the machine: Godot 4.7.2 with its export templates (the Android source template `android_source.zip` is part of them), the Android SDK with build tools 36.1.0 and platform 36, and JDK 17, set in Godot's Editor Settings. Gradle downloads its own tools and libraries the first time (about a minute, into your Gradle cache, outside the repo). That is build tooling only. The app has no network code and requests no permissions.
+
+`android/` (about 1 GB with the Gradle output) is ignored by git, as is `build/`. Delete `android/` any time to get a fresh template. The script reinstalls it when the Godot version changes.
+
+### Where the upload key lives
+
+The key is not in the repo and never goes in it.
+
+| Item | Place |
+|---|---|
+| Keystore | `%APPDATA%\Forkline\release\forkline-upload.keystore` |
+| Password | `%APPDATA%\Forkline\release\forkline-upload.password` (one line, readable only by the current Windows user) |
+| Key alias | `forkline-upload` (not a secret, it is in `build_release.sh`) |
+| Certificate | CN=Play Inc, O=Play Inc. RSA 4096, valid 30 years from 2026-10-27. |
+| SHA-256 fingerprint | AF:29:63:CB:E5:D2:D6:6E:82:69:E2:17:68:0B:A9:AA:71:80:38:81:56:8A:A1:32:38:FE:19:AD:47:20:9B:36 |
+
+The fingerprint is public. Play Console shows it after the first upload, and it must be the same. `check_aab.sh` and `check_apk.sh --release` print the fingerprint of the signed file, and `check_aab.sh` fails if it differs from the key in the folder.
+
+`build_release.sh` hands the key to Godot through the environment variables `GODOT_ANDROID_KEYSTORE_RELEASE_PATH`, `GODOT_ANDROID_KEYSTORE_RELEASE_USER` and `GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD`, only for the export commands. It never prints the password. `export_presets.cfg` holds no keystore path, user or password for release. `scripts/check_secrets.sh` fails if a tracked file (or a file git would add) has one, a key file name, or the real password. The build script runs it first. Godot's own editor can write credentials to `.godot/export_credentials.cfg`, which git ignores. Do not type the release key into the export dialog.
+
+### What Bart must back up
+
+Copy the whole folder `%APPDATA%\Forkline\release\` (both files) to storage of your own, such as a password manager attachment or an encrypted drive. Keep two copies in different places. Do not put it in the repo, in a public or shared cloud folder, or in an email. Anyone with both files can upload updates as Play, Inc.
+
+### If the upload key is lost or leaked
+
+Because Play App Signing is on, Google still holds the app signing key, so the app is not lost and players keep getting updates. Do this:
+
+1. In Play Console, open the app, then Test and release, App integrity, App signing, and choose Request upload key reset. (The menu names change now and then. Search the Play Console help for "reset upload key".)
+2. Make a new keystore with the same steps as below, with a new file name, so the old one is not overwritten.
+3. Upload the new certificate (the .pem export of the public certificate, not the keystore) when Play asks. Google confirms by email, and the new key works after a short wait (a few days at most).
+4. Point the build at the new files (change the file names in `build_release.sh`, or move the old ones aside and use the standard names), build, check and upload.
+
+For a leaked key, request the reset at once. Never delete the old keystore until the reset is done.
+
+### Make a new upload key
+
+Only if the old one is lost. This writes the password to a file and never to the screen.
+
+```bash
+dir="$(cygpath -u "$APPDATA")/Forkline/release"
+mkdir -p "$dir" && cd "$dir"
+LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 40 > forkline-upload.password
+keytool -genkeypair -keystore forkline-upload.keystore -storetype PKCS12 -alias forkline-upload \
+  -keyalg RSA -keysize 4096 -validity 10950 -dname "CN=Play Inc, O=Play Inc" \
+  -storepass:file forkline-upload.password -keypass:file forkline-upload.password
+icacls "$(cygpath -w "$dir")" /inheritance:r /grant:r "$USERNAME:(OI)(CI)F"
+```
+
+The `icacls` line limits the folder to the current Windows user. Then show only the public fingerprint:
+
+```bash
+keytool -list -v -keystore forkline-upload.keystore -storepass:file forkline-upload.password | grep SHA256
+```
+
+### Upload to Play (ask first)
+
+Play Console work waits for Play, Inc.'s DUNS number and Bart's go ahead. When it starts: create the app, turn on Play App Signing when asked, upload `build/forkline-release.aab` to a testing track first, and check that Play Console lists no permissions for it. Agents never do this step.
 
 ## Wording for the privacy policy and store listing (phase 9)
 
@@ -181,4 +262,4 @@ The tool's pictures are enough for the phone slots. If Play Console asks for lar
 
 ### What is still missing for a Play submission
 
-See the end of the phase 9 report. In short: a release key and a signed upload, a bundle (AAB) export, the privacy policy on a public address, Play Console itself, and a few decisions of Bart's. All of these are ask first.
+The upload key, the signed bundle and the privacy policy on a public address are done (see above). What is left is Play Console itself, which waits for Play, Inc.'s DUNS number, and the answers recorded in docs/store/listing.md.
