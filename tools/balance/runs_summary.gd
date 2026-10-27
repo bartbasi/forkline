@@ -40,9 +40,9 @@ func _initialize() -> void:
 		"waves": _wave_tables, "boss": _boss_tables, "maps": _map_tables, "towers": _tower_tables, "cards": _card_tables,
 		"daily": _daily_tables, "risk": _risk_tables, "cardvalue": _cardvalue_tables, "whatif": _whatif_tables, "ironshell": _ironshell_tables, "lives": _lives_tables}
 	var b4: Dictionary = {"bars": _bars, "boss": _boss_b4, "fair": _fair_b4, "forced": _forced_b4, "cardbar": _cardbar_b4, "riskfair": _riskfair_b4,
-		"lengthb4": _length_b4, "detb4": _det_b4, "dailyb4": _daily_b4, "whatifb4": _whatif_b4, "flags": _flags_b4, "allstacks": _allstacks_b4}
+		"lengthb4": _length_b4, "detb4": _det_b4, "dailyb4": _daily_b4, "whatifb4": _whatif_b4, "flags": _flags_b4, "allstacks": _allstacks_b4, "fullstacks": _fullstacks_b5, "perf": _perf_b5}
 	if part == "b4":
-		for part_name: String in ["bars", "boss", "fair", "forced", "cardbar", "riskfair", "lengthb4", "detb4", "dailyb4", "whatifb4", "flags"]:
+		for part_name: String in ["bars", "boss", "fair", "forced", "cardbar", "riskfair", "lengthb4", "detb4", "dailyb4", "whatifb4", "perf", "fullstacks", "flags"]:
 			(b4[part_name] as Callable).call()
 	elif b4.has(part):
 		(b4[part] as Callable).call()
@@ -1076,7 +1076,7 @@ func _fair_b4() -> void:
 		for piece: String in names:
 			var list: Array = _where(rows, func(r: Dictionary) -> bool: return String(r["stack"]).split("|")[int(kind[1])] == piece)
 			var rate: float = float(_won(list)) / float(list.size())
-			_row([piece, _distinct_seeds(list), list.size(), _pct(_won(list), list.size()), "%.2f" % (rate / overall), "met" if rate / overall >= 0.75 else "NOT MET"])
+			_row([piece, _distinct_seeds(list), list.size(), _pct(_won(list), list.size()), "%.3f" % (rate / overall), "met" if rate / overall >= 0.75 else "NOT MET"])
 	print("\n### Fair maps: stacks that 4 or more seeds use, lost by wave 6 (bar: at most 10%)\n")
 	_head(["Stack (top, middle, bottom)", "Seeds", "Plays", "Won", "Lost by wave 6", "Bar 10%"])
 	var stacks: Array = []
@@ -1218,7 +1218,7 @@ func _cardbar_b4() -> void:
 			continue
 		var gains: Dictionary = _card_gains(rows)
 		print("\n### The card experiment, %s: %d drafts, seeds 1 to 200\n" % ["base cards" if pool == "base" else "every card", rows.size()])
-		print("Win gain is in points of win rate against the average of the 3 offered cards; SE is the standard error of that mean. Tower cards are reported and not held to the 5 point bar.\n")
+		print("Win gain is in points of win rate against the average of the 3 offered cards; SE is the standard error of that mean. Tower cards are reported and not held to the 5 point bar. A gain over +5 but within one SE of it is read as noise (TUNING_RUNS 9.6).\n")
 		_head(["Card", "Kind", "Offered", "Win gain (points)", "SE", "Bar +5"])
 		var ids: Array = gains.keys()
 		ids.sort_custom(func(a: String, b: String) -> bool: return _mean(gains[a]) > _mean(gains[b]))
@@ -1226,7 +1226,12 @@ func _cardbar_b4() -> void:
 			var list: Array = gains[id]
 			var m: float = _mean(list)
 			var kind: String = String(_game.run.card(StringName(id)).get("kind", ""))
-			var verdict: String = "reported (tower card)" if kind == "tower" else ("NOT MET" if m * 100.0 > 5.0 else "met")
+			var gain: float = m * 100.0
+			var verdict: String = "met"
+			if kind == "tower":
+				verdict = "reported (tower card)"
+			elif gain > 5.0:
+				verdict = "over by the number, within one SE: noise" if gain - 5.0 <= 100.0 * _se(list) else "NOT MET"
 			_row([id, kind, list.size(), "%+.1f" % (100.0 * m), "%.1f" % (100.0 * _se(list)), verdict])
 	print()
 
@@ -1588,7 +1593,13 @@ func _bars() -> void:
 	var best: Array = _best_strategy(base)
 	var all_rate: float = 100.0 * _won(base) / maxf(float(base.size()), 1.0)
 	var best_rate: float = 100.0 * int(best[1]) / maxf(float(best[2]), 1.0)
-	_row(["Normal, best strategy", "55% to 75%", "%s %s" % [best[0], _rate(int(best[1]), int(best[2]))], "met" if best_rate >= 55.0 and best_rate <= 75.0 else "NOT MET"])
+	var best_se: float = 100.0 * sqrt((float(best[1]) / float(best[2])) * (1.0 - float(best[1]) / float(best[2])) / float(best[2]))
+	var best_verdict: String = "met"
+	if best_rate > 75.0:
+		best_verdict = "NOT MET: %.1f points over the ceiling, %.1f SEs" % [best_rate - 75.0, (best_rate - 75.0) / best_se]
+	elif best_rate < 55.0:
+		best_verdict = "NOT MET: %.1f points under the floor, %.1f SEs" % [55.0 - best_rate, (55.0 - best_rate) / best_se]
+	_row(["Normal, best strategy", "55% to 75%", "%s %s, SE %.1f points" % [best[0], _rate(int(best[1]), int(best[2])), best_se], best_verdict])
 	_row(["Normal, the 16 together", "35% to 55%", _rate(_won(base), base.size()), "met" if all_rate >= 35.0 and all_rate <= 55.0 else "NOT MET"])
 	var best_r: Array = _best_strategy(relaxed)
 	var best_r_rate: float = 100.0 * int(best_r[1]) / maxf(float(best_r[2]), 1.0)
@@ -1625,6 +1636,7 @@ func _bars() -> void:
 	var overall: float = float(_won(base)) / maxf(float(base.size()), 1.0)
 	var worst_name: String = ""
 	var worst_ratio: float = 100.0
+	var worst_se: float = 0.0
 	var below: Array = []
 	for kind: int in 3:
 		var names: Array = []
@@ -1638,9 +1650,10 @@ func _bars() -> void:
 			if ratio < worst_ratio:
 				worst_ratio = ratio
 				worst_name = piece
+				worst_se = _segment_se(base, kind, piece) / overall
 			if ratio < 0.75:
 				below.append("%s %.2f" % [piece, ratio])
-	_row(["Fair maps, each segment", "at least 0.75 times all runs", "lowest %s %.2f times" % [worst_name, worst_ratio], "met" if below.is_empty() else "NOT MET: " + ", ".join(PackedStringArray(below))])
+	_row(["Fair maps, each segment", "at least 0.75 times all runs", "lowest %s %.3f times, SE about %.2f" % [worst_name, worst_ratio, worst_se], "met" if below.is_empty() else ("NOT MET: under the bar by %.3f, %.1f SEs (%s)" % [0.75 - worst_ratio, (0.75 - worst_ratio) / maxf(worst_se, 0.001), ", ".join(PackedStringArray(below))])])
 	var stacks: Array = []
 	for r: Dictionary in base:
 		if not stacks.has(r["stack"]):
@@ -1702,6 +1715,7 @@ func _bars() -> void:
 		var top_card: String = ""
 		var top_gain: float = -100.0
 		var over: Array = []
+		var noise: Array = []
 		var tower_top: String = ""
 		var tower_gain: float = -100.0
 		for id: String in gains.keys():
@@ -1716,9 +1730,13 @@ func _bars() -> void:
 				top_gain = m
 				top_card = id
 			if m > 5.0:
-				over.append("%s %+.1f (SE %.1f)" % [id, m, 100.0 * _se(gains[id])])
+				var text: String = "%s %+.1f (SE %.1f, %d offers)" % [id, m, 100.0 * _se(gains[id]), (gains[id] as Array).size()]
+				if m - 5.0 <= 100.0 * _se(gains[id]):
+					noise.append(text)
+				else:
+					over.append(text)
 		_row(["No card decides a run (%s cards, %d drafts)" % ["base" if pool == "base" else "every", rows.size()], "no perk, gate, economy or risk card above +5 points",
-			"best %s %+.1f (SE %.1f); best tower card %s %+.1f (reported)" % [top_card, top_gain, 100.0 * _se(gains[top_card]), tower_top, tower_gain], "met" if over.is_empty() else "NOT MET: " + ", ".join(PackedStringArray(over))])
+			"best %s %+.1f (SE %.1f); best tower card %s %+.1f (reported)" % [top_card, top_gain, 100.0 * _se(gains[top_card]), tower_top, tower_gain], ("NOT MET: " + ", ".join(PackedStringArray(over))) if not over.is_empty() else (("met; over +5 by the number but within one SE, so noise: " + ", ".join(PackedStringArray(noise))) if not noise.is_empty() else "met")])
 	# Risk cards.
 	var risk_data: Dictionary = _read("risk_economy_wide.json")
 	if not risk_data.is_empty():
@@ -1781,3 +1799,90 @@ func _allstacks_b4() -> void:
 				var name: String = "%s_%s_%s" % [top["id"], middle["id"], bottom["id"]]
 				for first: int in [1, 51, 101, 151]:
 					print("mode=rates first=%d count=50 pool=base relaxed=0 stack=%s,%s,%s stop=6 out=OUTDIR/force_stack_%s_%d.json" % [first, top["id"], middle["id"], bottom["id"], name, first])
+
+
+## The standard error of a segment's win rate (a fraction), counting each seed as one sample (its plays on that map are 16 tries
+## of one map): the spread of the seeds' mean win rates over the root of their number.
+func _segment_se(rows: Array, kind: int, piece: String) -> float:
+	var by_seed: Dictionary = {}
+	for r: Dictionary in rows:
+		if String(r["stack"]).split("|")[kind] != piece:
+			continue
+		var i: int = int(r["i"])
+		if not by_seed.has(i):
+			by_seed[i] = [0, 0]
+		by_seed[i][1] = int(by_seed[i][1]) + 1
+		by_seed[i][0] = int(by_seed[i][0]) + (1 if bool(r["won"]) else 0)
+	var rates: Array = []
+	for i: int in by_seed.keys():
+		rates.append(float(by_seed[i][0]) / float(by_seed[i][1]))
+	return _se(rates) if rates.size() > 1 else 0.0
+
+
+## Whole runs on forced stacks: every stack with mid_eye forced onto seeds 1 to 200, full plays (full_stack_*.json).
+func _fullstacks_b5() -> void:
+	var rows: Array = _load_rows("full_stack_")
+	if rows.is_empty():
+		return
+	var base: Array = _rates["base_r0"]
+	var overall: float = float(_won(base)) / maxf(float(base.size()), 1.0)
+	print("\n### Whole runs on forced stacks (Normal, base cards, seeds 1 to 200, 16 strategies, full plays; all runs on natural maps win %.1f%%)\n" % (100.0 * overall))
+	_head(["Stack", "Plays", "Won", "Times all runs", "SE (seeds as samples)", "Lost by wave 6", "Lost at the boss"])
+	var stacks: Array = []
+	for r: Dictionary in rows:
+		if not stacks.has(r["stack"]):
+			stacks.append(r["stack"])
+	stacks.sort()
+	for stack: String in stacks:
+		var list: Array = _where(rows, func(r: Dictionary) -> bool: return r["stack"] == stack)
+		var by_seed: Dictionary = {}
+		for r: Dictionary in list:
+			var i: int = int(r["i"])
+			if not by_seed.has(i):
+				by_seed[i] = [0, 0]
+			by_seed[i][1] = int(by_seed[i][1]) + 1
+			by_seed[i][0] = int(by_seed[i][0]) + (1 if bool(r["won"]) else 0)
+		var rates: Array = []
+		for i: int in by_seed.keys():
+			rates.append(float(by_seed[i][0]) / float(by_seed[i][1]))
+		var rate: float = float(_won(list)) / list.size()
+		_row([stack.replace("|", ", "), list.size(), _pct(_won(list), list.size()), "%.3f" % (rate / overall), "%.3f" % (_se(rates) / overall),
+			_pct(list.filter(func(r: Dictionary) -> bool: return _lost_by(r, 6)).size(), list.size()),
+			_pct(list.filter(func(r: Dictionary) -> bool: return not bool(r["won"]) and int(r["reached"]) >= 18).size(), list.size())])
+	var total: int = rows.size()
+	var won: int = _won(rows)
+	# Every (stack, seed) is one sample: the 16 strategies' mean win rate on that map. The stacks are weighted equally, as a seed draws them.
+	var cells: Dictionary = {}
+	for r: Dictionary in rows:
+		var key: String = "%s:%d" % [r["stack"], int(r["i"])]
+		if not cells.has(key):
+			cells[key] = [0, 0]
+		cells[key][1] = int(cells[key][1]) + 1
+		cells[key][0] = int(cells[key][0]) + (1 if bool(r["won"]) else 0)
+	var cell_rates: Array = []
+	for key: String in cells.keys():
+		cell_rates.append(float(cells[key][0]) / float(cells[key][1]))
+	print("\nAll %d stacks together: %d plays, %s won, %.3f times all runs (SE %.3f, each stack and seed one sample; the stacks are equally likely in a draw, so this is the segment's whole-run ratio).\n" % [stacks.size(), total, _pct(won, total), (float(won) / total) / overall, _se(cell_rates) / overall])
+
+
+## The benchmark's largest wave: perf_*.json, perf2_*.json and perf3_*.json from run_perf.sh (the case keeps its higher peak).
+func _perf_b5() -> void:
+	var best_of: Dictionary = {}
+	for prefix: String in ["perf_", "perf2_", "perf3_"]:
+		for file: String in _files(prefix):
+			var d: Dictionary = _read(file)
+			if d.has("peak") and (not best_of.has(d["case"]) or int(d["peak"]) > int(best_of[d["case"]]["peak"])):
+				best_of[d["case"]] = d
+	var rows: Array = best_of.values()
+	if rows.is_empty():
+		return
+	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["peak"]) > int(b["peak"]))
+	print("\n### The most crowded moment of each case (peak live creatures, tick times on this PC, headless)\n")
+	print("Each case: a bot plays to the build phase before the target wave (runs: with the risk card taken for it), the wave starts, and the next wave is called early as soon as the game allows. Times are the median of 5 plays of that tail, in microseconds a tick; busy ticks have 50 or more creatures. Sorted by peak.\n")
+	_head(["Case", "Wave", "Wave size", "Next wave", "Peak live creatures", "Ticks (busy)", "Mean us", "p99 us", "Busy mean us", "Busy p99 us", "Max us", "Seed / strategy"])
+	for d: Dictionary in rows:
+		var is_level: bool = d["kind"] == "level"
+		_row([d["case"], int(d["wave"]), int(d.get("wave_size", 0)) if is_level else "-", int(d.get("next_wave_size", 0)) if is_level else "-", int(d["peak"]),
+			"%d (%d)" % [int(d["ticks"]), int(d["busy_ticks"])], int(d["mean_us"]), int(d["p99_us"]), int(d["busy_mean_us"]), int(d["busy_p99_us"]), int(d["max_us"]),
+			("%d" % int(d["seed"])) if is_level else ("%d, %s" % [int(d["seed"]), d["strategy"]])])
+	print()

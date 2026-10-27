@@ -159,6 +159,26 @@ Bot changes (TUNING_RUNS 3.5). The numbers of the 2026-10-24 report need `bakery
 - `mode=search list=3,5,9` searches only those run seeds. `mode=det days=N day_from=K` plays N dailies from day K; a save that a load
   refuses is recorded in the row (`wave_refused`, `draft_refused`) and the play counts as a failure.
 
+## Confirmation run and the largest wave (task B5)
+
+Report: `runs-2026-10-27.md`. Raw numbers: `raw/2026-10-27-b5/`. The job lists are `run_b4.sh` (phases A, C, D, with the job files `jobs_A.txt`,
+`jobs_C_extra.txt` and `jobs_D_extra.txt` in the raw folder; D is the whole-run check of the `mid_eye` stacks, `full_stack_*.json`) and `run_perf.sh`.
+`runs_summary.gd ... part=b4` prints every table (it now includes `fullstacks` and `perf`). The bars table reports the best strategy and a
+segment with their standard errors, and a card gain over +5 that is within one standard error of it is marked as noise (TUNING_RUNS 9.6).
+
+The benchmark's largest wave (ARCHITECTURE 9.4, B5):
+
+- `perf_cases.gd` lists how many creatures every wave spawns, with no play: campaign levels and Twists, and every run pack wave with each risk
+  card (`jobs=N` also prints the `perf_peak.gd` job lines for the biggest run waves).
+- `perf_peak.gd` finds the most crowded moment of one case. `level=ID [twist=1] seeds=S targets=K` or `run=PACK wave=N card=ID seeds=S`. A bot plays
+  to the build phase before the target wave (a run takes the risk card for it, whether or not a draft offers it: `RunBot.play` has
+  `force_risk`, `stop_before` and `return_state`), the wave starts and the next wave is called early as soon as the game allows. It keeps the play with
+  the most live creatures at once and times its tail 5 times (median mean and 99th percentile, all ticks and ticks with 50 creatures or more).
+  `save=DIR` writes that build phase as a saved game through `SaveStore`, reads it back through a new store, checks it, and copies
+  `game_level.json` or `game_run.json` to DIR. `seed0=S seeds=1 wave=N` (and `first=I seeds=1 strategy=ID` for a run) plays one earlier result again,
+  for timings on a quiet machine.
+- `run_perf.sh` is the job list: every level and Twist, and the biggest run waves. `PREFIX=perf2 LEVEL_SEEDS=300 TARGETS=3 RUN_SEEDS=25` is the wider round.
+
 ## Files
 
 - `tools/balance/bot.gd`: strategies, the generator and mutator, the plain recipe, the player.
@@ -171,7 +191,8 @@ Bot changes (TUNING_RUNS 3.5). The numbers of the 2026-10-24 report need `bakery
   a `run_pass.sh` run (plain, solo, search, spread, Twist, determinism and benchmark files, and the what-if
   files of `run_whatif_b1.sh`). Without it, the old region 1 tables.
 - `tools/balance/run_bot.gd`, `runs.gd`, `runs_summary.gd`, `run_runs.sh`: the run and daily bots, runner, tables and job list (above).
-- `tools/balance/run_b4.sh`: the job list and seeds of the B4 run report (raw folder `raw/2026-10-25-b4/`).
+- `tools/balance/run_b4.sh`: the job list and seeds of the B4 run report (raw folder `raw/2026-10-25-b4/`) and of B5 (`raw/2026-10-27-b5/`).
+- `tools/balance/perf_cases.gd`, `perf_peak.gd`, `run_perf.sh`: the benchmark's largest wave (above).
 - `tools/balance/run_region1.sh`, `run_whatif.sh`, `run_stats.sh`: the exact job lists and seeds.
 - `tools/balance/run_pass.sh`, `run_pass_post.sh`, `run_special.sh`, `run_whatif_b3.sh`: the job lists and seeds of the 2026-10-25
   campaign pass (raw folder `raw/2026-10-25-b3/`, report `campaign-2026-10-25.md`, `SEED_SHIFT=100000`).

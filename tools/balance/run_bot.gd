@@ -452,6 +452,10 @@ static func _weakest(b: Battle, count: Dictionary) -> TowerState:
 ##   "stack": Array           top, middle and bottom segment ids to use instead of the seed's (B4: forced stacks)
 ##   "pack": String           a pack id that replaces the seed's pack of that pack's band (B4: forced packs)
 ##   "stop_after": n          stop at the first build phase after n waves have started (all cleared)
+##   "force_risk": {"card": id, "k": n}   at the draft held after n picks, take this risk card whether or not it is offered (B5: the
+##                            most crowded wave). The run is rebuilt through Battle.add_effects and RunSession.from_data, so it saves and loads.
+##   "stop_before": n         stop in the build phase just before wave n starts (after the draft and the buying)
+##   "return_state": true     the result also holds `end_battle` and `end_run`, the saved data of the battle and the run at the end
 ## Returns a plain Dictionary (see the keys at the end).
 static func play(game: GameData, run_seed: int, day: String, relaxed: bool, pool: Array[StringName], strat: Dictionary, opts: Dictionary = {}) -> Dictionary:
 	var session: RunSession = null
@@ -508,6 +512,8 @@ static func play(game: GameData, run_seed: int, day: String, relaxed: bool, pool
 	var idle: StringName = &"waiting"
 	var boss_dist: PackedInt32Array = b.map.distances(b.closed_cells())
 	var stop_after: int = int(opts.get("stop_after", 0))
+	var stop_before: int = int(opts.get("stop_before", 0))
+	var risk_force: Dictionary = opts.get("force_risk", {})
 	var stopped: bool = false
 	var aim_boss: bool = boss_aim == 1
 	var boss_aimed: bool = false
@@ -518,6 +524,15 @@ static func play(game: GameData, run_seed: int, day: String, relaxed: bool, pool
 		gold_pre.append(b.gold)
 		lives_pre.append(b.lives)
 		while session.draft_open():
+			if not risk_force.is_empty() and session.picks.size() == int(risk_force["k"]):
+				var made: RunSession = _force_pick(game, session, StringName(String(risk_force["card"])))
+				if made == null:
+					return {"bad": "a forced pick would not load at seed %d" % run_seed}
+				session = made
+				b = session.battle
+				b.record_events = false
+				risk_force = {}
+				continue
 			if restore_draft == session.picks.size() and restores == 0:
 				var before: Array[StringName] = session.offers()
 				var again: Dictionary = _roundtrip(game, session)
@@ -553,6 +568,9 @@ static func play(game: GameData, run_seed: int, day: String, relaxed: bool, pool
 		idle_at.append(1 if idle == &"nothing" else 0)
 		if bool(opts.get("snapshots", false)):
 			snapshots.append({"battle": b.to_data(), "run": session.to_data(), "wave": b.waves_started})
+		if stop_before > 0 and b.waves_started == stop_before - 1:
+			stopped = true
+			break
 		var started_at: int = b.tick
 		if session.start_next_wave() != Battle.DONE:
 			break
@@ -626,11 +644,34 @@ static func play(game: GameData, run_seed: int, day: String, relaxed: bool, pool
 		"battle_hash": JSON.stringify(b.to_data()).hash(), "run_hash": JSON.stringify(session.to_data()).hash(),
 		"restores": restores, "offers_equal": offers_equal,
 	}
+	if bool(opts.get("return_state", false)):
+		out["end_battle"] = b.to_data()
+		out["end_run"] = session.to_data()
+		out["forced_done"] = risk_force.is_empty()
 	if bool(opts.get("snapshots", false)):
 		out["snapshots"] = snapshots
 	if bool(opts.get("draft_snapshots", false)):
 		out["draft_snaps"] = draft_snaps
 	return out
+
+
+## The session with a risk card taken at the open draft, whether or not the draft offers it: the battle takes the card's effects
+## as Battle.add_effects does for a pick, and the run is read back with the card among its picks. Null when a check refuses it.
+static func _force_pick(game: GameData, session: RunSession, card_id: StringName) -> RunSession:
+	var battle: Battle = Battle.from_data(JSON.parse_string(JSON.stringify(session.battle.to_data())), game.catalog)
+	if battle == null:
+		return null
+	var card: Dictionary = session.card(card_id)
+	if card.is_empty():
+		return null
+	var effects: Array[Dictionary] = []
+	for effect: Dictionary in card["effects"]:
+		effects.append(effect)
+	if battle.add_effects(effects, card["kind"] == &"risk") != Battle.DONE:
+		return null
+	var data: Dictionary = JSON.parse_string(JSON.stringify(session.to_data()))
+	(data["picks"] as Array).append(String(card_id))
+	return RunSession.from_data(data, battle, game.run)
 
 
 ## Saves the session and its battle to JSON text and loads them again: the real path of a saved game.
