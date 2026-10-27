@@ -1,10 +1,19 @@
 # Forkline expansion: regions 5 to 8
 
-Owner: game designer. 2026-10-27. A proposal for Bart.
+Owner: game designer. 2026-10-27. Approved by Bart on 2026-10-27.
 
 Revised the same day after the architect's review against the code, with the DM's decisions: mist covers tiles (5.2), the nap is its own status that sets health when it starts (3.3, 5.2), run packs show each new creature as if new (9.3), and tiers have their own data (9.1). Also pinned: the Snow Fort's line (4.5), the Moth Lantern's lure details (4.6), when the Bramble pulses (4.3), wake and growth details (5.2), the tick order (5.5), tunnels on run maps and run map grounds (3.4, 9.3), and what keeps older saves loading (11.2).
 
-Nothing in this file is a rule yet. Once Bart approves it, its rules and numbers go into docs/design/RULES.md and data/stats/ in a later task, and everyone builds from RULES.md as usual. Every number here is a starting target for the balance bots, as the first numbers of RULES.md were.
+Bart approved this file, as revised, together with docs/art/EXPANSION_LOOK.md. It was updated the same day for his answers and the art director's look:
+
+- The Snoozer is renamed Yawner, id `yawner`, everywhere (Bart). Its job and numbers do not change.
+- The daily follows content tiers, option A of 9.4 (Bart). A tier 0 daily is exactly today's daily.
+- Regions 2 to 4 (Millbrook, Willow Fen and Moonspire Keep) get their own ground colors and scenery too (Bart). That is art only: play does not change. Lantern Hill keeps today's meadow, and so does a run map with no feature (9.3).
+- The art director's silhouettes, grounds and status marks replace my starting ideas (2, 3.7, 4.3 to 4.6, 5.4, 10): dusk blue snow on Frostpine Ridge, toadstools that glow warm peach in Starglen, and no buildings on map cells.
+- Level 8-5 is now Stone Circle, the art director's spare name. The art director left that choice to Bart or me (10).
+- 3.4 now says what "at most 6" counts, tunnel tiles, and that a tunnel is a straight run with no bend (DM).
+
+docs/design/RULES.md now holds every rule and number of this file, and everyone builds from it. Where the two differ, RULES.md wins. This file keeps the reasons. data/stats/ follows once the contract defines the new fields. Every number here is a starting target for the balance bots, as the first numbers of RULES.md were.
 
 Bart's decision, 2026-10-27: four more campaign regions of six levels each, with more complex pathing, new creatures, new towers and new features. Version 1 launches with all 48 levels. The pace stays as in regions 1 to 4: one new tower per region with two tier 3 paths, two new creatures per region, one boss per region, and one new map feature per region that makes routing more interesting. New towers and creatures join the roguelite and the daily once the player has unlocked them in the campaign.
 
@@ -23,7 +32,7 @@ Bart's decision, 2026-10-27: four more campaign regions of six levels each, with
 9. Roguelite and daily
 10. Names
 11. Engineering impact
-12. Open questions for Bart
+12. Bart's answers
 13. Suggestions beyond the task
 
 ## 1. Summary
@@ -32,7 +41,7 @@ Bart's decision, 2026-10-27: four more campaign regions of six levels each, with
 |---|---|---|---|---|---|
 | 5 | Hollow Lanes | Tunnels: walkers inside are out of reach | Bramble Cottage: thorns hit every walker around it | Mossbud (regrows), Mistwisp (hides others from aim) | Burrowbelly |
 | 6 | Russet Orchards | Bridges: two roads cross without joining | Scarecrow: creatures in its ring take more damage | Gleamer (draws every tower's aim), Sleepyhead (gets up once) | Old Hayrick |
-| 7 | Frostpine Ridge | Ice slides: one-way roads | Snow Fort: hits every walker in a straight line | Snowroller (grows as it walks), Snoozer (makes towers doze) | Snowsnore |
+| 7 | Frostpine Ridge | Ice slides: one-way roads | Snow Fort: hits every walker in a straight line | Snowroller (grows as it walks), Yawner (makes towers doze) | Snowsnore |
 | 8 | Starglen | Hollow stumps: twin stumps join two far roads | Moth Lantern: pulls flyers low so every tower can hit them | Blinker (jumps ahead), Hootling (nothing near it can be slowed) | Glimmertoad |
 
 Each region follows the shape of regions 2 to 4: the map feature comes first, on a level with nothing else new. Then the tower, then one creature per level, a level with nothing new, and the boss.
@@ -49,33 +58,35 @@ Goals for the expansion:
 
 ## 2. Regions 5 to 8
 
-All four stay in the cozy storybook dusk of the village and its surroundings. Creatures are mischievous night creatures that pop into sparkles. No blood, nothing scary beyond a gentle storybook shiver, rating Everyone. Each region gets its own ground colors and scenery so it looks different at a glance (11.4), while keeping the theme's rules: warm is ours, cool is theirs, ink outlines on everything that matters (docs/art/THEME.md).
+All four stay in the cozy storybook dusk of the village and its surroundings. Creatures are mischievous night creatures that pop into sparkles. No blood, nothing scary beyond a gentle storybook shiver, rating Everyone. Each region gets its own ground colors and scenery so it looks different at a glance, while keeping the theme's rules: warm is ours, cool is theirs, ink outlines on everything that matters (docs/art/THEME.md). The art director's grounds are in docs/art/EXPANSION_LOOK.md 3. Only towers are buildings on map cells: barns, sheds and huts stand in the backdrop above the map, so nothing is mistaken for a tower.
+
+Regions 2 to 4 get their own grounds too (Bart, 2026-10-27). That is art only: their maps, waves and rules do not change. Lantern Hill keeps today's meadow.
 
 ### 2.1 Region 5: Hollow Lanes (`hollow_lanes`)
 
 - Setting: old sunken lanes between tall hedgerows at the edge of the village. Berry bushes, mossy banks, and grassy mounds where the lanes run under the hedges.
-- Look: deep hedge green banks, sandy lanes, dark berry dots, round mossy mounds over the tunnels.
+- Look: deep hedge green ground, sandy lanes with a dark bank along both sides so they look sunken, hedges with blackberries and red haws, and round mossy mounds over the tunnels.
 - Plays as: hide and seek. Tunnels hide walkers from your towers, the Mistwisp hides its friends from aim, and the boss digs under the road. The answers are gates that keep walkers out of the tunnels, and towers that need no aim.
 - Brings: tunnels, the Bramble Cottage, the Mossbud, the Mistwisp, and Burrowbelly.
 
 ### 2.2 Region 6: Russet Orchards (`russet_orchards`)
 
 - Setting: autumn orchards on the slopes below the village. Apple trees, hay barns, cider sheds, and cart tracks that cross on wooden bridges.
-- Look: amber and russet ground, round apple trees, hay bales, plank bridges with rails.
+- Look: a darker amber brown stubble ground, with the amber and russet in the scenery: apple trees with red apples, round hay bales, fallen leaves, and plank bridges with rails. The barns and cider sheds stand in the backdrop.
 - Plays as: loops and crossings. Roads cross over each other, so one spot can watch the same road twice. Its creatures are tough in new ways: one draws every shot, one gets up again. The Scarecrow makes every hit count for more.
 - Brings: bridges, the Scarecrow, the Gleamer, the Sleepyhead, and Old Hayrick.
 
 ### 2.3 Region 7: Frostpine Ridge (`frostpine_ridge`)
 
 - Setting: the snowy pine ridge above the village in winter. Sled runs, ski huts with warm windows, and pine trees heavy with snow.
-- Look: blue-white snow, dark pines, packed-snow lanes in a warm cream so roads still read as roads, and ice slides with big carved chevrons.
+- Look: snow at dusk, a soft blue with moonlit drifts, snowy pines and snow-capped rocks, packed-snow lanes in a warm cream so roads still read as roads, and ice slides with big carved chevrons. The ski huts stand in the backdrop.
 - Plays as: one-way flows. Ice slides let walkers go only one way, so a gate can send them around a whole loop. The Snowroller grows with every tile it walks, which turns "make the road long" into a real trade.
-- Brings: ice slides, the Snow Fort, the Snowroller, the Snoozer, and Snowsnore.
+- Brings: ice slides, the Snow Fort, the Snowroller, the Yawner, and Snowsnore.
 
 ### 2.4 Region 8: Starglen (`starglen`)
 
 - Setting: a deep glade in the old wood beyond the hills, lit by glowing toadstools, standing stones and starlight. Hollow stumps stand in pairs: walk into one, come out of its twin.
-- Look: dark violet moss, teal glowing toadstool caps, grey standing stones, star motes in the air. The art director picks the ground so cool creatures still stand out.
+- Look: deep violet moss, grey standing stones with moss, toadstool rings that glow warm peach, and a few small cream motes. Nothing on the ground glows cool, so the cool creatures still stand out.
 - Plays as: magic shortcuts and the final exam. Twin stumps join far parts of the map, Blinkers jump ahead, Hootlings stop slows, and the Moth Lantern finally lets ground towers fight flyers.
 - Brings: hollow stumps, the Moth Lantern, the Blinker, the Hootling, and Glimmertoad, the final boss.
 
@@ -121,7 +132,7 @@ Tunnels, stumps and Burrowbelly's digging share one status.
 
 ### 3.4 Region 5: tunnels
 
-- **Map.** New tile `T`: a road tile under a grassy mound. A tunnel is a run of 1 to 4 tunnel tiles, and a map has at most 6. A tunnel tile is never a gate socket, entrance, base or build spot. No tunnel tile is next to a socket, so a breaker never breaks a gate from inside a tunnel.
+- **Map.** New tile `T`: a road tile under a grassy mound. A tunnel is a straight run of 1 to 4 tunnel tiles, all in one row or all in one column, with no bend, because the mound art reads as straight runs (DM, 2026-10-27). No tunnel tile is a fork or a bend: each tunnel tile has exactly two road neighbors, on opposite sides, in the line of its tunnel. A map has at most 6 tunnel tiles. A tunnel tile is never a gate socket, entrance, base or build spot. No tunnel tile is next to a socket, so a breaker never breaks a gate from inside a tunnel.
 - **Routing.** No change. Tunnel tiles are ordinary road and count as steps.
 - **Reach.** A walker whose center is inside a tunnel tile is out of reach (3.3).
 - **Gates and refusal.** No change.
@@ -160,7 +171,7 @@ Tunnels, stumps and Burrowbelly's digging share one status.
 - **Routing (3.2).** Twins are joined by one step, both ways. A walker on a stump takes that step or a usual one, whichever its shortest route needs.
 - **Walking through.** The stump step takes the time of one step at the walker's speed. For that whole step the walker is out of reach (3.3). It stands at the stump it entered until the step is done, then appears at its twin's center. A release that begins during the step begins at the stump it entered, and its walkers take the same step.
 - **Gates and refusal.** No change. A stump never holds a gate, but a gate on the road beside a stump closes that way in.
-- **Route line.** It runs into a stump and starts again at its twin. Twins carry the same carved symbol, a crescent for `P` and a star for `Q`, so pairs read by shape.
+- **Route line.** It runs into a stump and starts again at its twin. Twins carry the same carved symbol, a crescent for `P` and a five point star for `Q`, so pairs read by shape. When a walker steps through, a few sparkles show at the stump it entered.
 - **Flyers** fly over stumps. **Breakers** use stump steps like any walker. Targeting counts the stump step as one step, as routing does.
 - **Why it is fun.** Twins join far parts of the map. A route can jump back up the map past the same towers, or skip your best stretch. The player cannot close a stump, but can close the roads into it, and choosing which way in to close is the puzzle.
 - **Why it reads on a phone.** Two matching stumps with matching symbols, walkers popping into one and out of the other, and a route line that jumps between them.
@@ -209,8 +220,8 @@ A cottage under a crown of thorns. Every second, its thorns scratch every walker
 - When its timer is 0 or less and at least one creature it can hit is in its ring, it pulses: every creature it can hit whose center is within the ring takes the hit. Then its reload starts, as for any tower (RULES 5.2). With nothing it can hit in its ring, its timer waits at 0, so it never saves up a pulse.
 - The creatures it can hit are walkers and low flyers (4.6). Hidden ones (5.2, Mistwisp) count. Out of reach (3.3) and napping (5.2) creatures do not.
 - A ring of 1.5 covers the eight tiles around it, diagonals included, like the Bakery's reach.
-- Wild Bramble: a wider ring for a spot that sees two roads. Holly Crown: sharp holly that ignores armor, for Shellbacks and Snoozers at a bend.
-- Render and audio: a cottage under a thorny crown, then a wild crown or a holly crown at tier 3. Its shot is a ring of thorns that pulses out to the ring's edge. A short dry rustle on `fired`.
+- Wild Bramble: a wider ring for a spot that sees two roads. Holly Crown: sharp holly that ignores armor, for Shellbacks and Yawners at a bend.
+- Render and audio: the looks are the art director's (docs/art/EXPANSION_LOOK.md 2): a cottage whose roof is a great tangle of thorny bramble, then a wilder tangle or a holly bush at tier 3. Its shot is a ring of thorns that pulses out to the ring's edge. A short dry rustle on `fired`.
 
 ### 4.4 Scarecrow
 
@@ -228,7 +239,7 @@ A straw scarecrow with a lantern on its post. Creatures in its ring get frighten
 - A creature holds one fright at a time. A higher fright replaces it. An equal one keeps the longer time. Frights never add up (as slows, RULES 8.5).
 - Bosses are frightened too. A bubble still blocks the whole hit.
 - Tall Scarecrow: the strongest fright. Crow Keeper: a wider ring that frightens flyers too.
-- Render and audio: a scarecrow on a post beside a small hut, taller at Tall Scarecrow, with a crow on its arm as Crow Keeper. A frightened creature shows small shiver lines, a shape, not a color. No battle sound beyond built, upgraded and sold, like the Bell.
+- Render and audio: the looks are the art director's (docs/art/EXPANSION_LOOK.md 2): a field scarecrow on its post behind a small hut, never a walking straw man, with a wider hat as Tall Scarecrow and a crow on each arm as Crow Keeper. A frightened creature shows two small zigzag shiver lines on each side, a shape, not a color. No battle sound beyond built, upgraded and sold, like the Bell.
 
 ### 4.5 Snow Fort
 
@@ -247,7 +258,7 @@ A round fort of snow bricks. It rolls a big snowball in a straight line, and eve
 - The line ignores roads. A line that crosses grass and another road hits walkers on both.
 - Only a low flyer can be at the tower's own center. If the target is there, the shot hits that target alone.
 - Big Snowball: one huge, wider snowball for armored columns and bosses. Flurry: quick snowballs, twice as often, for long crowds.
-- Render and audio: a snow-brick fort with a flag, and a bigger snowball or a stack of small ones at tier 3. The snowball rolls along the line with a short snow trail. A soft rolling thump on `fired`.
+- Render and audio: the looks are the art director's (docs/art/EXPANSION_LOOK.md 2): a wall of warm cream snow bricks with a flag and a snowball on top, then one huge snowball or a stack of six small ones at tier 3. Our snow is warm cream and the creatures' is blue-white, so the fort's snowball never shares a color with a Snowroller's. The snowball rolls along the line with a short snow trail. A soft rolling thump on `fired`.
 
 ### 4.6 Moth Lantern
 
@@ -268,7 +279,7 @@ A tall lantern on a curled post. Its light lures flyers low, where every tower c
 - A low flyer still flies its straight line, still ignores roads and gates, and still counts as a flyer for every other rule. But every tower can aim at it and hit it as if it were a walker: Catapult splash, Longbow arrows, Bramble rings and Snow Fort lines reach it, every Bell slows it and every Scarecrow frightens it. Sling Posts and Fireworks hit it as before.
 - Bosses can be lured: the Moon Moth, and the flyers any boss releases.
 - Beacon Lantern: reaches far and holds flyers low longer. Lantern Garland: lures three flyers with each shot, for flocks.
-- Render and audio: a lantern post with two moths, a brighter lantern or a string of small lanterns at tier 3. A soft beam to each flyer it hits. A low flyer flies just above its shadow, with a small glow ring. A soft glassy chime on `fired`.
+- Render and audio: the looks are the art director's (docs/art/EXPANSION_LOOK.md 2): a lamplighter's booth with a tall curled post and a big lantern, then one big lantern on a straight post or a string of small lanterns at tier 3. Two tiny cream moths are a detail in the light, not part of the shape. A soft beam to each flyer it hits. A low flyer flies just above its shadow, with a pale ring at the shadow. A soft glassy chime on `fired`.
 
 ### 4.7 One-line tower cards (RULES 5.9 format)
 
@@ -339,11 +350,11 @@ Numbers at strength 100. Strength scales health, regrow amounts and bounty (RULE
 | Gleamer | `gleamer` | 160 | 0 | 0.8 | Walks | 2 | 18 | Dazzles: every tower in range aims at it (5.2). |
 | Sleepyhead | `sleepyhead` | 90 | 0 | 0.9 | Walks | 1 | 12 | Naps once for 2.0 s, then wakes with half its max health (5.2). |
 | Snowroller | `snowroller` | 40 | 0 | 1.0 | Walks | 1 | 8 | Grows 10% of its starting max health each tile, up to 3 times (5.2). |
-| Snoozer | `snoozer` | 110 | 2 | 0.7 | Walks | 2 | 15 | Every 4.0 s, towers within 1.5 tiles doze for 2.0 s (5.2). |
+| Yawner | `yawner` | 110 | 2 | 0.7 | Walks | 2 | 15 | Every 4.0 s, towers within 1.5 tiles doze for 2.0 s (5.2). |
 | Blinker | `blinker` | 60 | 0 | 0.9 | Walks | 1 | 9 | Every 3.0 s, it blinks 2 tiles ahead (5.2). |
 | Hootling | `hootling` | 80 | 1 | 0.9 | Walks | 1 | 11 | No creature within 1.5 tiles of it can be slowed (5.2). |
 
-That makes 18 creature types and 8 bosses, plus the Puff. No two share a job: the Mossbud heals only itself (the Mender heals others), the Mistwisp protects others from aim (the Bubbler protects itself from one hit), the Sleepyhead gets up again (the Puffball splits), the Blinker jumps (the Skitter runs), and the Gleamer, Snowroller, Snoozer and Hootling do things no creature does today.
+That makes 18 creature types and 8 bosses, plus the Puff. No two share a job: the Mossbud heals only itself (the Mender heals others), the Mistwisp protects others from aim (the Bubbler protects itself from one hit), the Sleepyhead gets up again (the Puffball splits), the Blinker jumps (the Skitter runs), and the Gleamer, Snowroller, Yawner and Hootling do things no creature does today.
 
 All eight walk. Flyers keep coming in every region (Flitters, Dusk Moths and boss releases), so gates are never a complete answer. A new flyer type would add little next to the Moth Lantern, which changes how every flyer is fought.
 
@@ -377,8 +388,8 @@ All eight walk. Flyers keep coming in every region (Flitters, Dusk Moths and bos
 - The wave health ceiling of the saves (contract 5.6) counts each grower at its cap: 3 times its starting max health for a Snowroller, 1.5 times for Snowsnore.
 - Its drawing grows with it, up to 1.5 times its size, so growth reads by shape.
 
-**Yawn (Snoozer, Snowsnore).**
-- 4.0 s after a Snoozer appears, and every 4.0 s after that, it yawns: every attacking tower whose center is within 1.5 tiles of the Snoozer's center dozes for 2.0 s.
+**Yawn (Yawner, Snowsnore).**
+- 4.0 s after a Yawner appears, and every 4.0 s after that, it yawns: every attacking tower whose center is within 1.5 tiles of the Yawner's center dozes for 2.0 s.
 - A dozing tower does not fire, and its reload timer does not run down. A new doze keeps the longer time.
 - In the timers step, doze timers run down first and new yawns land after. So a new doze already stops that tick's towers step and lasts its full time.
 - Bells, Scarecrows and Bakeries never doze.
@@ -419,13 +430,15 @@ Starting boss wave strengths, as the campaign's boss waves set their own (RULES 
 
 | Status | Who | Shown as, never by color alone | Stacks? |
 |---|---|---|---|
-| Out of reach | In a tunnel or stump, Burrowbelly under the ground | Hidden under the mound, a glimmer at the stump, a moving dirt mound | On or off |
-| Hidden | On or next to a Mistwisp's tile | A mist swirl over the creature | On or off, worked out at the start of the towers step |
-| Napping | Sleepyhead, Old Hayrick | Lying down with a small moon mark, not the drowsy "z z". The panel says "Napping" | Once per creature. Its own status, stricter than out of reach |
-| Frightened | Near a Scarecrow | Shiver lines | One fright. The strongest wins |
-| Low | Lured flyer | Flying just above its shadow, with a glow ring | One. The longest wins |
-| Awake | Near a Hootling or Glimmertoad | A small open-eye mark | On or off, worked out once a tick in the timers step |
-| Dozing | Towers near a yawn | A "z" over the tower | One doze. The longest wins |
+| Out of reach | In a tunnel or stump, Burrowbelly under the ground | Hidden under the mound, a few sparkles at the stump it entered, a moving dirt mound with claw tips | On or off |
+| Hidden | On or next to a Mistwisp's tile | The Mistwisp's own curl, small, above the creature's head | On or off, worked out at the start of the towers step |
+| Napping | Sleepyhead, Old Hayrick | Lying on its side with a small crescent moon above, not the drowsy "z z". The panel says "Napping" | Once per creature. Its own status, stricter than out of reach |
+| Frightened | Near a Scarecrow | Two small zigzag shiver lines on each side | One fright. The strongest wins |
+| Low | Lured flyer | Flying just above its shadow, with a pale ring at the shadow | One. The longest wins |
+| Awake | Near a Hootling or Glimmertoad | A small open eye above it | On or off, worked out once a tick in the timers step |
+| Dozing | Towers near a yawn | One big "z" over the tower, unlike a slowed creature's smaller "z z" | One doze. The longest wins |
+
+The marks are the art director's (docs/art/EXPANSION_LOOK.md 5).
 
 Regrow and a Mender's heal both apply, each on its own (RULES 8.7).
 
@@ -448,7 +461,7 @@ Regrow and a Mender's heal both apply, each on its own (RULES 8.7).
 | Gleamer | Every tower that can reach it aims at it. Others slip past. |
 | Sleepyhead | Popped once, it naps for 2 seconds, then gets up with half its health. |
 | Snowroller | Grows with every tile it walks, up to 3 times its health. Pop it early. |
-| Snoozer | Every 4 seconds it yawns, and towers right beside it doze for 2 seconds. |
+| Yawner | Every 4 seconds it yawns, and towers right beside it doze for 2 seconds. |
 | Blinker | Every 3 seconds it blinks 2 tiles ahead along the road. |
 | Hootling | Its hoots keep everything near it awake. Nothing near it can be slowed. |
 | Burrowbelly | Digs under for 2 seconds every 8. Comes up with 2 Mistwisps. |
@@ -465,7 +478,7 @@ Regrow and a Mender's heal both apply, each on its own (RULES 8.7).
 | Gleamer | Builds where every tower aims, because its escort walks free | Splash, lines and rings, towers with several targets, Scarecrows to drop it fast |
 | Sleepyhead | Defenses packed at one end of the road | Towers spread down the road, splash where it wakes |
 | Snowroller | Long roads made by gates and loops | Towers near the entrance, shorter routes, early hits |
-| Snoozer | Clusters right beside the road, Bakery clusters | Towers set back from the road: Longbows, Snow Forts, Catapults |
+| Yawner | Clusters right beside the road, Bakery clusters | Towers set back from the road: Longbows, Snow Forts, Catapults |
 | Blinker | One choke point | Towers that cover long stretches |
 | Hootling | Bell and Jam Pot builds | Damage over control, and popping the Hootling first |
 | Burrowbelly | Aiming alone, because its Mistwisps hide it | Bramble rings and splash beside its road |
@@ -489,7 +502,7 @@ Regrow and a Mender's heal both apply, each on its own (RULES 8.7).
 |---|---|---|---|---|---|---|---|
 | 5 | Hollow Lanes | `hollow_lanes` | Sunken lanes under arching hedgerows | Bramble Cottage | Mossbud, Mistwisp | Burrowbelly | Tunnels |
 | 6 | Russet Orchards | `russet_orchards` | Autumn orchards, hay barns and cart bridges | Scarecrow | Gleamer, Sleepyhead | Old Hayrick | Bridges |
-| 7 | Frostpine Ridge | `frostpine_ridge` | A snowy pine ridge with sled runs and ski huts | Snow Fort | Snowroller, Snoozer | Snowsnore | Ice slides |
+| 7 | Frostpine Ridge | `frostpine_ridge` | A snowy pine ridge with sled runs and ski huts | Snow Fort | Snowroller, Yawner | Snowsnore | Ice slides |
 | 8 | Starglen | `starglen` | A glade of glowing toadstools and hollow stumps | Moth Lantern | Blinker, Hootling | Glimmertoad | Hollow stumps |
 
 ### 6.2 Unlock order (RULES 12.2 format)
@@ -513,7 +526,7 @@ Each line is one new thing, in the order the player meets it.
 | 7-1 | Ice slides |
 | 7-2 | Snow Fort |
 | 7-3 | Snowroller |
-| 7-4 | Snoozer |
+| 7-4 | Yawner |
 | 7-5 | Nothing new |
 | 7-6 | Snowsnore |
 | 8-1 | Hollow stumps |
@@ -559,7 +572,7 @@ Region 7, Frostpine Ridge:
 | 7-1 | Sled Runs | Slides go one way. A gate can send walkers around a loop. | Ice slides | none | 2 (5) | 12 | 255 | 800 | 1200 |
 | 7-2 | Snow Fort Hill | A line hits every walker on a straight road. | Snow Fort | none | 2 (5) | 12 | 260 | 850 | 1280 |
 | 7-3 | Rolling Slope | Some creatures grow on long roads. Pop them early. | Snowroller | 2 | 3 (6) | 12 | 265 | 850 | 1280 |
-| 7-4 | Drowsy Huts | Towers beside the road doze. Range stays awake. | Snoozer | 3 | 3 (6) | 12 | 270 | 900 | 1350 |
+| 7-4 | Drowsy Huts | Towers beside the road doze. Range stays awake. | Yawner | 3 | 3 (6) | 12 | 270 | 900 | 1350 |
 | 7-5 | Icicle Pass | Slides and a tunnel together. | none | none | 3 (7) | 12 | 275 | 900 | 1350 |
 | 7-6 | Snowsnore | A boss that grows and puts towers to sleep. | Snowsnore | 12 | 3 (7) | 12 | 280 | 950 | 1430 |
 
@@ -571,7 +584,7 @@ Region 8, Starglen:
 | 8-2 | Lantern Glade | Lure flyers low and the whole board can hit them. | Moth Lantern | none | 3 (6) | 12 | 270 | 900 | 1350 |
 | 8-3 | Blinking Path | Blinkers skip choke points. Cover long stretches. | Blinker | 2 | 3 (6) | 12 | 275 | 900 | 1350 |
 | 8-4 | Hoot Glen | Hootlings stop slows. Pop them first. | Hootling | 3 | 3 (7) | 12 | 280 | 950 | 1430 |
-| 8-5 | Starfall | Everything at once, with a bridge from region 6. | none | none | 3 (7) | 12 | 290 | 950 | 1430 |
+| 8-5 | Stone Circle | Everything at once, with a bridge from region 6. | none | none | 3 (7) | 12 | 290 | 950 | 1430 |
 | 8-6 | Glimmertoad | The final boss hops, cannot be slowed and lets flyers out. | Glimmertoad | 12 | 3 (7) | 12 | 300 | 1000 | 1500 |
 
 Per region:
@@ -596,7 +609,7 @@ Typical gaps for the new creatures (RULES 12.5 additions):
 | Gleamer | 2.0 to 4.0, at the front of a group |
 | Sleepyhead | 1.0 to 1.5 |
 | Snowroller | 0.5 to 1.0 |
-| Snoozer | 2.0 to 4.0 |
+| Yawner | 2.0 to 4.0 |
 | Blinker | 0.8 to 1.2 |
 | Hootling | Spawn it just after the group it should keep awake, like the Mender |
 
@@ -621,7 +634,7 @@ Star 2 stays "Keep 15 lives." on every level. Each star 3 rule is a starting tar
 | 7-1 | Have at most 6 towers. | Ice slides only go the way their arrows point. Watch the line. | The socket that sends walkers around the slide loop |
 | 7-2 | Build no Pumpkin Catapults. | Snow Forts roll snowballs in a line. Build them at the end of a long road. | A spot at the end of a long straight road |
 | 7-3 | Use no gates. | Snowrollers grow with every tile. Pop them early or keep their road short. | A spot near the entrance |
-| 7-4 | Have at most 7 towers. | Snoozers make towers beside them doze. Towers set back stay awake. | A spot two tiles from the road |
+| 7-4 | Have at most 7 towers. | Yawners make towers beside them doze. Towers set back stay awake. | A spot two tiles from the road |
 | 7-5 | No tower above tier 2. | none | none |
 | 7-6 | Use at most 3 kinds of tower. | Snowsnore grows as it walks and yawns towers asleep. Hit it early. | A spot near the entrance |
 | 8-1 | Have at most 6 towers. | Hollow stumps come in twins. Walkers that step into one come out of the other. | The socket on the road into a stump |
@@ -708,7 +721,7 @@ RULES 13 still applies: a Twist unlocks with 3 stars on its level, has no stars,
 |---|---|---|---|---|---|
 | 1 | `r5_l6` | `bramble_cottage` | `mossbud`, `mistwisp` | `burrowbelly` | `T` |
 | 2 | `r6_l6` | `scarecrow` | `gleamer`, `sleepyhead` | `old_hayrick` | `X` |
-| 3 | `r7_l6` | `snow_fort` | `snowroller`, `snoozer` | `snowsnore` | `^`, `v`, `<`, `>` |
+| 3 | `r7_l6` | `snow_fort` | `snowroller`, `yawner` | `snowsnore` | `^`, `v`, `<`, `>` |
 | 4 | `r8_l6` | `moth_lantern` | `blinker`, `hootling` | `glimmertoad` | `P`, `Q` |
 
 - The player's tier is the number of listed boss levels cleared, 0 to 4. It comes from the level records, so progress.json needs no new field.
@@ -736,26 +749,26 @@ RULES 13 still applies: a Twist unlocks with 3 stars on its level, has no stars,
 
 ### 9.3 Waves and maps
 
-- New creatures join these run bands: Mossbud and Sleepyhead in band 2, Gleamer, Snowroller and Blinker in band 3, Mistwisp and Snoozer in band 4, Hootling in band 5.
+- New creatures join these run bands: Mossbud and Sleepyhead in band 2, Gleamer, Snowroller and Blinker in band 3, Mistwisp and Yawner in band 4, Hootling in band 5.
 - Each region adds packs that use its creatures, at least one in each band from its creatures' bands on, plus two band 6 packs for its boss. A pack is eligible only when its tier (9.1) is at most the run's tier. Every band keeps its 4 or more packs of today, so tier 0 runs keep today's packs.
 - **New creatures in packs.** Every pack shows each tier 1 to 4 creature it uses as if it were new. That creature comes in the first group of the first wave of the pack that has it, no group of that wave starts before it, and a wave shows at most one such creature. Today's rule for creatures the run has not shown yet (RULES 14.3) still holds, and no wave shows two creatures as new, counting both kinds. Tests check every choice of packs at every tier. Why: the player has met these creatures in the campaign, but a run can bring them in any band, so each pack brings them in gently, at the front where the player sees them first.
 - Each region adds two or three middle segments with its feature, using the ports of today's segments, so every top and bottom still fits. A segment holds at most one feature, in its middle three rows, and its top and bottom rows stay plain road. A segment is eligible only when its tier is at most the run's tier. Every stack still meets RULES 14.2: 11 or 12 spots, 2 to 5 sockets and the Bakery spot. No tunnel tile is next to a socket on any stack, across the seams between segments too (3.4). Tests check every stack at every tier.
-- **The ground of a run map.** A run map takes the ground of the region whose feature it holds: Hollow Lanes for tunnels, Russet Orchards for bridges, Frostpine Ridge for slides, Starglen for stumps. A map with no feature keeps today's meadow, which is also the ground of regions 1 to 4. Since a segment holds at most one feature and only middles hold features, a map never has two.
+- **The ground of a run map.** A run map takes the ground of the region whose feature it holds: Hollow Lanes for tunnels, Russet Orchards for bridges, Frostpine Ridge for slides, Starglen for stumps. A map with no feature keeps today's meadow, Lantern Hill's ground. Regions 2 to 4 have grounds of their own now (2), but no feature, so a run map never takes theirs. Since a segment holds at most one feature and only middles hold features, a map never has two.
 - The seed picks among the eligible segments, packs and bosses exactly as now (contract 3.4). So the same seed and the same tier always give the same run.
 
 ### 9.4 The daily
 
-Today the daily is the same run on every phone, because it uses every card (RULES 15). Content that joins by progress breaks that, so here are the choices:
+Today the daily is the same run on every phone, because it uses every card (RULES 15). Content that joins by progress breaks that, so these were the choices. Bart chose A on 2026-10-27: the daily follows content tiers, and a tier 0 daily is exactly today's.
 
 | Option | Same run on every phone? | New content in the daily? | Cost |
 |---|---|---|---|
-| A. Tiers (my recommendation) | Yes, for every player at the same tier. All new players share tier 0, and everyone who finishes the campaign shares tier 4 | Yes, once earned | The daily record and run saves keep the tier. The bots check the daily at all five tiers |
+| A. Tiers (my recommendation, Bart's choice) | Yes, for every player at the same tier. All new players share tier 0, and everyone who finishes the campaign shares tier 4 | Yes, once earned | The daily record and run saves keep the tier. The bots check the daily at all five tiers |
 | B. Base content only | Yes, always | Never | None |
 | C. Everything for everyone | Yes, always | Yes, even before the campaign brings it, with first sight cards, as runs show v1 content today | None, but it goes against "once unlocked in the campaign" |
 
 Why A: with no network and no leaderboards, "the same daily" matters only when two players compare. A keeps the daily the same for players at the same stage and still rewards progress. The daily card names its regions, for example "Regions 1 to 6", so two friends see why their runs differ.
 
-Rules for A:
+Rules for A, now in RULES 14.9 and 15:
 
 - The daily's tier is the player's tier when they start that day's first daily. It holds for the whole day: the daily record stores it with the day's best, and a daily in progress keeps it in its save. A tier earned later that day joins tomorrow's daily, so the day's best always compares the same run.
 - The seed is still the date. The daily uses only things whose tier is at most its tier (9.1), and its pool is every card of those tiers, unlocked or not (9.2). Always Normal.
@@ -764,7 +777,7 @@ Rules for A:
 ### 9.5 Balance risks
 
 - **Draft dilution.** At tier 4, 9 tower cards share the tower weight instead of 5, and 10 base perks come before any unlocked perk instead of 6. Each tower is offered less often and unlocked perks wait longer. The bots check RULES 14.8 at tier 0 and tier 4.
-- **The Snoozer on run maps.** Every run map has a Bakery spot with 3 neighbors (RULES 14.2), exactly what a Snoozer punishes. Keep Snoozers in band 4, a few per wave.
+- **The Yawner on run maps.** Every run map has a Bakery spot with 3 neighbors (RULES 14.2), exactly what a Yawner punishes. Keep Yawners in band 4, a few per wave.
 - **The Moth Lantern against Moon Moth packs.** A run with Lanterns and Giant Bows may find the Moon Moth easier. The per-pack boss bar (RULES 14.8) catches it.
 - **Run length.** Gleamers, Sleepyheads and Mossbuds add hidden health, so waves may run longer. Watch the 12 to 16 minute bar.
 - **The card experiment.** Each new perk must move the win rate by 5 points or less (RULES 14.8).
@@ -772,49 +785,51 @@ Rules for A:
 
 ## 10. Names
 
-Ids follow docs/art/NAMES.md and contract 2.1: lowercase `a` to `z`, `0` to `9` and `_`, starting with a letter, at most 32 characters. Display names are at most 24 characters. None is another game's name or a famous character as far as I know. Two choices were made for that reason: "Gleamer" instead of "Dazzler", a famous comic book character, and "Mossbud" instead of names close to another game's moss creatures. The art director checks every name and silhouette after me. The silhouette notes are only starting ideas.
+Ids follow docs/art/NAMES.md and contract 2.1: lowercase `a` to `z`, `0` to `9` and `_`, starting with a letter, at most 32 characters. Display names are at most 24 characters. None is another game's name or a famous character as far as I know. Two choices were made for that reason: "Gleamer" instead of "Dazzler", a famous comic book character, and "Mossbud" instead of names close to another game's moss creatures. The art director checked every name and silhouette after me (docs/art/EXPANSION_LOOK.md 1 and 2), and Bart approved the result on 2026-10-27. The names are in docs/art/NAMES.md too. The silhouettes below are the art director's, in short. EXPANSION_LOOK.md 2 is their source.
 
-| Kind | Id | Name | Silhouette idea |
+| Kind | Id | Name | Silhouette |
 |---|---|---|---|
 | Region | `hollow_lanes` | Hollow Lanes | |
 | Region | `russet_orchards` | Russet Orchards | |
 | Region | `frostpine_ridge` | Frostpine Ridge | |
 | Region | `starglen` | Starglen | |
-| Tower | `bramble_cottage` | Bramble Cottage | A cottage under a crown of thorny brambles |
-| Path 0 | `wild_bramble` | Wild Bramble | A wider, wilder crown |
-| Path 1 | `holly_crown` | Holly Crown | Spiky holly leaves and berries on the roof |
-| Tower | `scarecrow` | Scarecrow | A straw scarecrow on a post beside a small hut, a lantern on its arm |
-| Path 0 | `tall_scarecrow` | Tall Scarecrow | A taller figure with a wide hat |
-| Path 1 | `crow_keeper` | Crow Keeper | A crow perched on its arm |
-| Tower | `snow_fort` | Snow Fort | A round fort of snow bricks with a flag |
-| Path 0 | `big_snowball` | Big Snowball | One huge snowball on the wall |
-| Path 1 | `flurry` | Flurry | A stack of small snowballs |
-| Tower | `moth_lantern` | Moth Lantern | A tall lantern on a curled post with two moths |
-| Path 0 | `beacon_lantern` | Beacon Lantern | One big, bright lantern |
-| Path 1 | `lantern_garland` | Lantern Garland | A string of small lanterns |
-| Creature | `mossbud` | Mossbud | A round moss ball with two leaf sprouts |
-| Creature | `mistwisp` | Mistwisp | A small teardrop wisp with a curling tail |
-| Creature | `gleamer` | Gleamer | A plump creature with a big shiny star on its belly |
-| Creature | `sleepyhead` | Sleepyhead | A round creature in a floppy nightcap |
-| Creature | `snowroller` | Snowroller | A snowball with stubby feet and a face |
-| Creature | `snoozer` | Snoozer | A droopy creature trailing a blanket |
-| Creature | `blinker` | Blinker | A small creature with huge round eyes |
-| Creature | `hootling` | Hootling | A small owlish creature with a flat round face |
-| Boss | `burrowbelly` | Burrowbelly | A big round digger with wide paws |
-| Boss | `old_hayrick` | Old Hayrick | A walking haystack in a straw hat |
-| Boss | `snowsnore` | Snowsnore | A huge shaggy snow beast with droopy eyes |
-| Boss | `glimmertoad` | Glimmertoad | A huge toad with glowing spots |
+| Tower | `bramble_cottage` | Bramble Cottage | A small cottage whose whole roof is a great tangle of thorny bramble |
+| Path 0 | `wild_bramble` | Wild Bramble | A wider, spikier tangle with two canes looping over the top |
+| Path 1 | `holly_crown` | Holly Crown | A rounder holly bush crowned with spiky holly leaves and red berries |
+| Tower | `scarecrow` | Scarecrow | A field scarecrow on its post behind a small hut, arms spread, a lantern hanging from one hand |
+| Path 0 | `tall_scarecrow` | Tall Scarecrow | Raised a little, with a hat half again as wide |
+| Path 1 | `crow_keeper` | Crow Keeper | A crow on each arm, one flapping |
+| Tower | `snow_fort` | Snow Fort | A wide wall of warm cream snow bricks with a glowing door, a flag and a snowball on top |
+| Path 0 | `big_snowball` | Big Snowball | One huge snowball |
+| Path 1 | `flurry` | Flurry | A stack of six small snowballs |
+| Tower | `moth_lantern` | Moth Lantern | A lamplighter's booth with a tall curled post and a big lantern. Two tiny moths in the light are a detail, not part of the shape |
+| Path 0 | `beacon_lantern` | Beacon Lantern | One big lantern on a straight post |
+| Path 1 | `lantern_garland` | Lantern Garland | Three small lanterns on a string |
+| Creature | `mossbud` | Mossbud | A walking flower bud with a curled tip and a frill of two leaves |
+| Creature | `mistwisp` | Mistwisp | A small bean body with a tall spiral of mist rising from its head |
+| Creature | `gleamer` | Gleamer | A plump body with a fan of five feathers raised behind it, each tipped with a round gleam |
+| Creature | `sleepyhead` | Sleepyhead | A round body in a long floppy nightcap, eyes half shut |
+| Creature | `snowroller` | Snowroller | A small creature running on top of the big snowball it rolls |
+| Creature | `yawner` | Yawner | A droopy creature with long ears, mouth open in a yawn, a patched quilt over its back |
+| Creature | `blinker` | Blinker | A small upright hopper with a big round head and two huge eyes, never a small ghost |
+| Creature | `hootling` | Hootling | A small owlish creature standing tall, with a heart-shaped top and a pale face |
+| Boss | `burrowbelly` | Burrowbelly | A big round digger with a pot belly, a pointed snout and two huge spade paws |
+| Boss | `old_hayrick` | Old Hayrick | A walking haystack with two straw arms raised high and a small sheaf on top |
+| Boss | `snowsnore` | Snowsnore | A low droopy-eared beast with a big snowball on its back, like a snail's shell |
+| Boss | `glimmertoad` | Glimmertoad | A huge, low, squat toad with tall eye bumps and glowing spots on its back |
 | Card | `tower_bramble_cottage`, `tower_scarecrow`, `tower_snow_fort`, `tower_moth_lantern` | (tower cards take the tower's name) | |
 | Card | `thorn_tips`, `big_hat`, `packed_snow`, `bright_wick` | Thorn Tips, Big Hat, Packed Snow, Bright Wick | |
 | Levels | `r5_l1` to `r8_l6` | The level names in 6.3 | |
 
 Map features need no ids. Their tiles are grid characters (3.4 to 3.7), and players read them as tunnel, bridge, ice slide and hollow stump. Plurals for "Build no ..." are in 4.7.
 
-Names I would watch, left unchanged here while the art director checks them:
+Names I watched, and how they ended:
 
-- **Scarecrow** is a plain word, but it is also the name of well-known characters in a classic children's story and in comic books. If the art director wants a spare, "Straw Watcher" keeps the job and the look.
-- **Hootling.** "Hoot" is a plain word, but owl creatures in other games use it too. I think the name is far enough apart.
-- **Sleepyhead and Snoozer** both lean on sleep. The names are clear, but their silhouettes must differ plainly: a nightcap against a trailing blanket.
+- **Scarecrow** is a plain word, but it is also the name of well-known characters in a classic children's story and in comic books. The art director kept it: draw a field scarecrow on a post, never a walking straw man.
+- **Hootling.** "Hoot" is a plain word, but owl creatures in other games use it too. I think the name is far enough apart, and the art director kept it.
+- **The Yawner** was the Snoozer. Next to the Sleepyhead it read as a second creature that sleeps, in the next region, so the art director renamed it, and Bart agreed. "Yawner" says what it does and matches its card and Snowsnore, which yawns too.
+- **Stone Circle**, level 8-5. Its first name is a plain word, but also a well known spell name in a big online game, and the name of a well known children's learning app. The art director offered Stone Circle as a spare, for Bart or me to choose. I chose it: it fits Starglen's standing stones.
+- The art director's other watch notes (Flurry, Blinker, Glimmertoad, and Bramble Cottage next to Hollow Lanes) are in docs/art/EXPANSION_LOOK.md 1. All of those names stay.
 
 ## 11. Engineering impact
 
@@ -829,7 +844,7 @@ Short lists, so the architect can plan the contract changes. Nothing here is dec
 5. Routing on nodes, not cells: two nodes on a bridge, slide directions, stump steps. `RoadMap.distances` and `route()` change shape, and route lines need over and under at bridges, under at tunnels and a jump at stumps (section 4).
 6. Battle queries: the new statuses in `enemy_numbers` (hidden, out of reach, napping, frightened, low, awake, grown max health) and dozing in `tower_numbers`. New events, for example `burrowed`, `surfaced`, `napped`, `woke`, `blinked` and `yawned` (3.1).
 7. Runs: run.json `tiers` (9.1), a content tier in `RunSession.start`, `RunData` filters for cards, packs, segments and bosses by tier, the pack rule of 9.3, and the daily's tier (2.9 to 2.11, 3.4).
-8. Theme: `MapArt` takes the region, for its ground colors and scenery. Regions 1 to 4 keep today's meadow, and a run map takes the ground of its feature (9.3) (3.9).
+8. Theme: `MapArt` takes the region, for its ground colors and scenery, in all 8 regions. Lantern Hill keeps today's meadow, regions 2 to 8 each get their own ground (Bart chose 2 to 4 on 2026-10-27), and a run map takes the ground of its feature, or the meadow when it has none (9.3) (3.9).
 9. Save ceilings for the new timers, an at-once bound for creatures that wake, and growers counted at their cap in the wave health ceiling (5.6).
 
 ### 11.2 Per area
@@ -837,7 +852,7 @@ Short lists, so the architect can plan the contract changes. Nothing here is dec
 | Area | Needs |
 |---|---|
 | Sim | Routing on the node graph. The out of reach status. Bramble pulses, Snow Fort lines (squared distance from a point to a segment, integers only), lures and low flyers in every tower's targeting, frights in the damage step. Every creature rule of 5.2 and boss rule of 5.3, in the tick order of 5.5. Save and restore of every new timer. Tests for every rule, determinism, and snapshot and restore on levels with each new thing. The perf test with Mistwisps and Hootlings in the crowd. |
-| Theme | 4 towers at tier 1, tier 2 and both paths, 8 creatures and 4 bosses, distinct by shape under the silhouette test. A ground palette and scenery for each new region, with contrast checks, keeping warm for ours and cool for theirs. Feature tiles: the tunnel mound, the plank bridge, slide chevrons, stumps with a crescent and a star. Marks: mist swirl, nap moon, shiver lines, the low flyer's glow ring, the open eye, a "z" on dozing towers. |
+| Theme | 4 towers at tier 1, tier 2 and both paths, 8 creatures and 4 bosses, distinct by shape under the silhouette test. A ground palette and scenery for each of regions 2 to 8, with contrast checks, keeping warm for ours and cool for theirs. Feature tiles: the tunnel mound, the plank bridge, slide chevrons, stumps with a crescent and a star. The status marks of 5.4. |
 | Render | Region grounds. Walkers hidden in tunnels and stumps. Route lines over and under bridges and through stumps. Shots: the thorn pulse, the rolling snowball, the lantern beam. A pulse or a line is one drawn shot, however many creatures it hits, so the 96 shot cap holds. Growth scaling, blink and hop sparkles, the dirt mound, the yawn ring and the nap pose. A Fold5 measurement of the most crowded new wave. |
 | Audio | A `fired` sound for the Bramble Cottage, Snow Fort and Moth Lantern and their paths. A sound or a deliberate silence for each new event. No new music needed. |
 | UI | A build panel that fits up to 10 towers on the cover screen at 48 dp, in two rows or a scroll. Tower panels for pulses, lines, lures and frights. Creature panels with the new statuses. LevelSelect with 8 regions. The Info screen with the new towers, creatures, bosses and the four map features. The daily card names its regions. |
@@ -845,11 +860,16 @@ Short lists, so the architect can plan the contract changes. Nothing here is dec
 | Balance bots | The plain mixed recipe for regions 5 to 8 (below). Lone searches for the Bramble Cottage and the Snow Fort. The Moth Lantern skipped where walkers cost 6 lives or more, like the Firework. The Scarecrow counted as support, like the Bell. Run reports at tiers 0 and 4, the daily at all five. The largest wave and the tick time on every new level. |
 | Saves | progress.json: no change, since new level and seen ids fit its 512 entry caps. Saved games: new battle fields, each optional with a safe default, so a game saved before the update still loads. Run and daily saves: `tier`, 0 to 4, missing means 0. daily.json: `tier` for the day's record, missing means 0. rules.json, a data file: `region_stars` with 8 values. Older saves: this plan changes no number of today's towers, creatures or rules. No reload time of a current tower, and no heal, summon, break or bubble time of a current creature in regions 1 to 4, gets shorter. So the timers in a mid-wave save made by today's build stay inside the ranges the load checks allow, and it keeps loading after the update. |
 
-Proposed plain mixed recipe for regions 5 to 8 (RULES 12.6), for the balance analyst to confirm: the attacking towers in turn become Sling Post, Pumpkin Catapult, Longbow Loft, Bramble Cottage, Snow Fort, then Firework Tower and Moth Lantern on levels whose waves bring flyers. One Scarecrow joins the Bell and the Bakery, on the fifth spot in the spot order. Road seen counts only road tiles outside tunnels. Tier 3 takes each tower's first path, as today.
+Proposed plain mixed recipe for regions 5 to 8 (RULES 12.6), for the balance analyst to confirm: the attacking towers in turn become Sling Post, Pumpkin Catapult, Longbow Loft, Bramble Cottage, Snow Fort, then Firework Tower and Moth Lantern on levels whose waves bring flyers. One Scarecrow joins the Bell and the Bakery, on the fifth spot in the spot order, or the sixth if the Bakery has the fifth. Road seen counts only road tiles outside tunnels. Tier 3 takes each attacking tower's first path, as today, and the Scarecrow stays at tier 2 with the Bell and the Bakery. RULES 12.6 now holds it.
 
-## 12. Open questions for Bart
+## 12. Bart's answers
 
-1. **The daily.** The brief says the daily is the same run on every phone. New content joins only once a player has earned it, so the two pull apart. Should the daily follow content tiers, so every player at the same stage shares the same daily (A)? Or use only today's content for everyone (B), or everything for everyone from the start (C)? I recommend A (9.4). It keeps "same daily" true for players at the same stage, still rewards progress, and the daily card names its regions so friends see why runs differ.
+Bart answered on 2026-10-27, when he approved this file:
+
+1. **The daily** follows content tiers (option A of 9.4). Every player at the same stage shares the same daily, and a tier 0 daily is exactly today's. The daily card names its regions so friends see why runs differ.
+2. **The Snoozer** is renamed Yawner, as the art director proposed.
+3. **Regions 2 to 4** get their own ground colors and scenery too. Play does not change.
+4. **Still no mid-wave gate switch.**
 
 For the record, not questions:
 

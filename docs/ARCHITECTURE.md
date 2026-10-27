@@ -1,10 +1,10 @@
 # Forkline: Architecture
 
-Owner: architect. Status: revised for phase 7, and brought up to the built sim (S1), the run code (R1, R2), the saves (S2), the run segments (L4), the Twist and run screens (U2), the rules alignment (G1), the run tuning (G3), the security fixes (S4, R4, S5) and the ceilings on stacked effects (S6, S7), 2026-10-25; then to the perk rule (G5, R5), the QA round 3 fixes (docs/reviews/qa-2026-10-26.md), the Fold5 frame times (V2) and the shot rework (commit a68c16c), 2026-10-26; then section 13 marked up to B5, with what is in progress or next, and brought up to the wave start save (QA 2026-10-27 m1), the shot polish and the release build (P2), 2026-10-27.
+Owner: architect. Status: revised for phase 7, and brought up to the built sim (S1), the run code (R1, R2), the saves (S2), the run segments (L4), the Twist and run screens (U2), the rules alignment (G1), the run tuning (G3), the security fixes (S4, R4, S5) and the ceilings on stacked effects (S6, S7), 2026-10-25; then to the perk rule (G5, R5), the QA round 3 fixes (docs/reviews/qa-2026-10-26.md), the Fold5 frame times (V2) and the shot rework (commit a68c16c), 2026-10-26; then section 13 marked up to B5, with what is in progress or next, and brought up to the wave start save (QA 2026-10-27 m1), the shot polish and the release build (P2), 2026-10-27. Then change block A12 (section 14), 2026-10-27: the expansion to 8 regions, with its build plan at the end of section 13.
 
-This is the contract every agent builds against: folders and owners, ids and data files, every public class with its methods and data shapes, routing, saves, resume, orientation, outbound links, the performance budget, the tests and the build plans for phase 5 (section 11) and phase 7 (section 13). Do not invent a public method that another area must call. If you need a change here, put it in your report for the DM.
+This is the contract every agent builds against: folders and owners, ids and data files, every public class with its methods and data shapes, routing, saves, resume, orientation, outbound links, the performance budget, the tests, the build plans for phase 5 (section 11), phase 7 and the expansion (section 13), and the expansion's changes (section 14). Do not invent a public method that another area must call. If you need a change here, put it in your report for the DM.
 
-Sources: docs/BRIEF.md, CLAUDE.md (with Bart's hard stop A decisions), docs/design/RULES.md and docs/art/NAMES.md. RULES.md holds every game rule and number, and it wins over this document on every rule. If the two disagree, this document has a bug: report it. "RULES 7.3" means section 7.3 of RULES.md.
+Sources: docs/BRIEF.md, CLAUDE.md (with Bart's hard stop A decisions), docs/design/RULES.md and docs/art/NAMES.md, and for section 14 docs/design/EXPANSION.md and docs/art/EXPANSION_LOOK.md. RULES.md holds every game rule and number, and it wins over this document on every rule. If the two disagree, this document has a bug: report it. "RULES 7.3" means section 7.3 of RULES.md.
 
 Parts marked (phase 7) belong to the roguelite mode, the daily challenge or Twists. They are built in phase 7, in the order of section 13.
 
@@ -92,6 +92,7 @@ These ids are fixed. They come from docs/art/NAMES.md, and src/theme/ already us
 | Levels (RULES 12.3) | `r1_l1` to `r1_l6`, `r2_l1` to `r2_l6`, `r3_l1` to `r3_l6`, `r4_l1` to `r4_l6`. Level 2-3 is `r2_l3`. |
 | Cards (phase 7) | The RULES.md card name in id form, for example `spare_gate`, `crowded_night`. Tower cards have no RULES name: `tower_` plus the tower id, for example `tower_bakery`. The full list is in 2.11. |
 | Run plan and segments (phase 7) | Segment ids are the level designer's, in the same id form, one per file. The assembled run map has the level id `run`. |
+| Expansion (A12) | The ids of 14.1 |
 
 One style for every kind: the NAMES.md name in id form, so a region is `lantern_hill`, never `region_1`. Levels are the one exception: `r1_l1` style ids give a level's place in the campaign, because level names are display text that may still change.
 
@@ -112,7 +113,7 @@ Every map is a grid of 7 columns and 8 to 13 rows (Bart, hard stop A; RULES 3.1)
 
 Checked on load:
 
-- Road cells are `#`, `G`, `1` to `4` and `B`. Orthogonal neighbors that are both road cells are joined. Diagonal neighbors never are.
+- Road cells are `#`, `G`, `1` to `4` and `B`, and since A12 the feature characters `T`, `X`, `^`, `v`, `<`, `>`, `P` and `Q` (14.2). Orthogonal neighbors that are both road cells are joined, except where bridges and slides say otherwise (14.3). Diagonal neighbors never are.
 - No 2 x 2 block of road cells, so roads are one tile wide (RULES 3.3).
 - 1 to 4 entrances. At most 24 build spots and 8 sockets.
 - With no gates placed, every entrance reaches the base. With only a Twist's fixed gates closed, every entrance still reaches it.
@@ -164,7 +165,7 @@ The map and waves are placeholders. Both branches are 13 steps long, so with no 
 | start_gold | int | 0 to 100,000 | Normal. Twists and Relaxed change it in `Battle.create` (3.1). |
 | gates | int | 0 to 3, and at most the socket count | RULES 7.1 |
 | strength | int | 50 to 1,000 | Every wave's strength unless the wave sets its own. RULES 6.4 |
-| towers | array of tower ids | 1 to 6, no repeats | The towers this level offers. RULES 12.2 |
+| towers | array of tower ids | 1 to 10 (A12), no repeats | The towers this level offers. RULES 12.2 |
 | star3 | object | 2.7 | Star 3. Stars 1 and 2 are the same on every level. |
 | hint | object, optional | `text` 1 to 80 characters, plus at most one of `cell` (inside the map) or `button` (`"call"`, the next wave button) | RULES 9.6, 12.4 |
 | waves | array | 1 to 40 waves | |
@@ -179,7 +180,7 @@ The map and waves are placeholders. Both branches are 13 steps long, so with no 
 
 Spawn bound: one wave, with its Twist applied, spawns at most 120 creatures, counting `split_count` for each splitter (RULES 12.5). Boss releases depend on play, so the bots measure them (9.1).
 
-Saved levels: `Battle.from_data` also bounds what a saved level's waves can bring. The creatures that summon and the creatures that heal that can be on the map at once stay within `MAX_SUMMONERS` (8) and `MAX_HEALERS` (40) (5.6). Real levels stay far below: their two largest waves hold at most 2 summoners and 12 healers. A saved level is still matched to the bundled one only by its id.
+Saved levels: `Battle.from_data` also bounds what a saved level's waves can bring. The creatures that summon and the creatures that heal that can be on the map at once stay within `MAX_SUMMONERS` (8) and `MAX_HEALERS` (40) (5.6), and since A12 the creatures that wake within `MAX_WAKERS` (40) (14.7). Real levels stay far below: their two largest waves hold at most 2 summoners and 12 healers. A saved level is still matched to the bundled one only by its id.
 
 Map height and the dock (7.4, settled 2026-10-24): waves need no shape limit for the portrait dock. A build phase whose open wave preview would cover the map starts with the preview folded into its one line strip. On the Fold5 cover that strip still covers part of the bottom row of a 13 row map, so **the bottom row of a 13 row map is scenery only**: no road, spot, socket, entrance or home. tests/levels checks it for every level file, and for run maps through their bottom segments (2.9). Maps of 8 to 12 rows have no such rule. This is a level design rule, not a load check, so `LevelData.check` does not change.
 
@@ -217,7 +218,7 @@ Every number comes from RULES 4 to 6. Unknown keys are errors (they catch typos)
 ]}
 ```
 
-- towers.json holds 1 to 32 towers. A tower has `id`, `name`, `plural` (for the star line "Build no ..."), `info`, `kind` (`attack`, `slow` for the Bell, `boost` for the Bakery), `tiers` (exactly 2: the build, then the tier 2 upgrade) and `specs` (exactly 2 tier 3 paths, spec 0 first, each with `id`, `name` and `info` plus a stat block). `cost` is the price of that step. Path ids are unique across all towers.
+- towers.json holds 1 to 32 towers. A tower has `id`, `name`, `plural` (for the star line "Build no ..."), `info`, `kind` (`attack`, `slow` for the Bell, `boost` for the Bakery, and since A12 `fright` for the Scarecrow), `tiers` (exactly 2: the build, then the tier 2 upgrade) and `specs` (exactly 2 tier 3 paths, spec 0 first, each with `id`, `name` and `info` plus a stat block). `cost` is the price of that step. Path ids are unique across all towers.
 - Stat block fields. A field is required for the kinds listed unless it says optional. A field outside its kinds is an unknown key.
 
 | Field | Kinds | Limits | Meaning | RULES |
@@ -233,6 +234,8 @@ Every number comes from RULES 4 to 6. Unknown keys are errors (they catch typos)
 | slow_pct, slow_ms | slow; attack, optional | 1 to 90, and 50 to 60,000. Both or neither. | The slow given, with this much time left: a Bell gives it every tick, a Jam Pot to each walker it damages | 8.5 |
 | boost_pct | boost | 0 to 500 | Attack rate added to attacking towers in reach | 8.6 |
 | boost_damage | boost, optional | 0 to 1,000 | Damage added to attacking towers in reach | 8.6 |
+
+A12 adds `fright_pct`, `fright_ms`, `pulse`, `line` and `lure_ms`, with their checks (14.4).
 
 `enemies.json` holds 1 to 64 creatures and bosses:
 
@@ -260,7 +263,7 @@ Every number comes from RULES 4 to 6. Unknown keys are errors (they catch typos)
 | speed_up | `at_pct` 1 to 10 values, each 1 to 99 and lower than the one before; `add` 1 to 1,000 | `{"at_pct": [75, 50, 25], "add": 10}`: the first time health falls to each percent, speed rises by `add` from the next tick | 6.3 |
 | release | `at_pct` 1 to 99, `count` 1 to 20, `gap_ms` 50 to 60,000 | `{"at_pct": 50, "enemy", "count", "gap_ms"}`: once, starting on the next tick, even if the same hit defeats it | 6.3 |
 
-Release checks: the creature named by `split_into`, `summon.enemy` or `release.enemy` exists, is not the releaser itself and is not a boss. It has no `split_into`, `summon` or `release` of its own, so releases never chain. A flyer releases only flyers, because a released walker starts on its releaser's road step (RULES 6.2). A summoned creature has no `heal`: summons come for as long as the boss lives, so a save could not bound the healers they bring.
+Release checks: the creature named by `split_into`, `summon.enemy` or `release.enemy` exists, is not the releaser itself and is not a boss. It has no `split_into`, `summon` or `release` of its own, so releases never chain. A flyer releases only flyers, because a released walker starts on its releaser's road step (RULES 6.2). A summoned creature has no `heal`: summons come for as long as the boss lives, so a save could not bound the healers they bring. A12 adds the creature fields of 14.4, and a summoned creature has no `wake_reach` either.
 
 `rules.json`, every key required:
 
@@ -401,7 +404,7 @@ Segments, one file each, data/segments/<id>.json:
 - Ports: the columns of the road cells on a top or middle segment's bottom row (its bottom ports), and on a middle or bottom segment's top row (its top ports). On those rows no two road cells are side by side, so a seam never makes a 2 x 2 block. Each of those rows has at least one road cell.
 - A segment fits under another when its top ports equal the other's bottom ports, as sets of columns.
 - Coverage: there is at least one segment of each kind, every top segment has at least one middle that fits under it, and every middle that fits under some top has at least one bottom that fits under it.
-- Valid stacks: every stack of a top, a middle that fits under it and a bottom that fits under that middle, assembled as in 3.4, passes `LevelData.check` and has its spots and sockets within run.json's `spots` and `sockets`. So every pick MapAssembler can make is valid. tests/levels/ checks every stack. `RunData.check` checks everything else in this list at load.
+- Valid stacks (since A12 at every tier, 14.8): every stack of a top, a middle that fits under it and a bottom that fits under that middle, assembled as in 3.4, passes `LevelData.check` and has its spots and sockets within run.json's `spots` and `sockets`. So every pick MapAssembler can make is valid. tests/levels/ checks every stack. `RunData.check` checks everything else in this list at load.
 - data/segments/index.json lists every segment file: `{"format": 1, "segments": ["top_twin", "mid_split"]}`, 1 to 256 ids, no repeats. Its order is the order MapAssembler picks from. The game loads only listed files, and tests/levels/ checks that every file in the folder is listed.
 
 The Bakery spot (RULES 14.2): **every stack has a build spot with at least 3 other build spots among its eight neighbors**, so a Bakery there reaches 3 towers. tests/levels/ checks every stack. Like the 13 row rule (2.4), this is a level design rule, not a load check, so `RunData.check` does not change.
@@ -412,9 +415,9 @@ Wave packs, data/segments/packs.json (RULES 14.3): `{"format": 1, "packs": [{"id
 - `waves`: exactly 3 waves in the level wave shape of 2.4. A band 6 pack's third wave, its boss wave, has a `strength` (50 to 1,000), required there and allowed on no other pack wave (RULES 14.3). Entrances are 1 or 2; entrance 2 means entrance 1 on a map with one entrance.
 - Creatures: a band b pack uses only the creatures that bands 1 to b add (run.json `bands`, 2.10), never a boss except its own, and never `puff` as a group. Band 1 packs' first wave holds only `scamp` (RULES 14.3).
 - Bands 1 to 5: `boss` is `""`. Band 6: `boss` is a boss id, and that boss comes only in the pack's third wave, as one group of count 1, with any escort.
-- Each band has at least 4 packs, and each boss in enemies.json has at least one band 6 pack.
+- Each band has at least 4 packs (since A12, 4 of tier 0, 14.8), and each boss in enemies.json has at least one band 6 pack.
 - Spawn bound: each pack wave spawns at most 120 creatures (2.4, counting `split_count`) with no risk card and with each risk card of cards.json applied in turn. A band 6 pack's third wave, the boss wave, never gets a risk card (3.4), so it is checked without one.
-- New creatures (RULES 14.3): for every choice of one pack per band (band 6: every pack), reading waves 1 to 18 in order, a creature the run has not shown yet comes in the wave's first group, no group of that wave starts before it, and no wave brings two such creatures. tests/levels/ checks every choice. The simple way to pass: make every band b pack show every creature that band b adds.
+- New creatures (RULES 14.3): for every choice of one pack per band (band 6: every pack), reading waves 1 to 18 in order, a creature the run has not shown yet comes in the wave's first group, no group of that wave starts before it, and no wave brings two such creatures. tests/levels/ checks every choice. The simple way to pass: make every band b pack show every creature that band b adds. Since A12 the check runs at every tier, with the rule of RULES 14.3 for creatures of tiers 1 to 4 (14.13).
 - `RunData.check` checks every rule in this list at load except the new creature rule, which only tests/levels/ checks.
 
 ### 2.10 The run plan: data/runs/run.json (roguelite-engineer, phase 7)
@@ -440,6 +443,7 @@ Values from RULES 14.1 to 14.4. Every key is required, and unknown keys are prob
 | spots, sockets | `[lo, hi]`: spots 1 <= lo <= hi <= 24; sockets 0 <= lo <= hi <= 8 | What an assembled map must hold (RULES 14.2) |
 | bands | exactly 6 lists of creature ids; no boss, no `puff`; each creature in at most one list | The creatures each band adds (RULES 14.3). Band 6 adds none: it uses every earlier one, plus its boss. |
 | weights | exactly `tower`, `perk`, `gate`, `economy`, `risk`, each 0 to 1,000; `economy` at least 1 | Draft weights (RULES 14.4). Economy is never 0, and every pool holds an economy card that is not `once` (3.4), so a draft is never empty. |
+| tiers | 0 to 4 entries (A12) | Content tiers (14.8) |
 
 ### 2.11 Cards: data/cards/cards.json (roguelite-engineer, phase 7)
 
@@ -469,7 +473,7 @@ Values from RULES 14.1 to 14.4. Every key is required, and unknown keys are prob
   - gate: an `add_gates`, and optionally a `gates_stay`.
   - economy: 1 to 3 of `add_gold`, `add_lives`, `bounty_pct`, `clear_bonus_pct`, `refund_pct`, `cost_add` and `interest`.
   - risk: exactly one `reward_gold`, plus 1 to 3 other risk effects. Every `add_group` uses entrance 1 (entrance A, as RULES 14.5 and 14.6 say), which every map has.
-- `RunData.check` checks all of this. `RunData.pool(counters)` is the base cards plus every card whose counter has reached its `at`, in file order.
+- `RunData.check` checks all of this. `RunData.pool(counters)` is the base cards plus every card whose counter has reached its `at`, in file order. Since A12, `pool` and `card_ids` also leave out the cards above a run's tier (14.8).
 
 Every card of RULES 14.5 and 14.6 as data. `name` is the RULES name; `text` is the roguelite engineer's, at most 80 characters, from the RULES effect line, and names come from the data as 2.1 says.
 
@@ -533,7 +537,7 @@ Every class below has the listed `class_name`. Fields are read only outside thei
 
 - A data speed of s moves `10 * s` sub-units a tick, and a reach of r is `200 * r` sub-units, so nothing is rounded on load. Data times are whole ticks.
 - Game state is int, bool, StringName, Vector2i and arrays of those. No float anywhere in src/sim/. A test scans the folder for `float`, `sqrt(`, `sin(`, `cos(`, `randf`, `randi` and float literals.
-- Distances are compared squared. The only root is `Sim.isqrt()`, used once per flyer path.
+- Distances are compared squared. The only root is `Sim.isqrt()`, used once per flyer path and, since A12, once per Snow Fort line shot (14.5).
 - A walker moves `speed * 10 * pct * (100 - slow) / 10000` sub-units a tick, where pct is 100 unless `speed_pct` changes it. The one truncation loses under one percent. Movement left over at a cell center carries into the next step, so speeds stay exact over a whole route.
 - Rounding follows RULES 2: half up for health, heals, gold scaled by strength or a percent, and damage percents; down for refunds; up for the early call bonus and `count_pct`. Every other product truncates once, at the end.
 - Two timers run at a changing pace, so they count in 1/100 ms. A tick takes `50 * (100 + rate boost)` off a tower's reload timer. A tower fires at most once a tick (RULES 5.2): with its timer at 0 or less and a target in range, it fires and adds `reload_ms * 100`, and a timer still below 0 after that is set to 0; with no target, the timer is set to 0 and waits. So between ticks, and in a save, a reload timer is 0 to `reload_ms * 100` of the tower's stats with card effects; an upgrade or a card never leaves it above that. A tick takes `50 * (100 - slow)` off a breaker's break timer (RULES 7.7). Every other timer counts whole ticks.
@@ -546,7 +550,7 @@ Combat never uses randomness (RULES 8.1). A Battle has no random generator, and 
 #### Order
 
 - Towers act in spot order: row, then column (RULES 3.4). Creatures update in id order, which is spawn order. Any other tie goes to the lower id or the earlier cell. No rule iterates a Dictionary unless its keys were inserted in one of these orders.
-- Each tick runs RULES 8.1 in order: 1 spawns (groups in wave data order, waves in start order, then due Puffs and boss releases; each creature gets the next id), 2 timers (bubbles, slows, heals, break timers; a gate whose timer ends breaks now and distances are worked out again), 3 Bells, 4 movement (a creature at the base center is removed and costs its lives; at 0 lives the battle is lost and the tick ends), 5 towers (reload, targets, fire; hits land at once), 6 defeats (bounties, queued Puffs, boss health events for the next tick), 7 wave checks (clear bonus, win, or the next build phase). Then `tick += 1`.
+- Each tick runs RULES 8.1 in order: 1 spawns (groups in wave data order, waves in start order, then due Puffs and boss releases; each creature gets the next id), 2 timers (bubbles, slows, heals, break timers; a gate whose timer ends breaks now and distances are worked out again), 3 Bells, 4 movement (a creature at the base center is removed and costs its lives; at 0 lives the battle is lost and the tick ends), 5 towers (reload, targets, fire; hits land at once), 6 defeats (bounties, queued Puffs, boss health events for the next tick), 7 wave checks (clear bonus, win, or the next build phase). Then `tick += 1`. A12 adds to steps 2 to 6 (14.5).
 - A released creature (a Puff or a boss release) appears at the spot where its release began. A released walker finishes the step its releaser was on, then takes the shortest open route from there. A release that has begun always finishes, even if its releaser is defeated or gets through (RULES 6.2).
 
 #### Classes
@@ -629,11 +633,12 @@ class_name GameRules extends RefCounted                # rules.json (2.6), a fie
 class_name LevelData extends RefCounted                # src/sim/level_data.gd: one checked level or assembled run map
 enum Kind { SCENERY, ROAD, SOCKET, SPOT, ENTRANCE, BASE }
 const FORMAT: int = 1
-const GRID_CHARS: String = ".#Go1234B"                 # the map characters of 2.3
+const GRID_CHARS: String = ".#Go1234BTX^v<>PQ"         # the map characters of 2.3, with A12's features (14.2)
 const MAX_SPOTS: int = 24                              # the map and wave limits of 2.3 and 2.4
 const MAX_SOCKETS: int = 8
 const MAX_GROUPS: int = 8                              # groups in one wave
 const SPAWN_BOUND: int = 120                           # creatures one wave spawns, counting splits
+# A12 adds ROAD_CHARS, MAX_TOWER_KINDS, Feature, feature_at() and slide_dir() (14.2)
 static func check(data: Variant, catalog: Catalog) -> PackedStringArray
 static func from_data(data: Variant, catalog: Catalog) -> LevelData   # null when check() finds anything
 func to_data() -> Dictionary                           # the file shape; from_data(to_data()) gives an equal level
@@ -672,12 +677,8 @@ var every_ticks: int
 ```
 
 ```gdscript
-class_name RoadMap extends RefCounted                  # src/sim/road_map.gd: routing (section 4)
-func _init(level: LevelData) -> void
-func distances(closed: Array[Vector2i]) -> PackedInt32Array   # steps to the base per cell (index row * 7 + column); -1 when cut off or not road
-func next_step(cell: Vector2i, dist: PackedInt32Array) -> Vector2i   # one step closer; ties: south, west, east, north
-func route(from: Vector2i, dist: PackedInt32Array) -> Array[Vector2i]   # from a cell to the base, both included; empty when cut off
-func seals(closed: Array[Vector2i]) -> bool            # true when any entrance has no open route
+class_name RoadMap extends RefCounted                  # src/sim/road_map.gd: routing on the node graph. A12 replaced this
+                                                       # listing: see 14.3
 ```
 
 ```gdscript
@@ -768,8 +769,8 @@ static func from_data(data: Variant, catalog: Catalog) -> Battle   # null when a
 - `create` sets the starting numbers: a Twist's `start_gold_pct`, `set_lives`, `set_gates` and `fixed_gates` first, then Relaxed (RULES 11). Starting gold is held at most BIG. Lives come from rules.json. A run's map carries its own start gold, gates and towers (3.4).
 - `create` returns null when the level or the catalog is missing, or when the Twist has more than 8 effects, fails `Modifiers.check` for use `twist`, has fixed gates that are not sockets of the level, outnumber the gates given (the level's, or the Twist's `set_gates`) or seal, or when any wave with the Twist alone (no risk card) passes a wave effect ceiling of 5.6, so no battle starts that no save of could load. Real data never does that: a level file holds at most 2 Twist effects, `LevelData.check` checks its fixed gates, and every real level's Twist stays far inside the ceilings (tests/save/). So a null is a bug.
 - `twist_effects`, `card_effects` and `risk_waiting` hold checked effects as plain data: ints, bools, Strings (ids included), and cells as `[column, row]` arrays. `gates_open` is true from the start of a wave whose risk card holds `gates_open` until the next build phase begins, even after that wave is cleared.
-- Tower numbers (`numbers`, `before`, `after` and `tower_numbers`) hold the tower's own stats with card effects: `damage`, `reload_ms`, `reach`, `splash`, `targets`, `pierce`, `slow_pct`, `slow_ms`, `hits_ground`, `hits_air`, `boost_pct`, `boost_damage`. `tower_numbers` adds `got_pct` and `got_damage` (the best Bakery boosts it gets), `boosting` (towers a Bakery boosts now), `spent`, `sell` and `aim`. The UI works out the rate as `(100 + got_pct) * 1000 / (100 * reload_ms)` attacks a second (RULES 5.2, 9.3).
-- `enemy_numbers(id)`: `health`, `max_health`, `armor`, `speed` (now, with slows and effects), `base_speed`, `flying`, `lives`, `bounty`, `heal`, `slow_pct`, `slow_ms` (left), `bubble` (up), `bubble_ms` (until it is back), `breaking_ms` (left, 0 when not breaking). RULES 9.4.
+- Tower numbers (`numbers`, `before`, `after` and `tower_numbers`) hold the tower's own stats with card effects: `damage`, `reload_ms`, `reach`, `splash`, `targets`, `pierce`, `slow_pct`, `slow_ms`, `hits_ground`, `hits_air`, `boost_pct`, `boost_damage`. `tower_numbers` adds `got_pct` and `got_damage` (the best Bakery boosts it gets), `boosting` (towers a Bakery boosts now), `spent`, `sell` and `aim`. The UI works out the rate as `(100 + got_pct) * 1000 / (100 * reload_ms)` attacks a second (RULES 5.2, 9.3). A12 adds the numbers of 14.6.
+- `enemy_numbers(id)`: `health`, `max_health`, `armor`, `speed` (now, with slows and effects), `base_speed`, `flying`, `lives`, `bounty`, `heal`, `slow_pct`, `slow_ms` (left), `bubble` (up), `bubble_ms` (until it is back), `breaking_ms` (left, 0 when not breaking). RULES 9.4. A12 adds the statuses of 14.6.
 - `wave_preview(index)`: one row per group in spawn order, `{"enemy": StringName, "count": int, "entrance": int (1 based), "health": int, "bounty": int, "heal": int}`, at that wave's strength with the Twist and, for the next wave, a waiting risk card applied (RULES 9.1).
 - `result()["stars"]` holds bits: 1 for star 1, 2 for star 2, 4 for star 3 (2.7).
 - `stars_possible()` (phase 7, for 2.7's stars during play): 0 once LOST. Otherwise bit 1, plus bit 2 on Normal while lives are at least `star2_lives`, plus bit 4 on Normal while the level's `star3` rule is not yet broken. For `no_lives_lost`, `towers_at_most`, `tower_ban`, `gates_at_most`, `tier_at_most`, `kinds_at_most` and `gates_whole` that means the record so far still meets the rule (2.7). For `early_calls_at_least` it means the early calls so far plus the waves not yet started can still reach N; in BUILD one fewer, since the next wave starts from a build phase. Once WON it equals `result()["stars"]`. On Relaxed it is at most 1.
@@ -792,6 +793,7 @@ var stats: TowerStats                                  # its own stats with card
 var got_pct: int                                       # the best Bakery rate boost it gets; 0 for Bells and Bakeries
 var got_damage: int                                    # the best Bakery damage bonus it gets; 0 for Bells and Bakeries
 var boosting: int                                      # a Bakery: the attacking towers it boosts now; 0 for other towers
+# A12 adds doze_ticks (14.5)
 
 class_name EnemyState extends RefCounted               # src/sim/enemy_state.gd
 var id: int
@@ -813,7 +815,8 @@ var fly_length: int
 var flown: int
 var breaking: int                                      # 1/100 ms of breaking left; 0 when not breaking
 var pos: Vector2i                                      # sub-units, after this tick
-var prev_pos: Vector2i                                 # sub-units, after the last tick
+var prev_pos: Vector2i                                 # sub-units, after the last tick (A12: or where it landed after a jump, 14.3)
+# A12 adds out_of_reach, hidden, awake, nap_ticks, napped, fright_pct, fright_ticks, low_ticks, dig_ticks and start_health (14.5)
 
 class_name GateState extends RefCounted                # src/sim/gate_state.gd
 var cell: Vector2i
@@ -835,7 +838,7 @@ Refunds (RULES 4.6): a purchase in a build phase goes into `spent_now`. A purcha
 | `&"top_tier"`, `&"tier_cap"` | Already tier 3, or a Twist caps the tier. |
 | `&"pick_spec"`, `&"bad_spec"` | Tier 2 to 3 needs spec 0 or 1; other steps take -1. |
 | `&"no_selling"` | A Twist forbids selling. |
-| `&"no_aim"` | Bells and Bakeries have no targeting. |
+| `&"no_aim"` | Bells and Bakeries have no targeting, and since A12 neither do Scarecrows and pulse towers (14.5). |
 | `&"bad_aim"` | The aim value is not FIRST, LAST or STRONG. |
 | `&"gates_locked"` | A gate command outside BUILD. The UI says "Gates are locked until the wave is over." (RULES 7.6) |
 | `&"not_a_socket"`, `&"has_gate"`, `&"no_gate"` | No socket there, the socket has a gate, or no gate there. |
@@ -874,6 +877,8 @@ Each event is a Dictionary with `"kind"` and the fields below. Commands add even
 | `&"gate_placed"`, `&"gate_removed"` | `cell: Vector2i` (a move is a removal, then a placement) |
 | `&"won"`, `&"lost"` | none |
 
+A12 adds `napped`, `woke`, `burrowed`, `surfaced`, `blinked` and `yawned`, and says what a pulse's and a line's `fired` lists (14.6).
+
 ### 3.2 How render and UI read the sim and send commands
 
 BattleScreen (ui-engineer) is the only place that steps the sim and drains its events. Each frame:
@@ -894,7 +899,7 @@ func _process(delta: float) -> void:
 ```
 
 - Render and UI only read `Battle` fields and the state objects. Player actions are command calls made between frames, so each lands between two ticks.
-- Drawing between ticks: `lerp(Vector2(prev_pos), Vector2(pos), alpha)`, scaled from sub-units to map pixels.
+- Drawing between ticks: `lerp(Vector2(prev_pos), Vector2(pos), alpha)`, scaled from sub-units to map pixels. Since A12 `prev_pos` holds the landing point after a jump, so this never crosses one (14.3).
 - A hit lands in the sim on the tick the tower fires. The render draws a projectile from the tower toward `at` and may hold the hit flash or the puff until it arrives (RULES 5.2). Lobbed and burst shots land in a splash or burst centered on `at`, the spot the sim hit, though the shot itself comes down up to 0.35 of the splash radius from it, toward its creature; other shots follow their creature while it is still on the map (9.3). The creature hit may already be gone from the state.
 - Inspect panels call the query methods every frame while open. That is cheap.
 - On a fold or any resize only the layout changes (7.5).
@@ -940,6 +945,7 @@ var outcome: Dictionary = session.result()
 
 - Same input check for runs: play twice with the same run seed and bot seed, and compare `session.result()`, `JSON.stringify(battle.to_data())` and `JSON.stringify(session.to_data())`.
 - Each bot run prints its seeds, so every number in a docs/balance/ report can be repeated.
+- Since A12, a run at a content tier passes the tier to `pool`, `card_ids` and `RunSession.start` (14.8), and distances are per node (14.3).
 
 ### 3.4 Runs, cards and the daily: src/run/ (roguelite-engineer, phase 7)
 
@@ -950,7 +956,7 @@ Seeds:
 - Every other generator is a `RandomNumberGenerator` from `MapAssembler.generator()`, whose `seed` is set to `RunSeeds.derive(run_seed, tag, index)`, which is `("%d:%s:%d" % [run_seed, tag, index]).hash()`. Tags and indexes: `"map"` 0, `"boss"` 0, `"pack"` the band (1 to 6), `"draft"` the wave the draft follows (1 to 17). A test pins a few values, so an engine change to `String.hash()` is caught.
 - Only `randi_range()` is called on these generators, in exactly the order written below. So the map, the boss and the waves depend only on the run seed, and a draft only on the run seed and the cards eligible when it opens. Earlier picks never change a later draft's generator (RULES 14.4).
 
-Building a run, `MapAssembler.assemble()`:
+Building a run, `MapAssembler.assemble()` (since A12 over the bosses, segments and packs of the run's tier and below, 14.8):
 
 1. Boss, generator `"boss"` 0: over the bosses that have a band 6 pack, in enemies.json order, `randi_range(0, n - 1)`.
 2. Map, generator `"map"` 0: a top segment by `randi_range(0, n - 1)` over every top in index order; then a middle the same way over the middles that fit under it; then a bottom over the bottoms that fit under that middle (2.9).
@@ -978,7 +984,7 @@ Drafts (RULES 14.4):
 - A pool must hold at least one economy card that is not `once`. Economy cards are always eligible, and run.json's economy weight is at least 1 (2.10), so a draft is never empty. `RunSession.start` returns null and `RunSession.from_data` refuses a save whose pool lacks one. The real pools hold `gold_purse` and `tea_break`.
 - Offers are worked out again whenever asked and are not saved. Nothing a player can do in a build phase changes eligibility before the pick, so a restored run shows the same offers.
 - `pick(card_id)`: only a card in `offers()`. It calls `battle.add_effects(effects, risk)`, with `risk` true for a risk card, and when that returns `Battle.DONE` it appends the id to `picks`. It returns `Battle.DONE`, `&"not_offered"`, or the battle's refusal. `RunSession.from_data` also ties the battle to the picks (5.6).
-- The pool is fixed when the run starts and is saved with it: the App passes `RunData.pool(progress.unlock_counters())` for a normal run and `RunData.card_ids()` for the daily (RULES 15).
+- The pool is fixed when the run starts and is saved with it: the App passes `RunData.pool(progress.unlock_counters())` for a normal run and `RunData.card_ids()` for the daily (RULES 15). Since A12, at the run's tier (14.8).
 
 ```gdscript
 class_name RunSeeds extends RefCounted                 # src/run/run_seeds.gd
@@ -1020,6 +1026,8 @@ func segments_under(upper_id: StringName) -> Array[Dictionary]   # the middles t
 func packs_of(band: int, boss: StringName = &"") -> Array[Dictionary]   # one band's packs in packs.json order; with a boss, only the
                                                        # band 6 packs naming it
 func boss_ids() -> Array[StringName]                   # the bosses that have a band 6 pack, in enemies.json order
+# A12 adds MAX_TIERS, tiers, and a tier parameter (default 0) to pool, card_ids, segments_of, segments_under, packs_of
+# and boss_ids (14.8)
 
 class_name MapAssembler extends RefCounted             # src/run/map_assembler.gd
 static func assemble(run_seed: int, data: RunData, catalog: Catalog) -> LevelData   # plan(), then build(); null on a data bug or a seed
@@ -1031,6 +1039,7 @@ static func plan(run_seed: int, data: RunData) -> Dictionary   # steps 1 to 3: {
 static func build(data: RunData, catalog: Catalog, top_id: StringName, middle_id: StringName, bottom_id: StringName, pack_ids: Array[StringName]) -> LevelData
                                                        # steps 4 and 5 for these segments and one pack per band, band 1 first; null below
 static func generator(run_seed: int, tag: String, index: int) -> RandomNumberGenerator   # seeded with RunSeeds.derive(run_seed, tag, index)
+# A12 adds a tier parameter (default 0) to assemble and plan (14.8)
 
 class_name RunCards extends RefCounted                 # src/run/run_cards.gd: the card checks of 2.11, internal except:
 static func has_stat(tower: TowerType, stat: String) -> bool   # the tower's kind has the stat, as 2.11's perk rule reads it
@@ -1065,6 +1074,7 @@ func result() -> Dictionary                            # {"won": bool, "waves": 
 func to_data() -> Dictionary                           # 5.5, without the battle
 static func from_data(data: Variant, battle: Battle, run_data: RunData) -> RunSession   # 5.6; null when invalid, a pool with no
                                                        # economy card that is not once included
+# A12 adds a tier parameter (default 0) to start, and var tier (14.8)
 
 class_name Daily extends RefCounted                    # src/run/daily.gd: RULES 15
 const STREAK_MAX: int = 100000                         # the streak ceiling of 5.5
@@ -1145,6 +1155,7 @@ func region_open(game: GameData, index: int) -> bool
 func runs_open(game: GameData) -> bool                 # the roguelite and the daily
 func twist_open(id: StringName) -> bool                # 3 stars on that level
 func unlock_counters() -> Dictionary                   # the counters plus "stars" and "twists_cleared", for RunData.pool (phase 7)
+func tier(game: GameData) -> int                       # A12: the player's content tier (14.8)
 func to_data() -> Dictionary
 static func from_data(data: Variant) -> Progress
 
@@ -1168,7 +1179,8 @@ var day: String                                        # "" or the day of `best`
 var best: Dictionary                                   # that day's best {"won": bool, "waves": int, "lives": int}; {} for none
 var streak: int
 var streak_day: String                                 # the last counted day
-func record_finish(day: String, result: Dictionary) -> void   # uses Daily.is_better and Daily.streak_after
+var tier: int                                          # A12: the content tier of day's daily (14.8)
+func record_finish(day: String, result: Dictionary, tier: int = 0) -> void   # uses Daily.is_better and Daily.streak_after; tier: A12 (14.8)
 func to_data() -> Dictionary
 static func from_data(data: Variant) -> DailyRecord
 ```
@@ -1236,7 +1248,7 @@ signal ended(result: Dictionary)                       # won, lost, or abandoned
 signal left()                                          # "Back to menu" in Pause; the game stays saved
 var stars_in_play: bool = true                         # false in a run or daily (set_run sets it). Star lines and star warnings
                                                        # need it true and a battle with no Twist.
-func setup(battle: Battle, audio: AudioService, progress: Progress) -> void
+func setup(battle: Battle, audio: AudioService, progress: Progress, region: StringName = &"lantern_hill") -> void   # region: A12 (14.11)
 func set_run(run: RunSession) -> void                  # after setup(): this battle is a run or daily (below)
 func apply_layout(window: Vector2, safe: Rect2) -> void   # from ScreenFrame; the App calls it on every resize (7.5)
 func pause() -> void                                   # freezes the clock and opens Pause
@@ -1268,9 +1280,9 @@ App flow:
 
 1. **Launch.** `GameData.load_from()`. If it has problems, show the damaged message and stop. Load settings, progress and the saved games (an invalid one is deleted), and the daily record (U3). Create the AudioService (3.8). Apply `UiTheme.build()`. Show the front door. Set `get_tree().quit_on_go_back = false`.
 2. **Play** opens ModeScreen. When any game is saved, the Continue card on top resumes the most recent one in one tap. A saved game also resumes from its own way in: the Roguelite or Daily button, or the saved level's card. Playing a different campaign level or Twist while one is saved asks first; a level and its own Twist count as different, since `SavedGame` has a `twist` flag. If the player confirms, the saved game ends as if abandoned from Pause, and nothing is recorded (RULES 4.10). Roguelite and Daily stay locked until `runs_open()`. Until U3 (section 13) sets `App.RUNS_BUILT` true, the Roguelite and Daily cards are locked with "Coming in a later update." whatever the stars, and tapping them does nothing. Until then the App also starts no run or daily, loads no daily record and resumes no saved run or daily, though `SaveStore.load_games()` loads and checks them.
-3. **Battle.** A campaign level: `Battle.create(level, catalog, relaxed, effects)`, where `effects` is the level's `twist_effects` when playing its Twist and empty otherwise. A normal run (phase 7): the App draws the seed (3.4), then `RunSession.start(seed, "", relaxed, game.run.pool(progress.unlock_counters()), game.run, game.catalog)`. The daily: `RunSession.start(RunSeeds.daily_seed(today), today, false, game.run.card_ids(), game.run, game.catalog)`, where `today` is `RunSeeds.day_key(Time.get_date_dict_from_system())`. Then `BattleScreen.setup()`, and for a run or daily `set_run()`, after which every call of the next wave goes through `run.start_next_wave()`. Every battle starts at 1x, a resumed one too (Bart, hard stop B). A resumed game opens paused, on the Pause menu.
+3. **Battle.** A campaign level: `Battle.create(level, catalog, relaxed, effects)`, where `effects` is the level's `twist_effects` when playing its Twist and empty otherwise. A normal run (phase 7): the App draws the seed (3.4), then `RunSession.start(seed, "", relaxed, game.run.pool(progress.unlock_counters()), game.run, game.catalog)`. The daily: `RunSession.start(RunSeeds.daily_seed(today), today, false, game.run.card_ids(), game.run, game.catalog)`, where `today` is `RunSeeds.day_key(Time.get_date_dict_from_system())`. Then `BattleScreen.setup()`, and for a run or daily `set_run()`, after which every call of the next wave goes through `run.start_next_wave()`. Every battle starts at 1x, a resumed one too (Bart, hard stop B). A resumed game opens paused, on the Pause menu. Since A12 the App passes the region to `BattleScreen.setup()` (14.11), and runs and dailies start at a content tier (14.8).
 4. **Saving.** On `save_requested` the App saves that mode's game. A new level, run or daily is also saved as soon as its battle opens. The HUD's call button is the only way to start a wave or call one early. When the battle takes the call, the HUD sends `wave_started` (BattleHud, internal to src/ui/) and BattleScreen sends `save_requested`, before any tick runs, so the save holds the moment the wave started. A refused call saves nothing (QA 2026-10-27 m1, section 6). `NOTIFICATION_APPLICATION_PAUSED`, `NOTIFICATION_APPLICATION_FOCUS_OUT` and `NOTIFICATION_WM_CLOSE_REQUEST` call `leave_app()`. With a game open, it calls `battle_screen.pause_for_leave()`. During a wave with no Pause menu up, whether the clock runs or only the HUD's Paused strip holds it, that opens the Pause menu, whose `save_requested` saves the game at that tick (QA 2026-10-26, p1). Otherwise (a build phase, Pause already open, or a first sight card holding the wave) the App saves the game itself, and a card that holds the wave opens Pause when it closes. Settings and progress save when they change.
-5. **End.** On `ended` the App deletes that mode's saved game, then records and saves. A won campaign level records its stars (`Progress.record_level`). A won Twist, on Normal or Relaxed, records the Twist (`Progress.record_twist`) and no stars. A run or daily records the counters, and a daily the daily record (U3). Then EndPanel shows for a campaign level or Twist, and RunEndPanel for a run or daily (U3). An abandoned game shows no end panel: the App goes back to the front door. An abandoned campaign level or Twist records nothing. An abandoned run or daily counts as lost at its current wave (RULES 14.7). For a run or daily, from `run.result()` (RULES 14.6): `raise(&"best_run_wave", reached)`; on a win `bump(&"runs_won", 1)`, also `bump(&"runs_won_normal", 1)` when not Relaxed, and `bump(&"risky_wins", 1)` when `risks` is 3 or more; for a daily, won, lost or abandoned, `bump(&"dailies_finished", 1)` and `DailyRecord.record_finish(run.day, result)` with `won`, `waves` and `lives` from `run.result()`.
+5. **End.** On `ended` the App deletes that mode's saved game, then records and saves. A won campaign level records its stars (`Progress.record_level`). A won Twist, on Normal or Relaxed, records the Twist (`Progress.record_twist`) and no stars. A run or daily records the counters, and a daily the daily record (U3). Then EndPanel shows for a campaign level or Twist, and RunEndPanel for a run or daily (U3). An abandoned game shows no end panel: the App goes back to the front door. An abandoned campaign level or Twist records nothing. An abandoned run or daily counts as lost at its current wave (RULES 14.7). For a run or daily, from `run.result()` (RULES 14.6): `raise(&"best_run_wave", reached)`; on a win `bump(&"runs_won", 1)`, also `bump(&"runs_won_normal", 1)` when not Relaxed, and `bump(&"risky_wins", 1)` when `risks` is 3 or more; for a daily, won, lost or abandoned, `bump(&"dailies_finished", 1)` and `DailyRecord.record_finish(run.day, result, run.tier)` with `won`, `waves` and `lives` from `run.result()` (the tier since A12, 14.8).
 6. **Back button.** One press does exactly one step. `handle_back()`: close or answer the top modal first (a first sight card closes whole and counts as read), then go back one screen. A page opened from a modal, such as About from Settings, goes back before that modal closes. In a battle, an open build, tower or creature panel closes first, and the next press opens Pause. In the short wait between a battle's end and its end panel, a press shows the panel at once. On the front door or the damaged message, quit; everything is already saved. `handle_back()` returns `&"modal"` for a closed modal, a closed battle panel, Pause opening, or the end panel shown at once. A back press from the go-back notification and one from `ui_cancel` go through one entry that ignores a second press within 150 ms.
 7. **Resize.** The App connects its viewport's `size_changed` and calls `apply_layout(window, safe)` with `Layout.safe_rect()`, which lays out every screen and modal (7.5).
 8. **Debug builds** (`OS.is_debug_build()`) add a `PerfProbe` (3.7) that watches the open battle and its map view through `watch()`. BattleScreen times each `battle.step()` with `Time.get_ticks_usec()` and passes it to `record_tick_usec()` (9.2). Release builds do none of this.
@@ -1282,7 +1294,7 @@ First sight (RULES 9.2, 9.6): a tower's card opens at the start of the first lev
 ```gdscript
 class_name MapView extends Node2D                      # src/render/map_view.gd
 const CELL: float = 128.0                              # local px per cell; fit() scales the node
-func setup(battle: Battle) -> void                     # builds the static map layer and the entity pools
+func setup(battle: Battle, region: StringName = &"lantern_hill") -> void   # builds the static map layer and the entity pools; region: A12 (14.10)
 func fit(rect: Rect2) -> void                          # rect in the parent's coordinates; position and scale so the map fills it
 func cell_at(global_point: Vector2) -> Vector2i        # a global canvas position to a cell; (-1, -1) outside the map
 func enemy_at(global_point: Vector2) -> int            # the nearest creature within reach of a finger; -1 for none
@@ -1321,6 +1333,7 @@ func is_in_front() -> bool                             # the app is in front, or
 - The App creates the service with `AudioService.new()`, adds it as its own child (no autoload), and calls `set_enabled(settings.sound_on)` once at boot, then again whenever the setting changes. It passes the service down with `setup()`.
 - AudioService makes its Sfx and Music buses at run time, so project.godot and the bus layout need nothing.
 - A shot's sound comes from the `fired` event's `tower` and `spec` (3.1).
+- A12 adds the sounds of 14.11.
 - Sound only in front, on phones (QA 2026-10-26). A service made on a phone (`OS.has_feature("mobile")`) is gated: it starts silent and comes to the front on `NOTIFICATION_APPLICATION_RESUMED` or `NOTIFICATION_APPLICATION_FOCUS_IN`. If neither arrives, its second frame counts as in front (`FRONT_FRAMES`), because a frame is drawn only once the activity has a surface. That fallback ends at the first leave. `NOTIFICATION_APPLICATION_PAUSED` and `NOTIFICATION_APPLICATION_FOCUS_OUT` stop every voice and the music at once, with no fade. Back in front, the music last asked for starts again. Sound plays only while it is on and in front (`_can_play()`). The node gets these notifications itself, so the App forwards nothing. On a desktop, such as Windows, the service is not gated unless a test passes `gated` true, so it is always in front. Why: Android logs "AudioHardening background playback" when audio starts a moment before the activity shows or plays on after it leaves, and a future Android may mute that.
 
 ### 3.9 Theme: src/theme/ (art-director)
@@ -1350,12 +1363,14 @@ static func draw_bubble(canvas: CanvasItem, center: Vector2, size: float) -> voi
 static func draw_drowsy(canvas: CanvasItem, center: Vector2, size: float, frame: int) -> void
 static func draw_boost(canvas: CanvasItem, center: Vector2, size: float) -> void
 static func draw_glyph(canvas: CanvasItem, glyph: StringName, center: Vector2, size: float, flat: Color = NO_FLAT) -> void   # &"heart", &"coin", &"moon", &"star", &"gate"
+# A12 adds the new ids to TOWERS, SPECS, CREATURES and BOSSES, and MARKS and draw_mark() (14.9)
 
 class_name MapArt extends RefCounted                   # src/theme/map_art.gd: the map, in map local pixels
 enum Gate { SOCKET, CLOSED, FIXED, BROKEN, REFUSED, OPEN }   # OPEN (phase 7): a placed gate standing open under gates_open;
                                                        # it comes last, so the older looks keep their numbers
 enum Route { WALK, BREAK, FLY }
-static func draw_ground(canvas: CanvasItem, grid: PackedStringArray, cell: float, font: Font = null) -> void   # all that never moves; grid is LevelData.grid
+static func draw_ground(canvas: CanvasItem, grid: PackedStringArray, cell: float, font: Font = null, ground: StringName = &"lantern_hill") -> void
+                                                       # all that never moves; grid is LevelData.grid; ground: A12 (14.9)
 static func draw_spot(canvas: CanvasItem, center: Vector2, cell: float) -> void
 static func draw_base(canvas: CanvasItem, center: Vector2, cell: float) -> void
 static func draw_highlight(canvas: CanvasItem, at: Vector2i, cell: float, pulse: float = 1.0) -> void
@@ -1364,6 +1379,7 @@ static func draw_gate_at(canvas: CanvasItem, center: Vector2, cell: float, acros
 static func draw_route(canvas: CanvasItem, points: PackedVector2Array, cell: float, style: Route, phase: float = 0.0) -> void
 static func route_points(cells: Array[Vector2i], cell: float) -> PackedVector2Array   # through cell centers with the roads' round turns
 static func road_runs_vertically(grid: PackedStringArray, at: Vector2i) -> bool
+# A12 adds GROUNDS, ROAD_CHARS, ground_of() and draw_features() (14.9)
 
 class_name Wordmark extends Control                    # src/theme/wordmark.gd; static draw_into(canvas, rect) for store art
 
@@ -1383,7 +1399,7 @@ static func paint(canvas: CanvasItem, rect: Rect2, layer: Layer) -> void
 
 ### 4.1 The road graph
 
-Nodes are road cells (`#`, `G`, `1` to `4`, `B`). Edges join orthogonal neighbors, and every edge is one step. `RoadMap` builds this once per battle.
+Since A12 this is the graph of 14.3: nodes are road cells, plus a second node on each bridge, and steps join neighbors as bridges and slides allow, and twin stumps. Every step is one step long. `RoadMap` builds it once per battle.
 
 ### 4.2 Gates
 
@@ -1395,10 +1411,10 @@ Nodes are road cells (`#`, `G`, `1` to `4`, `B`). Edges join orthogonal neighbor
 
 ### 4.3 The shortest open route and the tie break
 
-- `RoadMap.distances(closed)` runs one breadth first search from the base over open road cells. The result is the number of steps to the base for each cell, or -1 when cut off.
-- A walker at a cell center steps to an open neighbor whose distance is exactly one less. When several qualify, it takes the first in this fixed order: **south, west, east, north** (row + 1, column - 1, column + 1, row - 1). These are grid directions, the same in both layouts (RULES 7.3).
+- `RoadMap.distances(closed)` runs one breadth first search from the base over open nodes (14.3). The result is the number of steps to the base for each node, or -1 when cut off.
+- A walker at a cell center steps to an open neighbor whose distance is exactly one less. When several qualify, it takes the first in this fixed order: **south, west, east, north** (row + 1, column - 1, column + 1, row - 1), and since A12 then the twin step. These are grid directions, the same in both layouts (RULES 7.3).
 - A walker decides only at cell centers. Its first step is from its entrance's center.
-- Distances are worked out again only when the closed set changes: a gate command in BUILD, a gate breaking, or `gates_open` starting or ending. One search covers at most 91 cells.
+- Distances are worked out again only when the closed set changes: a gate command in BUILD, a gate breaking, or `gates_open` starting or ending. One search covers at most 91 cells and the bridges' second nodes.
 - When distances change during a wave, every walker except breakers uses the new distances from its next cell center, even if that turns it back (RULES 7.8).
 
 ### 4.4 The seal check
@@ -1420,7 +1436,7 @@ A flyer flies straight from its entrance's cell center, or from the spot where i
 
 ### 4.7 Distance to the base, for targeting
 
-- A walker: `dist[to_cell] * UNIT + (UNIT - progress)`, on the distances it walks (the breaker route for a breaker).
+- A walker: `dist[to_node] * UNIT + (UNIT - progress)`, on the distances it walks (the breaker route for a breaker), where `to_node` is the node it is heading to (A12, 14.3).
 - A flyer: `fly_length - flown`.
 
 First picks the smallest, Last the largest, and Strong the highest max health with ties by First. Any other tie goes to the lower id (RULES 8.2).
@@ -1514,14 +1530,14 @@ Ceilings are far above anything a real player reaches. Counters saturate at thei
 {"format": 1, "seed": 3141592653, "day": "", "pool": ["tower_bakery", "sharp_pebbles", "spare_gate", "gold_purse"], "picks": ["sharp_pebbles"]}
 ```
 
-- `RunSession.to_data()` (phase 7): the seed, the day (`""` for a normal run), the pool fixed at the start and the picks in order. Everything else (owed drafts, offers, the run's towers, the risk count) is worked out again from these and the battle.
+- `RunSession.to_data()` (phase 7): the seed, the day (`""` for a normal run), the pool fixed at the start and the picks in order. A12 adds `tier` (14.7). Everything else (owed drafts, offers, the run's towers, the risk count) is worked out again from these and the battle.
 
 ```json
 {"format": 1, "day": "2026-10-23", "best": {"won": false, "waves": 12, "lives": 0},
  "streak": 3, "streak_day": "2026-10-23"}
 ```
 
-- daily.json (phase 7): `day` and `streak_day` are `""` or a real calendar date from 2026-01-01 to 2200-12-31. `best` is `{}` or the result shape with numbers 0 to 1,000. A `day` with no valid `best`, or a `best` with no valid `day`, loads as neither. `streak` is 0 to 100,000. DailyRecord keeps every number as an int, loaded or recorded, because `Daily.is_better` counts a number of any other type as 0.
+- daily.json (phase 7): `day` and `streak_day` are `""` or a real calendar date from 2026-01-01 to 2200-12-31. `best` is `{}` or the result shape with numbers 0 to 1,000. A `day` with no valid `best`, or a `best` with no valid `day`, loads as neither. `streak` is 0 to 100,000. DailyRecord keeps every number as an int, loaded or recorded, because `Daily.is_better` counts a number of any other type as 0. A12 adds `tier` (14.7).
 
 ### 5.6 The saved battle
 
@@ -1552,6 +1568,8 @@ Ceilings are far above anything a real player reaches. Counters saturate at thei
 | releases | at most 1,000; each a known creature of a running wave, 1 to 200 still to come, the next one due within one gap, starting as a creature would (walkers on joined road cells, flyers inside the map); live creatures plus every creature still to come from releases, each counted with what it can still let out (1 plus its `split_count`; plus its release `count` while a health release has not begun), at most 4,000 (`MAX_ENEMIES`) |
 | at once | Per wave, a tally of creatures that summon and a tally of creatures that heal: its live creatures, its creatures still to come from releases, and what its groups have not yet spawned at the saved tick (with the Twist and the wave's risk card). A wave not started holds all of its groups (the next wave with the waiting risk card). Each creature counts with what it can let out; summons are not counted. For each kind, the sum of the `max_waves_running` largest tallies is at most 8 that summon (`MAX_SUMMONERS`) and at most 40 that heal (`MAX_HEALERS`). |
 | every number | whole, finite and in range, then converted to int |
+
+A12 adds keys and checks: 14.7.
 
 `RunSession.from_data` (phase 7) checks the run the same way, all or nothing: exact keys and `format` 1; a seed from 0 to 2^32 - 1; `day` either `""` or a day key whose `daily_seed()` is the seed, and then a battle that is not Relaxed; a pool of 1 to 256 known card ids with no repeats, holding at least one economy card that is not `once` (3.4); picks of 0 to 17 card ids from the pool, a `once` card at most once, and no more picks than the battle has cleared waves among waves 1 to 17. The battle's card effects must come from the picks. `RunSession.from_data` rebuilds the kept card effects from the picks, in pick order, from the card data (`Modifiers.normalize_all` of each non-risk card's effects, less the instant types), and refuses a run whose battle's `effects` differ in any key, value or order. A waiting risk card (`risk`) must be the effects of the last risk card picked, and the battle must be in `build` with fewer than 17 waves started. Each `wave_risk` entry must equal the effects of an earlier risk pick, matched in pick order, each pick used at most once, and never the pick still waiting. A save that breaks any of this is refused the same way as any other bad run. A saved campaign level is still matched to the bundled level only by its id. `SavedGame.from_data` checks that a campaign level's battle holds that level's Twist effects when `twist` is true and none otherwise, with no kept card effects, no waiting risk card, no `wave_risk` entry, `gates_added` 0 and `gates_open` false, because only cards and risk cards give those; that a run or daily battle holds no Twist; and that a daily battle is not Relaxed. It also checks that a campaign level's `run` is null, and that a run or daily has a `run` object. `RunSession.from_data` checks that object around the battle saved with it. Mode `daily` needs a day and mode `run` needs none, so neither can pass as the other. With no run data (`game.run` null), every saved run and daily is refused.
 
@@ -1760,7 +1778,7 @@ These Fold5 numbers are the budget. The dev PC number is only an early warning.
 - Shots (the shot rework, commit a68c16c, 2026-10-26). `MapShots` draws every shot and mark as tinted, scaled and turned quads of the sheet, so a frame of shots batches into very few draw calls. The pieces are `ShotPieces` (src/render/shot_pieces.gd), added to the sheet as `MapAtlas.Kind.PIECE` entries by `MapAtlas.add_shot_pieces()`, which loops over `ShotPieces.Piece.size()`. Each shot has a launch mark at the tower (`MapShots.Fx.MUZZLE`), a body with a short trail, and a landing mark. A catapult's lobbed shot (`MapShots.Look.PUMPKIN`, `JAM`, or `PRIZE` for the `prize_pumpkin` path) shows a dashed ring of its tower's real splash radius on the ground while it flies, and lands in a splash of that size (`Fx.SPLASH`). Since the shot polish (2026-10-27, QA 2026-10-27 p1 and p2), the shots that land on a spot (`MapShots.lands_on_spot()`: the catapult's three looks and the Firework Tower's `ROCKET` and `BLOOM`) slide toward their creature, which walks on while they fly, but stay at most `MapShots.AIM_REACH` (0.35) of the splash radius from the `at` of their `fired` event, the spot the sim hit (`aim_at()`). The splash or burst they land in, with its ring, is centered on that spot at the real radius, and its splat, chunks or flash come down where the shot did. A burst is made when its rocket lands. Other shots follow their creature while it is on the map (3.2). A single-target hit mark (`Fx.HIT`, which rockets and blooms also leave on their creature) lasts 0.18 s. Apart from an arrow that shows stuck there, it reaches at most 0.15 of a cell from where it lands, 0.19 for the Giant Bow and the Skyrocket (`hit_reach()`), so it is narrower than the smallest creature (0.4 of a cell). Flights: lobbed shots 0.11 to 0.17 s, rockets and blooms at most 0.13 s. A tower kicks back when it fires, by an amount set per shot look, and most looks also lean the tower away from its first target. At most 96 shots and 90 marks; a new one drops the oldest. Render only: the sim and its `fired` events did not change, and hits still land on the tick a tower fires.
 - Sparkle puffs use pooled one-shot `CPUParticles2D` emitters (simulated in C++, predictable in the Compatibility renderer).
 - No `Light2D`, no screen-reading shaders (`SCREEN_TEXTURE`, `BackBufferCopy`), no full-screen transparent layers beyond one sky gradient. Keep shared materials, so the Compatibility renderer can batch.
-- Inside the sim: each tower keeps the list of road cells in its reach, rebuilt only when towers change. Walkers are bucketed by cell each tick, so targeting checks nearby creatures, not all of them. Flyers, being few, are checked directly.
+- Inside the sim: each tower keeps the list of road cells in its reach, rebuilt only when towers change. Walkers are bucketed by cell each tick, so targeting checks nearby creatures, not all of them. Flyers, being few, are checked directly. A12 adds rules for the new work (14.12).
 
 ### 9.4 How to measure
 
@@ -1792,7 +1810,7 @@ General rules (CLAUDE.md "Writing tests" applies):
 | tests/audio/ | audio-engineer | Every sound renders, is not silent and never clips; voice caps hold; disabled means silent; every event kind in 3.1 has a sound or a deliberate silence. |
 | tests/theme/ | art-director | Contrast: every text pair 4.5:1 and graphic pair 3:1, including every text color the UI theme puts on a background; Outfit everywhere and the font files unmodified; every tower tier and path and every creature draws inside its box, in one color when asked, and each silhouette stays distinct from the others; the catalog ids have silhouettes in spec order, and `FLYERS` matches `flying`; route points and gate looks; the launcher icons exist at their sizes with the right transparency. |
 
-Phase 7 adds to these folders what the "Done when" column of section 13 lists.
+Phase 7 adds to these folders what the "Done when" column of section 13 lists. A12 adds the tests of 14.13.
 
 The balance bots in tools/balance/ are tools, not tests. They run on demand and write dated reports to docs/balance/.
 
@@ -1952,3 +1970,451 @@ Phase 7 is done when:
 - Killing the app mid-wave in a level, a run and a daily, then reopening, resumes at the exact moment, paused, at 1x.
 - Folding and unfolding mid-wave switches the layout without losing state, in a level and in a run with a draft open.
 - The dock test passes on every real level and on the run maps.
+
+### Expansion build plan (A12)
+
+Goal: the expansion Bart approved on 2026-10-27 (CLAUDE.md): regions 5 to 8 with 24 levels and their Twists, four towers, eight creatures, four bosses and four map features, grounds of their own for regions 2 to 8, and the new content in runs and the daily by content tier. Version 1 launches with all 48 levels. Everyone builds against section 14 and RULES.md, which holds the expansion and wins on every rule. EXPANSION.md keeps the reasons and EXPANSION_LOOK.md the look.
+
+Ground rules:
+
+- Engine first, then content. Each engine step proves itself on fixtures, so no real data needs a rule before it exists.
+- Then the region loop of phase 7, one region at a time, 5 to 8: content, a balance pass, tuning, level changes. A region's content may be built while the region before it is tuned, but its pass waits for that tuning.
+- After every step the tier 0 golden test (14.13) and S8's old save (14.7) still pass.
+- The DM checks each new region on the Fold5, both screens, with a fold mid-wave, once V4, U5 and AU1 are in.
+- The DM starts each step when what it depends on is in, at most four agents at once, and integrates, tests and commits after each. A good first wave: G6, S8, A2 and R6.
+- Sizes: S is a short task, M a normal one, L a large one that the DM may split where the row says.
+
+Engine steps:
+
+| Step | Agent | Size | Builds | Depends on | Done when |
+|---|---|---|---|---|---|
+| **G6** | game-designer (in progress, 2026-10-27) | M | RULES.md with the expansion folded in, Yawner throughout | EXPANSION.md | The DM checks RULES.md against section 14. Any difference comes back as a contract change request |
+| **S8** | sim-engineer | L | First, with today's build: a mid-wave game_level.json as a test fixture (14.7). Then 14.2 and 14.3: the new characters, `Feature`, `feature_at`, `slide_dir`, `ROAD_CHARS`, the stump checks, `towers` up to 10; the node graph and the new RoadMap; walkers on nodes and twin steps, `prev_pos` at landings, out of reach in tunnels and on twin steps; `_load_step` | this contract | tests/sim/: the graph rows of 14.13 on fixture maps with each feature; the old save loads and plays on the same; every older test passes |
+| **A2** | art-director | L | 14.9, the cast: the 4 towers in all 4 looks, the 8 creatures and the 4 bosses, `MARKS` and `draw_mark`, and their Palette fills | this contract | tests/theme/: boxes, distinct shapes, contrast; one sheet of every new look and mark |
+| **R6** | roguelite-engineer | M | First, with today's code and data: the tier 0 golden fixture (14.13). Then 14.8 in src/run/: run.json `tiers` (empty until E5.1), the tiers of cards, packs and segments, every filter and `tier` parameter, the new RunData checks, `RunSession.tier` and its save, `RunSegments.ROAD_CHARS`, and `RunCards.has_stat` for pulse and line towers | this contract | tests/run/: tier fixtures for every check and filter, saves with and without `tier`, the golden test |
+| **S9** | sim-engineer | L | 14.4 and 14.5 for towers: the `fright` kind, pulses, lines with their integer method, lures and low flyers; Catalog's tower fields and checks; `fired` for pulses and lines; tower numbers; `no_aim`; the save keys these rules add (14.7) | S8 | tests/sim/: each rule at its edges; saves round trip |
+| **A3** | art-director | L | 14.9, the map: all 8 grounds with their scenery, Lantern Hill's two new values, `GROUNDS`, `ROAD_CHARS`, `ground_of`, the features in `draw_ground` and `draw_features`, and Palette's region and feature tokens. IconArt draws with `ROAD_EDGE`: say whether icons/ should be drawn again | A2 | tests/theme/: contrast on all 8 grounds and the feature pairs; one picture of all 8 grounds and the four features at true size |
+| **S10** | sim-engineer | L | 14.4 and 14.5 for creatures: mist and hiding, dazzle, nap, grow, yawn and doze, blink, wake, dig and regrow; Catalog's creature fields and the summoned waker check; the tick order; the new events; the enemy numbers; the save keys these rules add (14.7). The DM may split it after nap and grow | S9 | tests/sim/: each rule at its edges, the tick order, the events, statuses after load; saves round trip |
+| **S11** | sim-engineer | M | The rest of 14.7 and 14.8: `MAX_WAKERS`, growth in the wave ceiling, hostile saves for every new key; `Progress.tier()`, `DailyRecord.tier`, GameData's checks of the tiers' levels; tests/sim/test_road_chars.gd; the crowded perf case (14.12) | S10, A3, R6 | the tests/sim/ and tests/save/ rows of 14.13 |
+| **V3** | render-engineer | L | 14.10, the map: `setup(battle, region)` and the grounds, the feature layer and the draw order at bridges, walkers in tunnels and on twin steps, jumps, route lines split at twin steps and over and under decks | S8, A3 | tests/render/ for these; screenshots of fixture maps with each feature at both Fold5 sizes |
+| **V4** | render-engineer | L | 14.10, the cast: the new towers, creatures and bosses, the three new shots, a mark for every status, the nap pose, the dig mound, low flyers, growth, and the atlas budget | V3, S10, A2 | the other tests/render/ rows of 14.13; screenshots mid-wave at both Fold5 sizes |
+| **U4** | ui-engineer | M | 14.11, part 1: the region through BattleScreen, the build panel with up to 10 towers, and tower panels for pulses, lines, lures, frights and dozing | S9, V3 | tests/ui/: a 10 tower build panel at both Fold5 sizes with every button at least `MIN_TOUCH`; screenshots |
+| **U5** | ui-engineer | M | 14.11, part 2: creature panels with the statuses; InfoScreen with the new towers, creatures and bosses and the four map features; tiers in run and daily starts, the Daily button's regions line, and `record_finish` with the tier | U4, S10, S11 | the other tests/ui/ rows of 14.13; screenshots |
+| **AU1** | audio-engineer | S | 14.11: `fired` sounds for the three new attacking towers and their paths, and a sound or a deliberate silence for each new event | S10 | tests/audio/ |
+| **B6** | balance-analyst | M | The bots for the expansion: distances by node, the plain mixed recipe of RULES 12.6 for regions 5 to 8, lone searches for the Bramble Cottage and the Snow Fort, the Scarecrow counted as support, the Moth Lantern left out where walkers cost 6 lives or more, road seen counted outside tunnels, run and daily reports by tier, and the most crowded wave written as a saved game (9.4) | S10 | the bots play fixture levels with each feature, tower and creature; a trial report |
+
+The region loop, for each region r from 5 to 8 (its tier is r - 4):
+
+| Step | Agent | Size | Builds | Depends on | Done when |
+|---|---|---|---|---|---|
+| **E{r}.1** | game-designer first, then roguelite-engineer and level-designer side by side | S, then S and L | The game designer puts region r's tower, creatures and boss into data/stats/ from RULES.md (in E5.1 also rules.json `region_stars` with 8 values). Then the roguelite engineer adds tier r - 4 to run.json, its creatures to run.json `bands` (RULES 14.3), and its tower card and base perk to cards.json; and the level designer builds levels r_l1 to r_l6 with their Twists, adds the region to campaign.json, and adds 2 or 3 middle segments with its feature and the packs with its creatures, 2 band 6 packs for its boss among them. The DM integrates the three as one step: until all three are in, the real data fails its checks (a new tower needs its card, a new boss its packs, a tier its level) | S11, A2; E{r-1}.1 | GameData loads with no problems; tests/levels/ for region r and for every stack and choice of packs at every tier; tests/run/, the golden test included |
+| **E{r}.2** | balance-analyst | M | The pass: every level and Twist built so far (RULES 12.6), runs and the daily at tier 0 and at tier r - 4, and the most crowded new wave as a saved game | E{r}.1, B6, E{r-1}.3 | the report |
+| **E{r}.3** | game-designer | M | Tuning from E{r}.2 | E{r}.2 | RULES.md and data/stats/ in one step, with a list of level changes |
+| **E{r}.4** | level-designer | S | The level changes | E{r}.3 | tests/levels/ |
+
+Last:
+
+| Step | Agent | Size | Builds | Depends on | Done when |
+|---|---|---|---|---|---|
+| **B7** | balance-analyst | M | The final reports: all 48 levels and every Twist (RULES 12.6), runs at tiers 0 and 4 on seeds 1 to 200 (RULES 14.8), and the daily at all five tiers (RULES 15) | E8.4 | every bar met, or the misses listed for the game designer |
+| **V5** | render-engineer | S | The Fold5 at the most crowded wave B7 finds, at 3x on both screens, with a fold mid-wave (14.12) | V4, B7 | the numbers within 9.2 |
+| **QA5** | qa-reviewer | M | The expansion on the Fold5: every feature, tower, creature and boss; a run and a daily at tier 4; killing the app mid-wave beside each feature, then resuming; an old save from the build before the expansion; and the watch items of EXPANSION_LOOK.md 6 (a gate beside a bridge, stump symbols at true size, the busiest tower cards on the cover screen, Burrowbelly's claws, the fen's faint boardwalk) | V4, U5, AU1, E8.4 | a QA report in docs/reviews/ |
+| **SEC3** | security-reviewer | M | The new save keys, ceilings and tiers against tampered files (14.7, 14.8) | S11, R6 | a security report in docs/reviews/ |
+
+The expansion is done when all tests pass; the bots meet RULES 12.6 for all 48 levels and their Twists, RULES 14.8 at tiers 0 and 4, and RULES 15 at all five tiers; the tier 0 golden test passes; the Fold5 holds 60 fps at the most crowded new wave on both screens; S8's old save loads; killing the app mid-wave beside every feature resumes at that moment; and every Critical and High review finding is fixed.
+
+## 14. Change block A12: the expansion, regions 5 to 8
+
+Bart approved docs/design/EXPANSION.md and docs/art/EXPANSION_LOOK.md on 2026-10-27, with the Snoozer renamed Yawner, the daily on content tiers, and grounds of their own for regions 2 to 4 (CLAUDE.md). RULES.md now holds every rule and number of the expansion, and it wins on every rule, as everywhere in this contract. This block holds every contract change the expansion needs. Where it differs from sections 1 to 13 it wins, and those sections point here with "A12". The build plan is at the end of section 13.
+
+### 14.1 Ids (2.2)
+
+From docs/art/NAMES.md (Bart, 2026-10-27):
+
+| Kind | Ids |
+|---|---|
+| Towers | `bramble_cottage`, `scarecrow`, `snow_fort`, `moth_lantern` |
+| Tier 3 paths, spec 0 then spec 1 | `bramble_cottage`: `wild_bramble`, `holly_crown`. `scarecrow`: `tall_scarecrow`, `crow_keeper`. `snow_fort`: `big_snowball`, `flurry`. `moth_lantern`: `beacon_lantern`, `lantern_garland` |
+| Creatures | `mossbud`, `mistwisp`, `gleamer`, `sleepyhead`, `snowroller`, `yawner`, `blinker`, `hootling` |
+| Bosses | `burrowbelly`, `old_hayrick`, `snowsnore`, `glimmertoad` |
+| Regions | `hollow_lanes`, `russet_orchards`, `frostpine_ridge`, `starglen` |
+| Levels | `r5_l1` to `r8_l6` |
+| Cards | `tower_bramble_cottage`, `tower_scarecrow`, `tower_snow_fort`, `tower_moth_lantern`, and the perks `thorn_tips`, `big_hat`, `packed_snow`, `bright_wick` |
+
+Map features have no ids. They are grid characters (14.2). Players read them as tunnel, bridge, ice slide and hollow stump, which may be fixed UI text, since they are none of the kinds that 2.1 keeps in data.
+
+### 14.2 The map: grid characters and LevelData (2.3, 3.1)
+
+Eight new grid characters. Each is a road tile: `kind_at()` gives `Kind.ROAD` for it, so `is_road()` holds and every road rule of 2.3 covers it (one tile wide, every entrance reaching the base). The `Kind` enum does not change.
+
+| Char | Feature | For the sim |
+|---|---|---|
+| `T` | tunnel | A walker whose center is in it is out of reach (14.5) |
+| `X` | bridge | Two nodes, a north-south road and an east-west road that cross without joining (14.3) |
+| `^`, `v`, `<`, `>` | ice slide pointing north, south, west, east | One way out, the arrow's (14.3) |
+| `P`, `Q` | hollow stump | The two stumps of a letter are twins, joined by a step (14.3) |
+
+```gdscript
+# LevelData additions (sim-engineer)
+const GRID_CHARS: String = ".#Go1234BTX^v<>PQ"
+const ROAD_CHARS: String = "#G1234BTX^v<>PQ"           # the characters kind_at() gives ROAD, SOCKET, ENTRANCE or BASE for
+const MAX_TOWER_KINDS: int = 10                        # `towers` holds 1 to 10 (2.4)
+enum Feature { NONE, TUNNEL, BRIDGE, SLIDE, STUMP }
+func feature_at(cell: Vector2i) -> Feature            # NONE outside the map and on every character of 2.3
+func slide_dir(cell: Vector2i) -> Vector2i            # a slide's way out: ^ (0, -1), v (0, 1), < (-1, 0), > (1, 0); (0, 0) on any other cell
+```
+
+Load checks, only what the sim needs (`LevelData.check`, so every saved level and assembled run map too):
+
+- The new characters are accepted.
+- `P` and `Q` each appear exactly twice or not at all, and the two of a letter are not neighbors (north, south, east or west). So a step between neighbors is always a walk, and a step between cells that are not neighbors is always a twin step.
+- `towers` holds 1 to 10 tower ids.
+
+Every other map rule of RULES 3.5 to 3.9 and 14.2 is a level design rule, checked by tests/levels/ on every level and every run stack (14.13), like the 13 row rule (2.4). The sim works on any map that passes the load checks: a feature placed badly gives a dead end or an odd route, never a crash, because a walker only steps to a node with a smaller distance.
+
+One list of road characters: `LevelData.ROAD_CHARS`, `MapArt.ROAD_CHARS` and `RunSegments.ROAD_CHARS` hold the same characters. tests/sim/test_road_chars.gd checks that, and that `kind_at()` gives a road kind exactly for them.
+
+### 14.3 Routing on the node graph (section 4, RULES 7.3)
+
+Nodes:
+
+- Every road cell is a node, with its old distance index as its id: `row * 7 + column`. On a bridge this node is the north-south road.
+- Each bridge also has an east-west node: the k-th bridge in cell order (row, then column, k from 0) has the id `rows * 7 + k`.
+
+Steps, each one step long:
+
+- A neighbor step from a road cell c to its road neighbor d in direction s (south, west, east or north). It leaves c's node on the axis of s (on a bridge: the north-south node for south and north, the east-west node for west and east) and arrives at d's node on that axis. There is no such step when c is a slide and s is not its arrow, or when d is a slide whose arrow points at c.
+- A twin step from a stump to its twin, both ways.
+
+Distances: one breadth first search from the base over the steps taken backwards, skipping closed nodes. A closed socket closes its one node (a socket is never a feature). The base has distance 0, and a node with no route -1. A node with a distance d above 0 always has a step to a node with distance d - 1, so a walker always moves on.
+
+Next node, at a center: the first step, in the order south, west, east, north, then the twin step, that leads to a node whose distance is one less. A walker turns back only along a step that exists: never up a slide, never off its bridge's axis (RULES 7.8).
+
+```gdscript
+class_name RoadMap extends RefCounted                  # src/sim/road_map.gd (replaces the 3.1 listing)
+func _init(level: LevelData) -> void
+func node_count() -> int                               # rows * 7, plus the bridges
+func node_of(cell: Vector2i, across: bool = false) -> int   # a road cell's node; on a bridge, across picks the east-west node; -1 off the road
+func node_cell(node: int) -> Vector2i                  # the cell of a node
+func arrival(from: Vector2i, to: Vector2i) -> int      # the node a step from cell `from` to cell `to` arrives at; from == to gives to's
+                                                       # node; -1 when it is not a step
+func is_step(from: Vector2i, to: Vector2i) -> bool     # a neighbor step or a twin step exists from `from` to `to`
+func twin_of(cell: Vector2i) -> Vector2i               # a stump's twin; (-1, -1) for any other cell
+func under_bridge(from: Vector2i, to: Vector2i) -> bool   # a step that runs north or south with a bridge at either end: it passes
+                                                       # under the deck (render draw order, 14.10)
+func distances(closed: Array[Vector2i]) -> PackedInt32Array   # steps to the base per node, node_count() long; -1 when cut off or not road
+func next_node(node: int, dist: PackedInt32Array) -> int      # one step closer, ties as above; the node itself when there is none
+func route(from: Vector2i, dist: PackedInt32Array) -> Array[Vector2i]   # unchanged signature
+func seals(closed: Array[Vector2i]) -> bool            # unchanged
+```
+
+- `next_step()` is gone. `next_node()` takes its place.
+- `route()` starts from a cell that is not a bridge (an entrance in practice) and lists the cell of every node it passes, the base included. A bridge cell appears once for each time the route crosses it, over or under. Two cells in a row are neighbors or twins.
+- On a map with no feature, `distances()` returns exactly what it did before. On any map, read a cell's distance at `node_of(cell)`.
+
+Walkers on the graph (internal to src/sim/ unless named):
+
+- `from_cell`, `to_cell` and `progress` stay. A walker's step is a graph step, or `from_cell == to_cell` at an entrance center with progress UNIT, as at spawn today.
+- Battle keeps `to_node`, the node a walker is heading to: `map.arrival(from_cell, to_cell)`, worked out whenever the step changes and on load, never saved. Movement (`next_node` at each center), breaking (the gate on the node after `to_node` on the breaker route) and targeting (4.7) use it.
+- A twin step takes one step's time at the walker's speed, `progress` 0 to UNIT as for any step. The walker stays at `from_cell`'s center until progress reaches UNIT, then it is at `to_cell`'s center. It is out of reach for the whole step (14.5). A release that begins on a twin step copies the step, so its walkers take it too (RULES 3.9).
+- `EnemyState.prev_pos` is the position after the last tick, except that a creature that jumped in this tick (a twin step done, a blink or a hop) holds the point where it last landed. So drawing between `prev_pos` and `pos` (3.2) never crosses a jump.
+- `_load_step` (5.6) accepts exactly: `is_step(from, to)` with progress 0 to UNIT, or `from == to` with progress UNIT on a road cell that is not a bridge (old saves, and releases at an entrance). In both cases neither cell is closed, and `to_node` has a distance of 0 or more on the distances the creature walks.
+
+Unchanged: gates close sockets; the seal check and `&"would_seal"`; breakers walk the distances with no gates, now on the graph, so they follow slides and take twin steps; flyers; the route entries of 4.8; `Battle.routes()` and `Battle.seals()`.
+
+### 14.4 Stats data (2.6; the game designer writes the data, the sim engineer the checks)
+
+towers.json:
+
+- `kind` adds `fright`, for the Scarecrow: a ring tower like the Bell. No reload, no targeting, no damage, never boosted by a Bakery, never dozing.
+- New stat block fields:
+
+| Field | Kinds | Limits | Meaning | RULES |
+|---|---|---|---|---|
+| hits | fright, required | `ground`, `air` or `both` | What it frightens | 5.13 |
+| fright_pct, fright_ms | fright, both required | 1 to 1,000; 50 to 60,000 | The fright it gives every tick, with this much time left | 5.13 |
+| pulse | attack, optional | true or false | Hits every creature it can hit in reach, with no aim (Bramble Cottage) | 5.12 |
+| line | attack, optional | 1 to 500 | Line width in hundredths of a tile (Snow Fort) | 5.14 |
+| lure_ms | attack, optional | 50 to 60,000 | A flyer it hits is low for this long (Moth Lantern) | 5.15 |
+
+- Checks: a stat block holds at most one of `pulse`, `line` and `lure_ms`, none of them together with a `splash` above 0, and `targets` above 1 only without `pulse` and `line`. `lure_ms` needs `hits` `air`. `pulse`, `line` and `lure_ms` are on every stat block of a tower or on none, so a tower's way of attacking never changes with its tier.
+- `TowerStats` gains a field for each, and `numbers()` returns them too, 0 or false when absent. `TowerType.kind` may be `&"fright"`.
+
+enemies.json, new optional fields:
+
+| Field | Limits | Meaning | RULES |
+|---|---|---|---|
+| regrow, regrow_ms | 1 to 10,000; 50 to 600,000. Both or neither. | Every `regrow_ms`, the first time `regrow_ms` after it appears, it gains `regrow` (at strength 100), up to its max health | 6.2 |
+| mist | true or false | Hides the creatures on its tile and the four next to it | 6.2 |
+| dazzle | true or false | Towers that can aim at it aim at it first | 6.2 |
+| nap_ms | 50 to 60,000 | Naps this long instead of its first defeat | 6.2 |
+| grow_pct, grow_cap_pct | 1 to 100; 101 to 1,000. Both or neither. Walkers only. | Grows by `grow_pct` of its starting max health at each tile center, up to `grow_cap_pct` of it | 6.2 |
+| yawn_ms, yawn_reach, doze_ms | 50 to 600,000; 1 to 1,000; 50 to 60,000. All three or none. | Every `yawn_ms`, the first time `yawn_ms` after it appears, attacking towers within `yawn_reach` doze for `doze_ms` | 6.2 |
+| blink_ms, blink_tiles | 50 to 600,000; 1 to 10. Both or neither. Walkers only. | Every `blink_ms`, the first time `blink_ms` after it appears, it moves `blink_tiles` tiles along its route at once | 6.2 |
+| wake_reach | 1 to 1,000 | It and every creature within this reach are awake | 6.2 |
+| dig_first_ms, dig_every_ms, dig_ms | 50 to 600,000; 50 to 600,000; 50 to 60,000 and below `dig_every_ms`. All three or none. Walkers only. | Digs under `dig_first_ms` after it appears, then every `dig_every_ms`, for `dig_ms` each time | 6.3 |
+
+- Release checks add: a summoned creature has no `wake_reach`, for the same reason it has no `heal` (2.6): summons are not counted in the save bounds, and `MAX_WAKERS` (14.7) bounds the wakers.
+- `EnemyType` gains a field for each key.
+- The bosses in these fields: Burrowbelly digs with `dig_first_ms` 6,000, `dig_every_ms` 8,000 and `dig_ms` 2,000, and its Mistwisps are its `summon` (2 every 8,000 ms, 300 ms apart), so they come as it comes up. Glimmertoad's hop is a blink of 3 tiles every 6,000 ms, no slow reaches it because its `wake_reach` of 200 wakes itself, and its Flitters are its `release`. Old Hayrick has `dazzle` and `nap_ms` 3,000. Snowsnore has `grow_pct` 2, `grow_cap_pct` 150, and a yawn of 6,000 ms, reach 200 and doze 3,000 ms.
+
+rules.json: `region_stars` becomes `[0, 6, 12, 18, 24, 30, 36, 42]` (RULES 16), inside its limit of 8 values.
+
+### 14.5 The sim: statuses, rules and tick order (3.1; sim-engineer)
+
+New state, read only outside src/sim/:
+
+| Status | Field | Saved | Worked out |
+|---|---|---|---|
+| Out of reach | `EnemyState.out_of_reach: bool` | no | Each time the sim buckets the creatures (before wake and the rings when they have work, and at the start of the towers step), and on load |
+| Hidden | `EnemyState.hidden: bool` | no | At the start of the towers step, and on load |
+| Awake | `EnemyState.awake: bool` | no | Last in the timers step, and on load |
+| Napping | `EnemyState.nap_ticks: int`, above 0 while napping; `napped: bool`, its one nap is used | yes | Defeats and timers steps |
+| Frightened | `EnemyState.fright_pct: int` and `fright_ticks: int` | yes | Rings and timers steps |
+| Low | `EnemyState.low_ticks: int` | yes | Towers and timers steps |
+| Dug under | `EnemyState.dig_ticks: int`, above 0 while under | yes | Timers step |
+| Dozing | `TowerState.doze_ticks: int` | yes | Timers step |
+
+Also on EnemyState: `start_health`, the max health it had when it appeared (after strength and its wave's effects), worked out at spawn and on load and never saved; and, internal and saved, `regrow_at`, `yawn_at`, `blink_at` and `dig_at`, the tick of its next regrow, yawn, blink and dig. At spawn each is the spawn tick plus its time over 50 ms (`dig_first_ms` for `dig_at`). Every other new field starts at 0 or false.
+
+Who can be aimed at and hit (RULES 8.2 to 8.4, 8.8):
+
+- A creature can be hit when it is not out of reach and not napping. It can be aimed at when it can be hit and is not hidden.
+- A tower can hit a walker when it hits ground, a flyer when it hits air, and a low flyer when it hits either. For every other rule a low flyer is still a flyer.
+- Splash, pulses, lines, Bell slows and Scarecrow frights reach every creature they can hit, hidden or not. Aiming reaches only creatures that can be aimed at. So splash and Bells change too: they skip out of reach and napping creatures, and reach low flyers when they hit ground.
+
+The rules (RULES 5.12 to 5.15, 6.2, 6.3, 8.8):
+
+- **Out of reach.** A walker whose center is in a tunnel tile (`feature_at(Sim.cell_of(pos))` is TUNNEL), a walker on a twin step with progress below UNIT, or a creature whose `dig_ticks` is above 0. Never a flyer.
+- **Hidden.** At the start of the towers step, the tile of every creature with `mist`, and its four neighbors inside the map, are misty. A creature without `mist` whose center is on a misty tile is hidden, a flyer too. With no creature with `mist` on the map, nothing is misty.
+- **Awake.** Last in the timers step, every creature whose center is within `wake_reach` of the center of a creature with `wake_reach` is awake, that creature included, and out of reach and napping ones too. An awake creature's slow ends, and `_slow()` gives it none until the next timers step, whatever the source. Frights and lures still land.
+- **Fright.** In the rings step every creature that a `fright` tower can hit, within its reach, gets `fright_pct` with `fright_ms / 50` ticks left, in one slot as for slows: a higher percent replaces, an equal one keeps the longer time. A frightened creature takes `Sim.pct_half_up(taken, 100 + fright_pct)`, where `taken` is the damage after armor (RULES 8.3). A bubble still blocks the whole hit.
+- **Pulse.** An attacking tower with `pulse` reloads as any attacking tower does. When its timer is 0 or less, every creature it can hit within its reach takes the hit, in id order, and its reload starts. With none there, its timer waits at 0. It has no aim: `set_aim` refuses it with `&"no_aim"`.
+- **Line.** An attacking tower with `line` picks one target as any attacking tower does. Then every creature it can hit whose center is within `line / 2` hundredths of a tile of this segment is hit, in id order, the target always among them. The integer method, in sub-units:
+  1. A is the tower's center, T the target's position, and `D = T - A`. If D is (0, 0), only the target is hit.
+  2. `n = Sim.isqrt(D.x * D.x + D.y * D.y)`, and `L = reach * 200`, with the tower's reach after card effects.
+  3. `B = A + D * L / n` on each axis, truncated toward zero. If B lies outside the map, the rectangle from (0, 0) to (7 * UNIT, rows * UNIT), pull it back to the edge: on each axis where B is outside, the fraction p / q is (the edge it crossed - A) / (B - A) on that axis, both made positive; take the smallest fraction (compare `p1 * q2` with `p2 * q1`), and `B = A + (B - A) * p / q` on each axis, truncated.
+  4. `r = line * 100` and `E = B - A`. For a creature at P: `V = P - A` and `t = V.x * E.x + V.y * E.y`. It is hit when `t <= 0` and `V.x * V.x + V.y * V.y <= r * r`; or when t is at least `E.x * E.x + E.y * E.y` and P's squared distance to B is at most `r * r`; or otherwise when `absi(V.x * D.y - V.y * D.x) <= r * n`.
+  5. Candidates: the walkers bucketed in the cells that the box around A and B, widened by r, covers inside the map, and the low flyers (every flyer, if it hits air).
+
+  Every product stays below 10^14: positions are below 3 * 10^5, L below 2.1 * 10^8 (reach is at most `MAX_TOWER_STAT`), and r at most 5 * 10^4. So each line shot takes one `Sim.isqrt`, the only root besides one per flyer path.
+- **Lure.** An attacking tower with `lure_ms` aims at flyers that are not low first, in its mode's order, and at low ones only with targets to spare. A hit that no bubble blocks also sets `low_ticks = maxi(low_ticks, lure_ms / 50)`. It counts at once: towers later in the same towers step treat that flyer as low.
+- **Dazzle.** When creatures with `dazzle` are among those a tower can aim at in its range, its first target is the best of them by its mode, and any further targets go by its mode as usual. For a Moth Lantern, dazzle decides first, then the rule of not-low first, then its mode.
+- **Nap.** In the defeats step, a creature with `nap_ms` that is not `napped` and is at 0 health or less is not defeated. Its health becomes `Sim.pct_half_up(max_health, 50)`, `napped` becomes true, `nap_ticks` becomes `nap_ms / 50`, its slow and fright end, and `napped` is sent. No bounty, no release. While `nap_ticks` is above 0 it does not move, cannot be hit, no heal reaches it, and it does not regrow or blink. In the timers step `nap_ticks` runs down, and at 0 it wakes (`woke`) and walks on. The next time it falls to 0 or less it is defeated as usual.
+- **Grow.** Each time a walker with `grow_pct` reaches a cell center while walking (the end of a twin step counts, its spawn at its entrance does not), and its `max_health` is below its cap, `start_health * grow_cap_pct / 100` truncated, both `max_health` and `health` rise by `mini(Sim.pct_half_up(start_health, grow_pct), cap - max_health)`.
+- **Yawn and doze.** A yawn makes every attacking tower whose center is within `yawn_reach` of the yawner's center doze: `doze_ticks = maxi(doze_ticks, doze_ms / 50)`. A dozing tower skips the towers step: its reload timer does not run down, and it does not fire.
+- **Blink.** In the movement step, when `blink_at <= tick`, `blink_at` moves on by `blink_ms / 50`. Unless the creature is napping, it first walks `blink_tiles * UNIT` along its route with no slow (deciding at each center, a twin step counting as one tile, growing at centers, getting through at the base), sets `prev_pos` where it landed, sends `blinked`, and then walks its usual move. Glimmertoad's hop is a blink.
+- **Dig.** In the timers step `dig_ticks` runs down, and at 0 the creature comes up (`surfaced`). Then, when `dig_at <= tick`, `dig_ticks` becomes `dig_ms / 50`, `dig_at` moves on by `dig_every_ms / 50`, and `burrowed` is sent.
+- **Regrow.** In the timers step, when `regrow_at <= tick`, `regrow_at` moves on by `regrow_ms / 50`, and unless the creature is napping it gains `regrow` at its wave's strength (rounded half up, at least 1, as a heal), up to its max health.
+- A timer that moves on does so whether its effect happened or not, so a nap never bunches them.
+
+Tick order (RULES 8.1; this grouping gives exactly its results, because every rule in 2b changes only its own creature):
+
+1. Spawns: as today.
+2. Timers. (a) Each creature in id order, as today: bubble, slow, heal (no heal reaches a napping creature), break timer. (b) Each creature in id order: regrow, nap, dig, then the fright and low timers. (c) Each tower in spot order: `doze_ticks` runs down. (d) Each creature in id order: a yawn that is due (`yawned`), then `yawn_at` moves on by `yawn_ms / 50`. (e) Wake.
+3. Rings: towers in spot order. Bells slow, but never an awake creature. Scarecrows frighten.
+4. Movement: each creature in id order. A napping one stays where it is. A due blink comes first, then the usual move. Twin steps and growth happen as it walks.
+5. Towers: hiding first. Then attacking towers in spot order; a dozing one skips its turn. Pulses, lines and lures land at once.
+6. Defeats: a creature that can still nap naps instead. Then bounties, splits and boss health events, as today.
+7. Wave checks: as today. A napping or out of reach creature keeps its wave running.
+
+Constant: `Battle.MAX_WAKERS` = 40 (14.7).
+
+### 14.6 Events and queries (3.1)
+
+New events:
+
+| kind | Fields |
+|---|---|
+| `&"napped"`, `&"woke"` | `id: int`, `enemy: StringName`, `pos: Vector2i` |
+| `&"burrowed"`, `&"surfaced"` | `id: int`, `enemy: StringName`, `pos: Vector2i` |
+| `&"blinked"` | `id: int`, `enemy: StringName`, `from: Vector2i` (before the blink), `pos: Vector2i` (where it landed) |
+| `&"yawned"` | `id: int`, `enemy: StringName`, `pos: Vector2i`, `cells: Array[Vector2i]` (the towers that doze, in spot order; may be empty) |
+
+`fired` keeps its fields of 3.1. A pulse lists every creature it hit in `targets` and `at`, in id order. A line does the same and adds `to: Vector2i`, the end of its segment (B above). A Moth Lantern lists its targets as any shot does. One `fired` per pulse, line or shot.
+
+Queries:
+
+- `tower_numbers(cell)` adds `doze_ms`, the time left dozing. Every `numbers()` dictionary (build options, upgrade options, tower numbers) adds `pulse`, `line`, `lure_ms`, `fright_pct` and `fright_ms`.
+- `enemy_numbers(id)` adds `out_of_reach`, `hidden` and `awake` (bools), `nap_ms` (the time left napping, 0 when awake), `fright_pct`, `fright_ms` (time left) and `low_ms` (time left). `max_health` is a grower's grown max health, and `health` a napping creature's wake value (RULES 9.4).
+
+### 14.7 Saves (5.5, 5.6)
+
+Saves made before the expansion keep loading (EXPANSION.md 11.2):
+
+- Every `format` stays 1: `Battle.FORMAT`, `RunSession.FORMAT` and every file's.
+- Keys for one kind of creature are required on that kind and refused on any other (exact keys, as today): `regrow_at` with `regrow`, `yawn_at` with a yawn, `blink_at` with a blink, `dig_at` and `dig_ticks` with digging, `napped` and `nap_ticks` with `nap_ms`. No save from before the expansion holds these kinds.
+- Keys that any creature or tower may hold are optional on load, 0 when missing, and always written: `fright_pct` and `fright_ticks` on every creature, `low_ticks` on flyers (refused on walkers), and `doze_ticks` on every tower.
+- Never saved, worked out on load: `to_node`, `start_health`, `out_of_reach`, `hidden`, `awake` and the misty tiles.
+
+`Battle.from_data` adds these checks, all or nothing:
+
+| Field | Rule |
+|---|---|
+| level | `LevelData.check` with 14.2 |
+| walkers and releases | `_load_step` of 14.3 |
+| regrow_at, yawn_at, blink_at | `tick` to `tick` plus the creature's time for it over 50 |
+| dig_at, dig_ticks | `tick` to `tick` plus the larger of `dig_first_ms` and `dig_every_ms` over 50; 0 to `dig_ms / 50` |
+| napped, nap_ticks | a bool; 0 to `nap_ms / 50`, above 0 only when napped |
+| fright_pct, fright_ticks | 0 to 1,000 and 0 to 1,200; both 0 or both above 0 |
+| low_ticks | 0 to 1,200 |
+| towers' doze_ticks | 0 to 1,200; above 0 only on an attacking tower |
+| wave effects | The max health ceiling counts growers at their cap: for every creature type of the catalog, its health at the wave's strength with the wave's `health_pct` effects, times its `grow_cap_pct` over 100 (100 when it does not grow), is at most 1,000,000,000. `_wave_effects_problem` does this, so `Battle.create` and `add_effects` refuse the same, and play never makes a creature that a save cannot hold. |
+| at once | A third tally beside the healers' and the summoners': creatures with `wake_reach`. The `max_waves_running` largest add up to at most `MAX_WAKERS`, 40. Real levels and runs stay far below: at most 6 Hootlings a wave (RULES 12.5). |
+
+What keeps today's mid-wave saves loading: the expansion shortens no time and lowers no count that a saved battle is checked against. That is every current tower's `reload_ms`; every current creature's `heal_ms`, `summon.every_ms`, `break_ms` and number of `speed_up` steps; and rules.json's `bubble_ms`, `max_waves_running` and `max_gates`. A later change that needs one of these lower comes with its own save plan. tests/sim/ loads S8's fixture, saved mid-wave by the build before the expansion, and plays it on (14.13).
+
+RunSession: `to_data()` adds `"tier": int`. `from_data` reads it as optional, 0 when missing, from 0 to `run_data.tiers.size()`, and refuses a pool that holds a card whose tier is above it.
+
+daily.json adds `"tier": int`, the tier of `day`'s daily. Missing or bad means 0, and a record with no `day` has tier 0.
+
+progress.json and the saved game file: no change. The new level and seen ids fit the 512 entry caps.
+
+### 14.8 Runs and the daily: content tiers (2.10, 2.11, 3.4; roguelite-engineer)
+
+run.json gains the key `tiers`, required like every run.json key: 0 to 4 entries, tier 1 first.
+
+```json
+"tiers": [
+  {"level": "r5_l6", "towers": ["bramble_cottage"], "creatures": ["mossbud", "mistwisp"], "bosses": ["burrowbelly"], "grid": "T"},
+  {"level": "r6_l6", "towers": ["scarecrow"], "creatures": ["gleamer", "sleepyhead"], "bosses": ["old_hayrick"], "grid": "X"},
+  {"level": "r7_l6", "towers": ["snow_fort"], "creatures": ["snowroller", "yawner"], "bosses": ["snowsnore"], "grid": "^v<>"},
+  {"level": "r8_l6", "towers": ["moth_lantern"], "creatures": ["blinker", "hootling"], "bosses": ["glimmertoad"], "grid": "PQ"}
+]
+```
+
+- Keys exactly `level` (a level id), `towers` (0 to 10 tower ids, none of run.json `towers`), `creatures` (0 to 64 creature ids, no boss and no `puff`), `bosses` (0 to 8 boss ids) and `grid` (0 to 8 characters of `TX^v<>PQ`, no repeats). Each id and character appears in at most one tier. GameData checks that each tier's `level` is the last level of a campaign region, and that the tiers come in campaign order.
+- Tiers of things, as RULES 14.9 says: what a tier lists has that tier, and anything else tier 0. A card has its tower's tier, 0 without a tower. A pack has the highest tier among its creatures and its boss, counting what they summon, split into or release. A segment has the highest tier among its grid characters. RunData works these out at load and adds `"tier": int` to the card, pack and segment shapes (3.4).
+- `RunData.check` adds: a card's effects never name a creature of a higher tier than the card's own, so no tier leaks in through a risk card; every band holds at least 4 packs of tier 0 (RULES 14.3); and the coverage of 2.9 holds at every tier from 0 to the tier count, over the segments of that tier and below.
+- A tier 0 run is today's run. Things above a run's tier leave every list before any pick, and the picks walk the lists in file order as before (3.4), so new cards, packs and segments may sit anywhere in their files.
+
+```gdscript
+# RunData: each tier parameter defaults to 0, so a caller that passes none gets today's runs
+const MAX_TIERS: int = 4
+var tiers: Array[Dictionary]                           # {"level": StringName, "towers", "creatures", "bosses": Array[StringName], "grid": String}
+func pool(counters: Dictionary, tier: int = 0) -> Array[StringName]     # as before, only cards of that tier or below
+func card_ids(tier: int = 0) -> Array[StringName]      # every card of that tier or below: the daily's pool
+func segments_of(kind: StringName, tier: int = 0) -> Array[Dictionary]
+func segments_under(upper_id: StringName, tier: int = 0) -> Array[Dictionary]
+func packs_of(band: int, boss: StringName = &"", tier: int = 0) -> Array[Dictionary]
+func boss_ids(tier: int = 0) -> Array[StringName]      # the bosses with a band 6 pack of that tier or below
+# MapAssembler
+static func assemble(run_seed: int, data: RunData, catalog: Catalog, tier: int = 0) -> LevelData
+static func plan(run_seed: int, data: RunData, tier: int = 0) -> Dictionary
+# RunSession
+static func start(run_seed: int, day: String, relaxed: bool, pool: Array[StringName], data: RunData, catalog: Catalog, tier: int = 0) -> RunSession
+                                                       # also null when tier is outside 0 to data.tiers.size(), or a pool card is above it
+var tier: int                                          # the run's tier, saved (14.7)
+# Progress (sim-engineer)
+func tier(game: GameData) -> int                       # how many of game.run's tiers have their `level` cleared (RULES 14.9); 0 without run data
+# DailyRecord (sim-engineer)
+var tier: int                                          # the tier of day's daily
+func record_finish(day: String, result: Dictionary, tier: int = 0) -> void
+                                                       # a later day replaces the tier along with the best; the same day keeps its tier
+```
+
+- `RunSegments` takes the new characters (`ROAD_CHARS`, 14.2). Which segments may hold features, and where, are level design rules (14.13).
+- `RunCards.has_stat`: `splash` and `targets` only for an attacking tower without `pulse` or `line`, so no perk adds them where they mean nothing.
+
+The App (3.6):
+
+- A normal run: `tier` is `progress.tier(game)`, the pool `game.run.pool(progress.unlock_counters(), tier)`, then `RunSession.start(..., tier)`.
+- The daily: its tier is the daily record's `tier` when the record's `day` is today, else `progress.tier(game)`, and never above `game.run.tiers.size()`. Its pool is `game.run.card_ids(tier)`. At its end, `record_finish(run.day, result, run.tier)`. So the day's first daily fixes the day's tier, and a tier earned later that day joins tomorrow's daily (RULES 15).
+- The Daily button says "Regions 1 to N" (RULES 15). N is the number of the campaign region that holds the daily's tier's `level`; for tier 0, one less than the region of tier 1's `level`, or the number of regions when run.json has no tiers. Fixed UI text, with the number from the data.
+
+### 14.9 Theme (3.9; art-director)
+
+```gdscript
+# MapArt
+const GROUNDS: Array[StringName]                       # the 8 region ids, in campaign order
+const ROAD_CHARS: String                               # equal to LevelData.ROAD_CHARS (14.2)
+static func ground_of(region: StringName, grid: PackedStringArray) -> StringName
+    # region, when it is one of GROUNDS; otherwise (a run map, region &"") the region of the first feature
+    # character in reading order: T hollow_lanes, X russet_orchards, ^ v < > frostpine_ridge, P Q starglen;
+    # with none, lantern_hill
+static func draw_ground(canvas: CanvasItem, grid: PackedStringArray, cell: float, font: Font = null, ground: StringName = &"lantern_hill") -> void
+    # as before, in that region's ground and scenery. Ice slides draw here, as ice with chevrons, and so do
+    # the road under a bridge and the road through a tunnel
+static func draw_features(canvas: CanvasItem, grid: PackedStringArray, cell: float) -> void
+    # the feature layer only: tunnel mounds with their mouths, bridge decks, and stumps with their symbols
+# Silhouettes: TOWERS, SPECS, CREATURES and BOSSES gain the ids of 14.1. FLYERS does not change.
+const MARKS: Array[StringName] = [&"hidden", &"napping", &"fright", &"awake", &"doze", &"low", &"dug"]
+static func draw_mark(canvas: CanvasItem, mark: StringName, center: Vector2, size: float, frame: int = 0) -> void
+```
+
+- Grounds: all 8 regions as EXPANSION_LOOK.md 3 draws them, regions 2 to 4 included (Bart, 2026-10-27). Lantern Hill keeps the meadow, and so does a run map with no feature. Play never depends on the ground.
+- Marks (RULES 8.8, EXPANSION_LOOK.md 5): `hidden` the small mist curl; `napping` the crescent over a creature lying on its side (the render lays the sprite down); `fright` the shiver lines; `awake` the open eye; `doze` the one big "z" over a tower; `low` the pale ring at a low flyer's shadow; `dug` the moving dirt mound with claw tips, drawn in place of the creature. Stump sparkles are the render's.
+- Palette: the tokens of all 8 grounds and their scenery, the feature tokens, and the fills of the new towers and creatures (EXPANSION_LOOK.md 3). Lantern Hill changes two values: `ROAD_EDGE` becomes `#856143` and `MEADOW_LIGHT` becomes `#507458`, so its road on light grass passes 3:1. `text_pairs()` and `graphic_pairs()` gain every new pair, so tests/theme/ checks every region.
+- `route_points()` does not change: it takes only cells that are neighbors. The render splits a route at its twin steps (14.10).
+- src/theme/ may split MapArt into more files. Only the members above are public.
+
+### 14.10 Render (3.7; render-engineer)
+
+```gdscript
+func setup(battle: Battle, region: StringName = &"lantern_hill") -> void   # MapView. region: the campaign region, or &"" for a run;
+                                                       # the ground is MapArt.ground_of(region, level.grid)
+```
+
+- Layers, bottom to top: the ground; route lines; walkers under a bridge deck, that is, on a step where `battle.map.under_bridge(from_cell, to_cell)` is true, while inside the bridge cell; the feature layer (`MapArt.draw_features`, drawn once and kept, like the ground); the parts of route lines that cross a deck east to west, so they run on top of it; gates and marks; towers and the other creatures in row order; then shots and the rest as today.
+- Out of reach: a walker in a tunnel fades out at one mouth and back in at the other. A walker on a twin step (`to_cell == battle.map.twin_of(from_cell)`) is hidden, with a few sparkles at `from_cell`. A creature whose `dig_ticks` is above 0 is drawn as the `dug` mark. `enemy_at()` finds only creatures it draws.
+- Statuses: a napping creature lies on its side with the `napping` mark. Hidden, frightened and awake creatures wear their marks, drawn small so a crowd stays readable. A low flyer is drawn just above its shadow with the `low` ring. A dozing tower wears the `doze` mark.
+- Growth: a creature with `grow_pct` is drawn at 1 + 0.5 * (max_health - start_health) / (cap - start_health) times its size, 1.5 at its cap (cap as in 14.5).
+- Jumps: `prev_pos` already holds the landing point (14.3). `blinked` shows sparkles at `from` and at `pos`.
+- Shots, one drawn shot per `fired` for a pulse or a line, so the cap of 96 holds: the Bramble's ring of thorns out to its reach; the Snow Fort's snowball rolling from the tower's center to `to`, with a hit mark on each target; and the Moth Lantern's beam to each target, one shot per target as the Triple Bow's arrows. `yawned`, `burrowed` and `surfaced` get small effects of the render engineer's choice.
+- Route lines: each `walk` and `break` route is split at its twin steps (two cells in a row that are not neighbors), so the line runs into a stump and starts again at its twin. Under a deck the deck cuts it; across a deck it runs on top.
+- Atlas: every MapAtlas sheet stays within 2048 by 4096 texels at bake scale 2.0. If the largest real sheet would pass 4096 rows, `bake()` lowers the scale in steps of 0.25 until it fits. MapAtlas adds the marks by looping over `Silhouettes.MARKS`.
+
+### 14.11 UI and audio (3.6, 3.8)
+
+ui-engineer:
+
+- `BattleScreen.setup(battle, audio, progress, region)` passes `region` to `MapView.setup`. The App passes the campaign region that holds the level or Twist (from `GameData.campaign`), and `&""` for a run or daily.
+- The build panel offers up to 10 towers, every button at least `MIN_TOUCH`, in both layouts at both Fold5 sizes. Two rows in portrait is the suggested way. The dock rules of 7.4 still hold.
+- Tower panels (RULES 9.3): no targeting row on a Bramble Cottage or a Scarecrow; the ring of a pulse, the width of a line, how long a lured flyer stays low, the fright percent with its range and linger; and dozing with the time left.
+- Creature panels (RULES 9.4): frightened, low, hidden, out of reach, awake and napping, in words, from `enemy_numbers`.
+- LevelSelect shows all 8 regions, as it reads campaign.json. InfoScreen adds the new towers, creatures and bosses from the data, and the four map features, whose names are fixed text (14.1).
+- Tiers in run and daily starts, the Daily button's regions line, and `record_finish` with the tier (14.8).
+
+audio-engineer:
+
+- A `fired` sound for `bramble_cottage`, `snow_fort` and `moth_lantern` and their paths. The Scarecrow never fires.
+- A sound or a deliberate silence for `napped`, `woke`, `burrowed`, `surfaced`, `blinked` and `yawned`.
+
+### 14.12 Performance (section 9)
+
+The sim's tick is the thinnest margin on the Fold5: a 99th percentile near 2 ms at 78 live creatures (docs/render/perf-fold5-2026-10-26.md). The new rules must not widen it:
+
+- Waves of regions 5 to 8 aim for 80 or fewer creatures, and bring at most 6 Hootlings and 6 Mistwisps (RULES 12.5). tests/levels/ checks the Hootlings and Mistwisps. The 200 live budget of 9.1 stays.
+- Bucket reuse: one bucket build serves wake and the rings, and one the towers step, so never more than two a tick, as today.
+- No cost when absent: no misty tiles without a creature with `mist`, no wake pass without a waker, no low flyer loop while no flyer is low, no dazzle ranking unless a dazzler is among a tower's candidates. The hot targeting loop reads one flag per creature, whether it can be aimed at, set when the sim buckets the creatures.
+- A pulse reads the cells in its tower's reach, and a line the cells around its segment, as splash does. `MAX_WAKERS` bounds the wake pass of a tampered save.
+- tests/sim/test_battle_perf.gd gains a crowded case: about 200 live over two waves, with Mistwisps, Hootlings, Yawners, Mossbuds, Gleamers, a lured flock and a digging Burrowbelly, on a fixture map with a tunnel, a bridge, a slide and stumps, against Bramble Cottages, Snow Forts, Scarecrows, Moth Lanterns and today's towers. The bar is the same as the other cases: a mean under 2 ms a tick on the dev PC.
+- The Fold5 decides, as 9.2 says: the most crowded wave of regions 5 to 8 (the balance passes find it) at 3x on both screens, with a fold mid-wave. A sim 99th percentile over 2 ms sends the sim engineer to speed up the sim before more content lands.
+
+### 14.13 Tests (section 10)
+
+| Folder | Owner | Adds |
+|---|---|---|
+| tests/sim/ | sim-engineer | test_road_chars.gd (14.2); the graph: straight across bridges, one way on slides, a placement refused because the only way left runs up a slide, twin steps, the tie order with the twin last, turning back on a bridge after a gate breaks; `_load_step` takes every graph step and refuses the rest (from == to on a bridge, against a slide, cells that are neither neighbors nor twins); every rule of 14.5 at its edges; the tick order; the events; statuses after load; the line method at the reach ceiling; S8's old save loads and plays on the same; hostile saves for every new key; `MAX_WAKERS`; growth in the wave ceiling; snapshot, restore and continue equal to an uninterrupted run with every new tower, creature, boss and feature; the perf case (14.12) |
+| tests/save/ | sim-engineer | daily.json without `tier`; `Progress.tier()`; GameData's tier checks; real levels and runs far below `MAX_WAKERS`, and below the max health ceiling with growers at their cap |
+| tests/levels/ | level-designer | The map rules below on every level and every run stack at every tier; RULES 12 for regions 5 to 8; at most 6 Hootlings and 6 Mistwisps a wave; the pack rules of RULES 14.3, each tier creature shown as if new and no wave showing two creatures as new, for every choice of packs at every tier; 2 band 6 packs for each boss whose tier's level is in campaign.json |
+| tests/run/ | roguelite-engineer | `tiers` and its checks; the tier of cards, packs and segments; each filter; plans at every tier; `RunSession.tier` saved, missing and refused; the tier 0 golden test |
+| tests/theme/ | art-director | Silhouettes for every new id, inside their boxes and distinct; the marks; all 8 grounds and the feature pairs in contrast; `ground_of` |
+| tests/render/ | render-engineer | Fixtures for every new tower, path, creature and boss, with no node leak; the draw order at a bridge (a walker under the deck below it, one on the deck above it); walkers hidden in tunnels and on twin steps; no slide across a jump; route lines split at twin steps; a run map's ground by its feature; the atlas budget |
+| tests/ui/ | ui-engineer | The 10 tower build panel at both Fold5 sizes; tower and creature panels with the new numbers; the region reaching MapView; the tier reaching run and daily starts; the Daily button's regions line |
+| tests/audio/ | audio-engineer | The six new event kinds; the new `fired` sounds |
+
+Map rules for tests/levels/ (RULES 3.5 to 3.9, 14.2):
+
+- Tunnels: runs of 1 to 4 joined tunnel tiles, at most 6 tiles a map; no tunnel tile next to a socket, across segment seams too; tunnels hold at most a quarter of the steps of any entrance's shortest route with no gates.
+- Bridges: four road neighbors, so never on the map edge; at most 3 a map, with a plain road tile between two; each on the shortest route of some gate placement.
+- Slides: straight runs of 2 or more, every arrow along the run; the tile an arrow points to is road; no slide is a dead end with no gates.
+- Stumps: at most 2 pairs; each pair on the shortest route of some gate placement.
+- Each region's levels use its own feature. Levels 5 and 6 of regions 6 to 8 may add one earlier feature, never two.
+- Run segments: features only in middle segments, never in their top or bottom row, and at most one feature a segment.
+
+The tier 0 golden test, tests/run/test_tier_zero.gd: before R6 changes any code, record with today's code and data, into tests/run/fixtures/tier0_golden.json, the plan (3.4) and the SHA-256 of `JSON.stringify(level.to_data())` for run seeds 1 to 200 and for the daily seeds of the 30 days from 2026-10-28, plus `pool()` with no unlocks and with every unlock, and `card_ids()`. Every later build gives the same at tier 0. Only a deliberate change to tier 0 runs, recorded by the DM, may record it again.
+
+### 14.14 Owners
+
+No new path. Every new file goes under a path its owner already holds (section 1). The untracked prototypes/expansion/ holds the art director's concept scripts, which EXPANSION_LOOK.md says are not committed. It is the DM's to keep out of git or delete, as prototypes/theme/ was.
