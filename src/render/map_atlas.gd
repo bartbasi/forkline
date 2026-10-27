@@ -36,7 +36,7 @@ const BOOST_TILE: float = 1.1
 const GATE_TILE: float = 1.3
 const HEART_TILE: float = 1.0
 
-enum Kind { TOWER, ENEMY, DROWSY, BUBBLE, BOOST, GATE, HEART }
+enum Kind { TOWER, ENEMY, DROWSY, BUBBLE, BOOST, GATE, HEART, PIECE }
 
 
 ## One picture on the sheet.
@@ -186,6 +186,21 @@ func add_marks() -> void:
 	_add(h)
 
 
+## The pieces the shots and their marks are made of (ShotPieces), each drawn once.
+func add_shot_pieces() -> void:
+	if _index.has(ShotPieces.key(0)):
+		return
+	for piece: int in ShotPieces.Piece.size():
+		var p: Entry = Entry.new()
+		p.key = ShotPieces.key(piece)
+		p.kind = Kind.PIECE
+		p.frame = piece
+		p.tile = ShotPieces.TILES[piece] * CELL
+		p.center = ShotPieces.ANCHORS[piece] * CELL
+		p.anchor = p.center
+		_add(p)
+
+
 ## Every look of a gate on a road that runs across or up and down the screen.
 func add_gates() -> void:
 	if _index.has(gate_key(0, false)):
@@ -255,6 +270,8 @@ func paint(canvas: CanvasItem) -> void:
 				Silhouettes.draw_glyph(canvas, &"heart", at, CELL * texel_scale * 0.92)
 			Kind.GATE:
 				MapArt.draw_gate_at(canvas, at, CELL * texel_scale, e.frame == 1, e.tier as MapArt.Gate)
+			Kind.PIECE:
+				ShotPieces.draw(canvas, e.frame, at, CELL * texel_scale)
 
 
 ## How many times the sheet's pictures were really drawn (not just queued).

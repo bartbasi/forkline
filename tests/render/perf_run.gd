@@ -26,6 +26,10 @@ func _run() -> void:
 	for arg: String in OS.get_cmdline_user_args():
 		if arg.begins_with("--only="):
 			only = arg.trim_prefix("--only=")
+	if only == "storm":
+		await _storm()
+		quit(0)
+		return
 	var screens: Array[Array] = [["cover", Vector2i(904, 2316), Fx.COVER], ["inner", Vector2i(1812, 2176), Fx.INNER]]
 	for s: Array in screens:
 		if only == "cover" and s[0] != "cover":
@@ -38,6 +42,7 @@ func _run() -> void:
 			var from: int = b.level.waves.size() - 3 if id != "r1_l6" else b.level.waves.size() - 4
 			await _measure("%s %s waves %d on, early calls, 3x" % [s[0], id, from + 1], b, s[1], s[2], from, true)
 		await _measure("%s synthetic 200 creature crowd, 3x" % s[0], Fx.stress(), s[1], s[2], 0, true)
+	await _storm()
 	await _build_phase()
 	quit(0)
 
@@ -182,3 +187,65 @@ func _p99_us(a: PackedInt32Array) -> float:
 	var s: PackedInt32Array = a.duplicate()
 	s.sort()
 	return float(s[mini(s.size() - 1, s.size() * 99 / 100)]) / 1000.0
+
+
+## The worst case for the shot overlay: it is kept full of shots of every look, so every frame
+## draws the cap in shots and as many marks as the cap allows. Cover size, one overlay on its own.
+func _storm() -> void:
+	var host: SubViewport = SubViewport.new()
+	host.size = Vector2i(904, 2316)
+	host.size_2d_override = Fx.COVER
+	host.size_2d_override_stretch = true
+	host.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	root.add_child(host)
+	var atlas: MapAtlas = MapAtlas.new()
+	host.add_child(atlas)
+	atlas.add_shot_pieces()
+	atlas.bake(1.0)
+	var shots: MapShots = MapShots.new()
+	shots.atlas = atlas
+	var premult: CanvasItemMaterial = CanvasItemMaterial.new()
+	premult.blend_mode = CanvasItemMaterial.BLEND_MODE_PREMULT_ALPHA
+	shots.material = premult
+	host.add_child(shots)
+	var looks: int = MapShots.Look.size()
+	var clock: float = 0.0
+	var frames: PackedFloat32Array = PackedFloat32Array()
+	var calls: PackedInt32Array = PackedInt32Array()
+	var draws: PackedInt32Array = PackedInt32Array()
+	var peak_shots: int = 0
+	var peak_marks: int = 0
+	await process_frame
+	var last: int = Time.get_ticks_usec()
+	for frame: int in 600:
+		await process_frame
+		var now: int = Time.get_ticks_usec()
+		var dt: float = float(now - last) / 1000000.0
+		last = now
+		clock += 1.0 / 60.0
+		# 24 towers fire about every 0.35 s at 3x, so a salvo of 8 shots every 3 frames.
+		if frame % 3 == 0:
+			for i: int in 8:
+				var at: Vector2 = Vector2(float(100 + (i * 97 + frame * 13) % 700), float(300 + (i * 211 + frame * 7) % 900))
+				shots.launch((frame + i) % looks, at, at + Vector2(220.0, 120.0), i, clock, 96.0)
+		var t0: int = Time.get_ticks_usec()
+		shots.advance(clock)
+		draws.append(Time.get_ticks_usec() - t0)
+		peak_shots = maxi(peak_shots, shots.shots.size())
+		peak_marks = maxi(peak_marks, shots.flashes.size())
+		if frame == 300 and OS.get_environment("STORM_PNG") != "":
+			host.get_texture().get_image().save_png(OS.get_environment("STORM_PNG"))
+		if frame >= 60:
+			frames.append(dt)
+			calls.append(int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)))
+	var total: float = 0.0
+	for f: float in frames:
+		total += f
+	var sorted: PackedFloat32Array = frames.duplicate()
+	sorted.sort()
+	print("== shot storm: a salvo of 8 shots every 3 frames, every look, 60 frames a second pace")
+	print("   peak shots %d, peak marks %d" % [peak_shots, peak_marks])
+	print("   frame: mean %.2f ms, p99 %.2f ms, worst %.2f ms" % [total / float(frames.size()) * 1000.0, sorted[frames.size() * 99 / 100] * 1000.0, sorted[sorted.size() - 1] * 1000.0])
+	print("   draw calls per frame: mean %.1f, max %.0f; advance call mean %.3f ms" % [_mean_us(calls) * 1000.0, _max_us(calls) * 1000.0, _mean_us(draws)])
+	host.queue_free()
+	await process_frame

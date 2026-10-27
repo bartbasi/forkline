@@ -25,6 +25,12 @@ const FINGER_CELLS: float = 0.45
 const REFUSED_MS: int = 1500
 ## The most "+" marks one heal shows, so a big crowd stays calm.
 const HEAL_MARKS: int = 6
+## The recoil of a tower that fires: seconds, squash and lean in radians, by shot look (the order
+## of MapShots.Look). The catapult kicks hardest and slowest, the sling quickest.
+const KICK_SECONDS: float = 0.15
+const KICK_TIME: Array[float] = [0.14, 0.2, 0.32, 0.32, 0.2, 0.26, 0.24, 0.28, 0.3, 0.38]
+const KICK_SQUASH: Array[float] = [0.07, 0.1, 0.14, 0.14, 0.07, 0.1, 0.11, 0.13, 0.15, 0.18]
+const KICK_LEAN: Array[float] = [0.03, 0.05, 0.1, 0.1, 0.04, 0.06, 0.0, 0.0, 0.0, 0.14]
 ## A breaker stands at the center of the cell before its gate, one tile away.
 const BREAK_REACH: int = Sim.UNIT * 13 / 10
 const DIRS: Array[Vector2i] = [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]
@@ -46,6 +52,11 @@ class TowerView:
 	var sprite: Sprite2D
 	var born_t: float = -10.0
 	var kick_t: float = -10.0
+	## The recoil of the last shot: how long it lasts, how far the tower squashes and how far it
+	## leans away from its target (radians, positive leans to the right).
+	var kick_dur: float = KICK_SECONDS
+	var kick_squash: float = 0.07
+	var kick_lean: float = 0.0
 	var gen: int = 0
 	var at_rest: bool = true
 
@@ -153,6 +164,8 @@ func setup(new_battle: Battle) -> void:
 	add_child(_atlas)
 	_shots = MapShots.new()
 	_shots.z_index = Z_SHOTS
+	_shots.atlas = _atlas
+	_shots.material = _premult
 	add_child(_shots)
 	_status = MapStatus.new()
 	_status.z_index = Z_STATUS
@@ -174,6 +187,7 @@ func setup(new_battle: Battle) -> void:
 	_prepared = Vector2i(-1, -1)
 	_prepare_atlas()
 	_atlas.add_marks()
+	_atlas.add_shot_pieces()
 	_atlas.add_gates()
 	_gates.atlas = _atlas
 	_build_turns()
@@ -485,10 +499,11 @@ func _set_tower_look(v: TowerView, t: TowerState) -> void:
 func _animate_tower(v: TowerView) -> void:
 	var age: float = _fx_time - v.born_t
 	var kick: float = _fx_time - v.kick_t
-	if age >= 0.3 and kick >= 0.15:
+	if age >= 0.3 and kick >= v.kick_dur:
 		if not v.at_rest:
 			v.at_rest = true
 			v.sprite.scale = Vector2.ONE / _atlas.texel_scale
+			v.sprite.rotation = 0.0
 		return
 	v.at_rest = false
 	var sx: float = 1.0
@@ -498,10 +513,14 @@ func _animate_tower(v: TowerView) -> void:
 		var back: float = 1.0 + 2.70158 * pow(k - 1.0, 3.0) + 1.70158 * pow(k - 1.0, 2.0)
 		sx = lerpf(0.6, 1.0, back)
 		sy = sx
-	if kick < 0.15:
-		var s: float = sin(PI * kick / 0.15)
-		sy *= 1.0 - 0.07 * s
-		sx *= 1.0 + 0.04 * s
+	var lean: float = 0.0
+	if kick < v.kick_dur:
+		# A quick snap, then a slower settle.
+		var s: float = sin(PI * pow(clampf(kick / v.kick_dur, 0.0, 1.0), 0.6))
+		sy *= 1.0 - v.kick_squash * s
+		sx *= 1.0 + v.kick_squash * 0.6 * s
+		lean = v.kick_lean * s
+	v.sprite.rotation = lean
 	v.sprite.scale = Vector2(sx, sy) / _atlas.texel_scale
 
 
@@ -709,21 +728,31 @@ func _on_fired(e: Dictionary) -> void:
 	var look: int = MapShots.look_for(tower, spec)
 	var v: TowerView = _towers.get(cell)
 	var tier: int = 3
-	if v != null:
-		v.kick_t = _fx_time
-		tier = v.tier
-	var burst_radius: float = 0.0
-	if look == MapShots.Look.ROCKET or look == MapShots.Look.BLOOM:
-		# A burst shows the tower's real splash, card effects included.
-		var state: TowerState = battle.tower_at(cell)
-		var splash: int = state.stats.splash if state != null and state.stats != null else 75
-		burst_radius = float(splash) / 100.0 * CELL
 	var ids: Array = e["targets"]
 	var ats: Array = e["at"]
+	if v != null:
+		v.kick_t = _fx_time
+		v.kick_dur = KICK_TIME[look]
+		v.kick_squash = KICK_SQUASH[look]
+		# The tower leans away from its first target.
+		var away: float = 1.0
+		if not ats.is_empty() and Vector2(ats[0] as Vector2i).x * PX_PER_SUB > _center_px(cell).x:
+			away = -1.0
+		v.kick_lean = KICK_LEAN[look] * away
+		tier = v.tier
+	var burst_radius: float = 0.0
+	var splash_px: float = 0.0
+	if MapShots.lands_on_spot(look):
+		# A burst or a splash shows the tower's real splash, card effects included.
+		var state: TowerState = battle.tower_at(cell)
+		var splash: int = state.stats.splash if state != null and state.stats != null else 75
+		splash_px = float(splash) / 100.0 * CELL
+		if not MapShots.is_lobbed(look):
+			burst_radius = splash_px
 	for i: int in ids.size():
 		var id: int = int(ids[i])
 		var to: Vector2 = Vector2(ats[i] as Vector2i) * PX_PER_SUB
-		var arrives: float = _shots.launch(look, MapShots.muzzle(tower, cell, tier, spec, i), to, id, _fx_time)
+		var arrives: float = _shots.launch(look, MapShots.muzzle(tower, cell, tier, spec, i), to, id, _fx_time, splash_px)
 		if burst_radius > 0.0:
 			_shots.add_burst(to, arrives, burst_radius, look == MapShots.Look.BLOOM)
 		_arrival_ids[id] = maxf(float(_arrival_ids.get(id, 0.0)), arrives)
@@ -933,6 +962,8 @@ func _sync_layers() -> void:
 ## A shot follows its target while the target is still on the map.
 func _track_shots() -> void:
 	for s: MapShots.Shot in _shots.shots:
+		if MapShots.lands_on_spot(s.look):
+			continue
 		var v: CreatureView = _creatures.get(s.target)
 		if v != null:
 			s.to = v.center

@@ -2,34 +2,37 @@
 # Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.
 class_name MapShots
 extends Node2D
-## Drawn projectiles and the short one-shot marks (hit flashes, pop rings, firework bursts,
-## heal pluses, coin glints, speed lines, pulses), in one overlay redrawn every frame while
-## something is flying (docs/ARCHITECTURE.md 9.3). The sim has no shots: a hit lands the
-## tick a tower fires, and these are only the picture. They fly fast so they arrive at about
-## the same time. Every mark has a shape of its own, so none of them is only a color.
-## Internal to src/render/.
+## Drawn projectiles and the short one-shot marks (muzzle puffs, hit flashes, splashes, pop rings,
+## firework bursts, heal pluses, coin glints, speed lines, pulses), in one overlay redrawn every
+## frame while something is flying (docs/ARCHITECTURE.md 9.3). The sim has no shots: a hit lands
+## the tick a tower fires, and these are only the picture. They fly fast so they arrive at about
+## the same time. Every mark has a shape of its own, so none of them is only a color. Each shot
+## has three parts: a mark where it leaves, a body with a short trail in flight, and a mark where
+## it lands. A lobbed shot (the catapult) also shows its true splash area on the ground while it
+## flies. Internal to src/render/.
 
 const CELL: float = 128.0
-const MAX_SHOTS: int = 150
+const MAX_SHOTS: int = 96
 const MAX_FLASHES: int = 90
-const FLASH_SECONDS: float = 0.14
-const RING_SECONDS: float = 0.28
 
 ## The pictures of the shots. The Longbow Loft fires ARROW (its Triple Bow fires three at three
 ## targets) or GIANT_ARROW; the Firework Tower fires ROCKET with a small burst, BLOOM with a
-## wide burst, or one heavy SKYROCKET.
-enum Look { PEBBLE, STONE, PUMPKIN, JAM, ARROW, GIANT_ARROW, ROCKET, BLOOM, SKYROCKET }
+## wide burst, or one heavy SKYROCKET. The Pumpkin Catapult lobs PUMPKIN, JAM (the jam pot) or
+## PRIZE (the huge pumpkin).
+enum Look { PEBBLE, STONE, PUMPKIN, JAM, ARROW, GIANT_ARROW, ROCKET, BLOOM, SKYROCKET, PRIZE }
 ## The short marks, in the order of their lifetimes below.
-enum Fx { HIT, RING, BURST, PLUS, COIN, WHOOSH, PULSE }
+enum Fx { HIT, RING, BURST, PLUS, COIN, WHOOSH, PULSE, MUZZLE, SPLASH }
 ## PULSE colors: a heal ring, a release ring, a gate ring.
 enum Hue { HEAL, RELEASE, GATE }
 
-## Per look: speed in cells a second, the longest flight in seconds, the arc height in cells.
-const SPEED: Array[float] = [22.0, 18.0, 15.0, 15.0, 34.0, 30.0, 20.0, 20.0, 24.0]
-const LONGEST: Array[float] = [0.16, 0.18, 0.24, 0.24, 0.14, 0.16, 0.22, 0.22, 0.2]
-const ARC: Array[float] = [0.08, 0.1, 0.6, 0.6, 0.0, 0.0, 0.1, 0.15, 0.05]
+## Per look: speed in cells a second, the shortest and longest flight in seconds, the arc height
+## in cells.
+const SPEED: Array[float] = [22.0, 18.0, 12.0, 12.0, 34.0, 30.0, 20.0, 20.0, 24.0, 12.0]
+const SHORTEST: Array[float] = [0.05, 0.05, 0.16, 0.16, 0.05, 0.05, 0.05, 0.05, 0.05, 0.16]
+const LONGEST: Array[float] = [0.16, 0.18, 0.24, 0.24, 0.14, 0.16, 0.22, 0.22, 0.2, 0.24]
+const ARC: Array[float] = [0.08, 0.1, 0.9, 0.9, 0.0, 0.0, 0.1, 0.15, 0.05, 1.1]
 ## Per Fx: how long it lasts, in seconds.
-const LIFE: Array[float] = [0.14, 0.28, 0.45, 0.6, 0.55, 0.35, 0.45]
+const LIFE: Array[float] = [0.24, 0.28, 0.5, 0.6, 0.55, 0.35, 0.45, 0.26, 0.75]
 const BURST_COLORS: Array[Color] = [Palette.HONEY, Palette.ROOF_CLAY, Palette.SPARKLE, Palette.SPARKLE_LILAC]
 const HUES: Array[Color] = [Palette.HP_FILL, Palette.SPARKLE_LILAC, Palette.SPARKLE]
 
@@ -42,6 +45,8 @@ class Shot:
 	var t0: float = 0.0
 	var t1: float = 0.0
 	var target: int = -1
+	## A lobbed shot: the splash radius in pixels, drawn on the ground while it flies.
+	var radius: float = 0.0
 
 
 class Flash:
@@ -50,22 +55,29 @@ class Flash:
 	var at: Vector2 = Vector2.ZERO
 	var t0: float = 0.0
 	var life: float = 0.14
-	## HIT: a size multiplier. BURST, PULSE: the radius in pixels. COIN: a size multiplier.
-	## WHOOSH: the creature's size in pixels.
+	## HIT: a size multiplier. BURST, PULSE, SPLASH: the radius in pixels. COIN: a size
+	## multiplier. WHOOSH: the creature's size in pixels.
 	var size: float = 1.0
-	## BURST: 1 for the wide Star Bloom burst. PULSE: a Hue.
+	## BURST: 1 for the wide Star Bloom burst. PULSE: a Hue. HIT, MUZZLE: the Look.
+	## SPLASH: 0 pumpkin, 1 jam, 2 prize pumpkin.
 	var hue: int = 0
 	## WHOOSH: 1.0 when the creature faces right, -1.0 when it faces left.
 	var dir: float = 1.0
+	## HIT, MUZZLE: the direction the shot flew, in radians.
+	var ang: float = 0.0
 
 
+## The sheet the pictures are cut from (set by MapView). Nothing draws without it.
+var atlas: MapAtlas
 var shots: Array[Shot] = []
 var flashes: Array[Flash] = []
 var now: float = 0.0
 ## For tests: how many shots of each look were launched, and how many marks of each Fx.
-var launched: PackedInt32Array = PackedInt32Array([0, 0, 0, 0, 0, 0, 0, 0, 0])
-var marked: PackedInt32Array = PackedInt32Array([0, 0, 0, 0, 0, 0, 0])
+var launched: PackedInt32Array = PackedInt32Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+var marked: PackedInt32Array = PackedInt32Array([0, 0, 0, 0, 0, 0, 0, 0, 0])
 var _drawn_last: bool = false
+var _tex: Texture2D
+var _pieces: Array[MapAtlas.Entry] = []
 
 
 ## Which look a tower's shot has. Bells and Bakeries never fire.
@@ -74,6 +86,8 @@ static func look_for(tower: StringName, spec: int) -> int:
 		&"sling_post":
 			return Look.STONE if spec == 1 else Look.PEBBLE
 		&"pumpkin_catapult":
+			if spec == 0:
+				return Look.PRIZE
 			return Look.JAM if spec == 1 else Look.PUMPKIN
 		&"longbow_loft":
 			return Look.GIANT_ARROW if spec == 0 else Look.ARROW
@@ -82,6 +96,17 @@ static func look_for(tower: StringName, spec: int) -> int:
 				return Look.BLOOM
 			return Look.SKYROCKET if spec == 1 else Look.ROCKET
 	return Look.PEBBLE
+
+
+## True for the catapult's looks: they fly high, show their splash area and land with a splash.
+static func is_lobbed(look: int) -> bool:
+	return look == Look.PUMPKIN or look == Look.JAM or look == Look.PRIZE
+
+
+## True for the looks that end in a burst or a splash at the spot the sim hit. They fly to that
+## spot and do not follow the creature, which walks on.
+static func lands_on_spot(look: int) -> bool:
+	return is_lobbed(look) or look == Look.ROCKET or look == Look.BLOOM
 
 
 ## Where a tower's shot leaves from, in map pixels. A tower stands higher on each tier (one stone
@@ -112,10 +137,11 @@ static func _muzzle_full(tower: StringName, cell: Vector2i, tier: int, spec: int
 	return c + Vector2(0.0, -0.5) * CELL
 
 
-## Starts a shot and returns the time it arrives.
-func launch(look: int, from: Vector2, to: Vector2, target: int, at_time: float) -> float:
+## Starts a shot and returns the time it arrives. `splash` is the splash radius in pixels of a
+## lobbed shot (0 draws no splash area on the ground). A mark is made where it leaves.
+func launch(look: int, from: Vector2, to: Vector2, target: int, at_time: float, splash: float = 0.0) -> float:
 	var length_cells: float = from.distance_to(to) / CELL
-	var flight: float = clampf(length_cells / SPEED[look], 0.05, LONGEST[look])
+	var flight: float = clampf(length_cells / SPEED[look], SHORTEST[look], LONGEST[look])
 	if shots.size() >= MAX_SHOTS:
 		shots.remove_at(0)
 	var s: Shot = Shot.new()
@@ -125,8 +151,10 @@ func launch(look: int, from: Vector2, to: Vector2, target: int, at_time: float) 
 	s.t0 = at_time
 	s.t1 = at_time + flight
 	s.target = target
+	s.radius = splash if is_lobbed(look) else 0.0
 	shots.append(s)
 	launched[look] += 1
+	_add_flash(Fx.MUZZLE, from, at_time, 1.0, look, 1.0, (to - from).angle())
 	_wake()
 	return s.t1
 
@@ -161,19 +189,20 @@ func add_pulse(at: Vector2, at_time: float, radius: float, hue: Hue) -> void:
 	_add_flash(Fx.PULSE, at, at_time, radius, hue, 1.0)
 
 
-## A hit flash. `big` makes it larger (the Giant Bow, the Skyrocket).
-func add_hit(at: Vector2, at_time: float, big: float = 1.0) -> void:
-	_add_flash(Fx.HIT, at, at_time, big, 0, 1.0)
+## A hit mark. `big` makes it larger (the Giant Bow, the Skyrocket). `look` and `angle` (the
+## direction the shot flew) pick its shape.
+func add_hit(at: Vector2, at_time: float, big: float = 1.0, look: int = Look.PEBBLE, angle: float = 0.0) -> void:
+	_add_flash(Fx.HIT, at, at_time, big, look, 1.0, angle)
 
 
-## Moves the clock on, ends the shots that arrived and starts their hit flashes.
+## Moves the clock on, ends the shots that arrived and starts their landing marks.
 func advance(time_now: float) -> void:
 	now = time_now
 	var i: int = 0
 	while i < shots.size():
 		var s: Shot = shots[i]
 		if now >= s.t1:
-			_add_flash(Fx.HIT, s.to, s.t1, 1.8 if (s.look == Look.GIANT_ARROW or s.look == Look.SKYROCKET) else 1.0, 0, 1.0)
+			_land(s)
 			shots.remove_at(i)
 		else:
 			i += 1
@@ -200,7 +229,17 @@ func _wake() -> void:
 	_drawn_last = true
 
 
-func _add_flash(kind: int, at: Vector2, t0: float, size: float, hue: int, dir: float) -> void:
+## The mark a shot makes where it lands: a splash for the catapult, else a hit mark.
+func _land(s: Shot) -> void:
+	if is_lobbed(s.look):
+		var hue: int = 1 if s.look == Look.JAM else (2 if s.look == Look.PRIZE else 0)
+		_add_flash(Fx.SPLASH, s.to, s.t1, s.radius if s.radius > 0.0 else CELL * 0.75, hue, 1.0)
+		return
+	var big: float = 1.8 if (s.look == Look.GIANT_ARROW or s.look == Look.SKYROCKET) else 1.0
+	_add_flash(Fx.HIT, s.to, s.t1, big, s.look, 1.0, (s.to - s.from).angle())
+
+
+func _add_flash(kind: int, at: Vector2, t0: float, size: float, hue: int, dir: float, ang: float = 0.0) -> void:
 	if flashes.size() >= MAX_FLASHES:
 		flashes.remove_at(0)
 	var f: Flash = Flash.new()
@@ -211,6 +250,7 @@ func _add_flash(kind: int, at: Vector2, t0: float, size: float, hue: int, dir: f
 	f.size = size
 	f.hue = hue
 	f.dir = dir
+	f.ang = ang
 	flashes.append(f)
 	marked[kind] += 1
 	_wake()
@@ -222,12 +262,14 @@ func _point(s: Shot, u: float) -> Vector2:
 
 
 func _draw() -> void:
+	if not _prepare():
+		return
 	for s: Shot in shots:
 		var u: float = clampf((now - s.t0) / maxf(s.t1 - s.t0, 0.001), 0.0, 1.0)
 		var p: Vector2 = _point(s, u)
 		var ahead: Vector2 = _point(s, minf(u + 0.05, 1.0))
 		var dir: Vector2 = (ahead - p).normalized() if ahead != p else Vector2.RIGHT
-		_draw_shot(s.look, p, dir, u)
+		_draw_shot(s, p, dir, u)
 	for f: Flash in flashes:
 		if now < f.t0:
 			continue
@@ -236,8 +278,7 @@ func _draw() -> void:
 			Fx.HIT:
 				_draw_hit(f, k)
 			Fx.RING:
-				draw_arc(f.at, CELL * (0.12 + 0.3 * k), 0.0, TAU, 24, Color(Palette.BUBBLE, 1.0 - k), CELL * 0.04, true)
-				draw_arc(f.at, CELL * (0.08 + 0.22 * k), 0.0, TAU, 20, Color(Palette.INK_LINE, 0.6 * (1.0 - k)), CELL * 0.02, true)
+				_ring(f.at, CELL * (0.12 + 0.3 * k), Color(Palette.BUBBLE, 1.0 - k))
 			Fx.BURST:
 				_draw_burst(f, k)
 			Fx.PLUS:
@@ -248,44 +289,257 @@ func _draw() -> void:
 				_draw_whoosh(f, k)
 			Fx.PULSE:
 				_draw_pulse(f, k)
+			Fx.MUZZLE:
+				_draw_muzzle(f, k)
+			Fx.SPLASH:
+				_draw_splash(f, k)
 
 
+# Drawing. Every part is a quad of the MapAtlas sheet (ShotPieces), so a whole frame of shots and
+# marks batches into a very few draw calls.
+
+## Looks up the pieces on the sheet. False while the view has not given this overlay its sheet.
+func _prepare() -> bool:
+	if atlas == null:
+		return false
+	if _pieces.is_empty():
+		for i: int in ShotPieces.Piece.size():
+			var e: MapAtlas.Entry = atlas.entry_for(ShotPieces.key(i))
+			if e == null:
+				_pieces.clear()
+				return false
+			_pieces.append(e)
+		_tex = atlas.get_texture()
+	return true
+
+
+## One piece with its anchor at `at`, `sx` and `sy` times its natural size, tinted by `col`, turned
+## by `rot` radians about the anchor.
+func _q(piece: int, at: Vector2, sx: float, sy: float, col: Color, rot: float = 0.0) -> void:
+	var e: MapAtlas.Entry = _pieces[piece]
+	var size: Vector2 = Vector2(e.tile.x * sx, e.tile.y * sy)
+	var origin: Vector2 = Vector2(e.anchor.x * sx, e.anchor.y * sy)
+	# The sheet is premultiplied and drawn with the premultiplied blend, so the tint is too.
+	var tint: Color = Color(col.r * col.a, col.g * col.a, col.b * col.a, col.a)
+	if rot != 0.0:
+		draw_set_transform(at, rot, Vector2.ONE)
+		draw_texture_rect_region(_tex, Rect2(-origin, size), e.rect, tint)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	else:
+		draw_texture_rect_region(_tex, Rect2(at - origin, size), e.rect, tint)
+
+
+## A soft filled disc of radius `r` pixels.
+func _disc(at: Vector2, r: float, col: Color) -> void:
+	var s: float = r / (ShotPieces.DISC_R * CELL)
+	_q(ShotPieces.Piece.DISC, at, s, s, col)
+
+
+## A ring of radius `r` pixels, edged in ink. Its thickness grows with its radius.
+func _ring(at: Vector2, r: float, col: Color) -> void:
+	var s: float = r / (ShotPieces.RING_R * CELL)
+	_q(ShotPieces.Piece.RING, at, s, s, col)
+
+
+## A ring of eight dashes, turned by `rot`.
+func _dashes(at: Vector2, r: float, rot: float, col: Color) -> void:
+	var s: float = r / (ShotPieces.RING_R * CELL)
+	_q(ShotPieces.Piece.DASH, at, s, s, col, rot)
+
+
+## A bead of visible radius `r` pixels with an ink edge.
+func _bead(at: Vector2, r: float, col: Color) -> void:
+	var s: float = r / (0.17 * CELL)
+	_q(ShotPieces.Piece.BEAD, at, s, s, col)
+
+
+## A line from `a` to `b`, `width` pixels thick with ink along its sides.
+func _bar(a: Vector2, b: Vector2, width: float, col: Color) -> void:
+	var length: float = a.distance_to(b)
+	if length < 0.5:
+		return
+	_q(ShotPieces.Piece.BAR, a, length / CELL, width / (0.11 * CELL), col, (b - a).angle())
+
+
+## A star whose tips reach `r` pixels, turned by `rot`. `wide` picks the eight point star.
+func _star(at: Vector2, r: float, wide: bool, rot: float, col: Color) -> void:
+	var s: float = r / (0.45 * CELL)
+	_q(ShotPieces.Piece.STAR8 if wide else ShotPieces.Piece.STAR4, at, s, s, col, rot)
+
+
+## A fading streak that ends at `head` and runs back `length` pixels along `angle`.
+func _streak(head: Vector2, angle: float, length: float, width: float, col: Color) -> void:
+	_q(ShotPieces.Piece.TRAIL, head, length / CELL, width / (0.3 * CELL), col, angle)
+
+
+## A puff of smoke of radius `r` pixels.
+func _puff(at: Vector2, r: float, a: float) -> void:
+	var s: float = r / (0.4 * CELL)
+	_q(ShotPieces.Piece.PUFF, at, s, s, Color(1, 1, 1, a))
+
+
+# Where a shot leaves.
+
+## Per look, what shows at the tower when it fires: a flick and dust for the sling, a swung arm and
+## dust for the catapult, a twang for the bows, smoke and sparks for the fireworks.
+func _draw_muzzle(f: Flash, k: float) -> void:
+	var d: Vector2 = Vector2.from_angle(f.ang)
+	var a: float = 1.0 - k
+	var e: float = 1.0 - (1.0 - k) * (1.0 - k)
+	match f.hue:
+		Look.PEBBLE, Look.STONE:
+			var big: float = 1.0 if f.hue == Look.PEBBLE else 1.5
+			_disc(f.at, CELL * 0.1 * big * (1.0 + 0.5 * k), Color(Palette.PLASTER, 0.75 * a))
+			for j: int in 3:
+				var dd: Vector2 = d.rotated((float(j) - 1.0) * 0.6)
+				_bar(f.at + dd * CELL * (0.07 + 0.05 * e) * big, f.at + dd * CELL * (0.15 + 0.17 * e) * big, CELL * 0.045 * big, Color(Palette.SPARKLE, a))
+		Look.PUMPKIN, Look.JAM, Look.PRIZE:
+			var big: float = 1.35 if f.hue == Look.PRIZE else 1.0
+			var r: float = CELL * (0.2 + 0.14 * e) * big
+			_q(ShotPieces.Piece.ARC, f.at, r / (0.8 * CELL), r / (0.8 * CELL), Color(Palette.SPARKLE, a), f.ang + PI - 0.3)
+			for j: int in 3:
+				var off: Vector2 = Vector2((float(j) - 1.0) * 0.13, -0.05 - 0.22 * e - 0.04 * float(j % 2)) * CELL * big
+				_puff(f.at + off, CELL * (0.05 + 0.07 * k) * big, 0.9 * a)
+			var fleck: Color = Palette.JAM if f.hue == Look.JAM else Palette.PUMPKIN
+			for j: int in 3:
+				var fp: Vector2 = f.at + d.rotated((float(j) - 1.0) * 0.5) * CELL * (0.1 + 0.22 * e) * big
+				_bead(fp, CELL * 0.03 * big, Color(fleck, a))
+		Look.ARROW, Look.GIANT_ARROW:
+			var big: float = 1.7 if f.hue == Look.GIANT_ARROW else 1.0
+			var back: Vector2 = f.at - d * CELL * 0.06 * big
+			for j: int in 2:
+				var r: float = CELL * (0.12 + 0.16 * e + 0.1 * float(j)) * big
+				_q(ShotPieces.Piece.ARC, back, r / (0.8 * CELL), r / (0.8 * CELL), Color(Palette.BONE, a * (1.0 - 0.3 * float(j))), f.ang)
+			var side: Vector2 = Vector2(-d.y, d.x)
+			for j: int in 2:
+				var o: Vector2 = side * (float(j) * 2.0 - 1.0) * CELL * 0.06 * big
+				_streak(f.at + o, f.ang + PI, CELL * (0.16 + 0.2 * e) * big, CELL * 0.05 * big, Color(Palette.SPARKLE, 0.8 * a))
+		_:
+			var big: float = 1.0
+			if f.hue == Look.SKYROCKET:
+				big = 1.5
+			elif f.hue == Look.BLOOM:
+				big = 1.2
+			var glow: Color = Palette.HONEY if f.hue == Look.BLOOM else Palette.GLOW
+			_disc(f.at, CELL * 0.2 * big * (1.0 - 0.5 * k), Color(glow, 0.6 * a))
+			_disc(f.at, CELL * 0.09 * big * (1.0 - 0.5 * k), Color(Palette.LANTERN_CORE, a))
+			for j: int in 7:
+				var dd: Vector2 = Vector2.from_angle(PI * 0.5 + (float(j) - 3.0) * 0.38)
+				_bar(f.at + dd * CELL * 0.1 * big, f.at + dd * CELL * (0.16 + 0.2 * e) * big, CELL * 0.035 * big, Color(Palette.SPARKLE if j % 2 == 0 else glow, a))
+			for j: int in 3:
+				var off: Vector2 = Vector2((float(j) - 1.0) * 0.1 * big, -0.1 - (0.12 + 0.1 * float(j)) * e * big) * CELL
+				_puff(f.at + off, CELL * (0.05 + 0.07 * k) * big, 0.85 * a)
+
+
+# Where it lands.
+
+## Per look, a hit mark: a flash on the creature, a star, and chips, a ring, a stuck arrow or a
+## bang to suit the shot.
 func _draw_hit(f: Flash, k: float) -> void:
-	var r0: float = CELL * (0.05 + 0.05 * k) * f.size
-	var r1: float = CELL * (0.12 + 0.1 * k) * f.size
-	for j: int in 4:
-		var a: float = TAU * float(j) / 4.0 + PI / 4.0
-		var d: Vector2 = Vector2.from_angle(a)
-		draw_line(f.at + d * r0, f.at + d * r1, Color(Palette.SPARKLE, 1.0 - k), CELL * 0.035 * minf(f.size, 1.5), true)
+	var a: float = 1.0 - k
+	var e: float = 1.0 - (1.0 - k) * (1.0 - k)
+	var sz: float = f.size
+	var heavy: bool = f.hue == Look.GIANT_ARROW or f.hue == Look.SKYROCKET
+	_disc(f.at, CELL * 0.3 * sz * (0.6 + 0.4 * e), Color(Palette.SPARKLE, 0.7 * a))
+	var col: Color = Palette.LANTERN if f.hue == Look.SKYROCKET else Palette.SPARKLE
+	var reach: float = CELL * (0.24 + 0.2 * e) * sz
+	if f.hue == Look.ROCKET or f.hue == Look.BLOOM:
+		reach *= 0.7
+	_star(f.at, reach, heavy or f.hue == Look.STONE, PI / 4.0, Color(col, a))
+	match f.hue:
+		Look.PEBBLE:
+			for j: int in 4:
+				var d: Vector2 = Vector2.from_angle(TAU * float(j) / 4.0 + 0.2)
+				var cp: Vector2 = f.at + d * CELL * (0.12 + 0.2 * e) + Vector2(0.0, -sin(PI * k) * CELL * 0.08)
+				_bead(cp, CELL * 0.022, Color(Palette.PLASTER, a))
+		Look.STONE:
+			for j: int in 4:
+				var d: Vector2 = Vector2.from_angle(TAU * float(j) / 4.0 + 0.5)
+				var cp: Vector2 = f.at + d * CELL * (0.1 + 0.26 * e) + Vector2(0.0, -sin(PI * k) * CELL * 0.1)
+				_bead(cp, CELL * 0.04, Color(Palette.STONE, a))
+			_ring(f.at, CELL * (0.12 + 0.22 * e), Color(Palette.STONE, 0.9 * a))
+		Look.ARROW, Look.GIANT_ARROW:
+			var wob: float = sin(k * 38.0) * 0.14 * a
+			var big: float = 1.7 if f.hue == Look.GIANT_ARROW else 1.0
+			var fade: float = 1.0 if k < 0.65 else 1.0 - (k - 0.65) / 0.35
+			_q(ShotPieces.Piece.ARROW, f.at, big, big, Color(1, 1, 1, fade), f.ang + wob)
+			if heavy:
+				_ring(f.at, CELL * (0.2 + 0.4 * e), Color(Palette.SPARKLE, a))
+		Look.SKYROCKET:
+			_disc(f.at, CELL * 0.22 * (1.0 - 0.6 * k), Color(Palette.LANTERN_CORE, a))
+			_ring(f.at, CELL * (0.25 + 0.5 * e), Color(Palette.GLOW, a))
+			for j: int in 3:
+				var off: Vector2 = Vector2((float(j) - 1.0) * 0.22, -0.1 - 0.3 * e) * CELL
+				_puff(f.at + off, CELL * (0.07 + 0.08 * k), 0.7 * a)
 
 
-## Spokes that reach the splash radius at the end, with a bead on each tip and a faint ring. The
-## Star Bloom has more spokes and a second ring.
+## A lobbed shot lands: the splash area spreads out to its true radius (a filled disc with a ring
+## on its edge), chunks fly out, sparkles twinkle, and a splat marks the middle. A jam splash
+## leaves a sticky puddle that fades slowly, as its jam slows what it touches.
+func _draw_splash(f: Flash, k: float) -> void:
+	var radius: float = f.size
+	var jam: bool = f.hue == 1
+	var main: Color = Palette.JAM if jam else Palette.PUMPKIN
+	var light: Color = Palette.SPARKLE_LILAC if jam else Palette.HONEY
+	var grow: float = 1.0 - pow(1.0 - minf(k / 0.13, 1.0), 3.0)
+	var r: float = radius * (0.2 + 0.8 * grow)
+	var fade: float = 1.0 - maxf((k - 0.5) / 0.5, 0.0)
+	_disc(f.at, r, Color(main, 0.3 * fade))
+	_disc(f.at, r * 0.6, Color(light, 0.2 * fade))
+	_ring(f.at, r, Color(light, fade))
+	# The splat in the middle.
+	var splat: float = radius * 0.34 * (0.4 + 0.6 * grow)
+	var puddle: float = 1.0 if jam else maxf(1.0 - k * 1.8, 0.0)
+	if puddle > 0.0:
+		var s: float = splat / (0.34 * CELL)
+		_q(ShotPieces.Piece.SPLAT, f.at, s, s, Color(main, puddle * fade))
+	# Chunks fly out and fall.
+	if k < 0.62:
+		var kc: float = k / 0.62
+		var n: int = 14 if f.hue == 2 else 10
+		for j: int in n:
+			var ang: float = TAU * float(j) / float(n) + 0.35 * float(j % 3)
+			var reach: float = radius * (0.5 + 0.4 * float(j % 3) / 2.0) * (1.0 - pow(1.0 - kc, 2.0))
+			var up: float = sin(PI * kc) * CELL * (0.3 + 0.14 * float(j % 2))
+			var pos: Vector2 = f.at + Vector2.from_angle(ang) * reach + Vector2(0.0, -up)
+			var cr: float = CELL * (0.055 + 0.025 * float(j % 2)) * (1.0 - 0.4 * kc)
+			var col: Color = main if j % 2 == 0 else (light if jam else Palette.BONE)
+			_bead(pos, cr, Color(col, 1.0 - kc * kc))
+	# Sparkles.
+	if k > 0.08 and k < 0.6:
+		var tw: float = sin(PI * (k - 0.08) / 0.52)
+		for j: int in 5:
+			var v: Vector2 = Vector2.from_angle(TAU * float(j) / 5.0 + 0.9)
+			var pos: Vector2 = f.at + v * radius * (0.5 + 0.1 * float(j)) + Vector2(0.0, -CELL * 0.2 * k)
+			_star(pos, CELL * 0.1 * tw, false, PI / 4.0, Color(Palette.SPARKLE, tw))
+
+
+## Spokes that reach the splash radius at the end, with a bead on each tip, a bright flash at the
+## middle and a faint disc of the true splash area. The Star Bloom has more spokes and a second ring.
 func _draw_burst(f: Flash, k: float) -> void:
 	var fade: float = 1.0 - k * k
-	var reach: float = f.size * (0.35 + 0.65 * (1.0 - (1.0 - k) * (1.0 - k)))
+	var reach: float = f.size * (0.5 + 0.5 * (1.0 - pow(1.0 - minf(k / 0.5, 1.0), 2.0)))
 	var spokes: int = 12 if f.hue == 1 else 8
+	_disc(f.at, reach, Color(Palette.SPARKLE, 0.16 * fade))
+	if k < 0.4:
+		_disc(f.at, CELL * 0.22 * (1.0 - k / 0.4), Color(Palette.LANTERN_CORE, 1.0 - k / 0.4))
 	for j: int in spokes:
 		var d: Vector2 = Vector2.from_angle(TAU * float(j) / float(spokes) + 0.2)
 		var col: Color = BURST_COLORS[j % BURST_COLORS.size()]
-		var inner: float = reach * (0.35 + 0.35 * k)
-		draw_line(f.at + d * inner, f.at + d * reach, Color(Palette.INK_LINE, 0.7 * fade), CELL * 0.07, true)
-		draw_line(f.at + d * inner, f.at + d * reach, Color(col, fade), CELL * 0.04, true)
-		draw_circle(f.at + d * reach, CELL * 0.045, Color(Palette.INK_LINE, 0.7 * fade))
-		draw_circle(f.at + d * reach, CELL * 0.03, Color(col, fade))
-	draw_arc(f.at, reach, 0.0, TAU, 32, Color(Palette.SPARKLE, 0.5 * fade), CELL * 0.02, true)
+		var inner: float = reach * (0.3 + 0.4 * k)
+		_bar(f.at + d * inner, f.at + d * reach, CELL * 0.055, Color(col, fade))
+		_bead(f.at + d * reach, CELL * 0.042, Color(col, fade))
+	_ring(f.at, reach, Color(Palette.SPARKLE, 0.8 * fade))
 	if f.hue == 1:
-		draw_arc(f.at, reach * 0.55, 0.0, TAU, 24, Color(Palette.HONEY, 0.5 * fade), CELL * 0.02, true)
+		_ring(f.at, reach * 0.55, Color(Palette.HONEY, 0.6 * fade))
 
 
 func _draw_plus(f: Flash, k: float) -> void:
 	var p: Vector2 = f.at + Vector2(0.0, -CELL * (0.28 + 0.3 * k))
 	var a: float = 1.0 if k < 0.5 else 1.0 - (k - 0.5) * 2.0
 	var arm: float = CELL * 0.09 * (0.7 + 0.5 * minf(k * 4.0, 1.0))
-	draw_line(p + Vector2(-arm, 0.0), p + Vector2(arm, 0.0), Color(Palette.INK_LINE, a), CELL * 0.085, true)
-	draw_line(p + Vector2(0.0, -arm), p + Vector2(0.0, arm), Color(Palette.INK_LINE, a), CELL * 0.085, true)
-	draw_line(p + Vector2(-arm, 0.0), p + Vector2(arm, 0.0), Color(Palette.HP_FILL, a), CELL * 0.05, true)
-	draw_line(p + Vector2(0.0, -arm), p + Vector2(0.0, arm), Color(Palette.HP_FILL, a), CELL * 0.05, true)
+	_bar(p + Vector2(-arm, 0.0), p + Vector2(arm, 0.0), CELL * 0.05, Color(Palette.HP_FILL, a))
+	_bar(p + Vector2(0.0, -arm), p + Vector2(0.0, arm), CELL * 0.05, Color(Palette.HP_FILL, a))
 
 
 ## A small coin that rises, with a four point twinkle at the start. It is round with a mark in
@@ -295,15 +549,11 @@ func _draw_coin(f: Flash, k: float) -> void:
 	var p: Vector2 = f.at + Vector2(0.0, -CELL * (0.12 + 0.34 * rise * f.size))
 	var a: float = 1.0 if k < 0.6 else 1.0 - (k - 0.6) / 0.4
 	var r: float = CELL * 0.07 * f.size
-	draw_circle(p, r * 1.2, Color(Palette.INK_LINE, a))
-	draw_circle(p, r, Color(Palette.COIN, a))
-	draw_circle(p, r * 0.45, Color(Palette.ROOF_CLAY, a))
+	_bead(p, r, Color(Palette.COIN, a))
+	_bead(p, r * 0.45, Color(Palette.ROOF_CLAY, a))
 	if k < 0.45:
 		var tw: float = sin(PI * k / 0.45)
-		var d: float = r * (1.6 + 0.8 * tw)
-		var up: Vector2 = p + Vector2(r * 0.9, -r * 0.9)
-		draw_line(up + Vector2(-d * 0.5, 0.0), up + Vector2(d * 0.5, 0.0), Color(Palette.SPARKLE, a), CELL * 0.025, true)
-		draw_line(up + Vector2(0.0, -d * 0.5), up + Vector2(0.0, d * 0.5), Color(Palette.SPARKLE, a), CELL * 0.025, true)
+		_star(p + Vector2(r * 0.9, -r * 0.9), r * (1.2 + 0.6 * tw), false, 0.0, Color(Palette.SPARKLE, a))
 
 
 ## Three speed lines behind the creature.
@@ -314,67 +564,93 @@ func _draw_whoosh(f: Flash, k: float) -> void:
 		var y: float = (float(j) - 1.0) * 0.2 * s
 		var start: Vector2 = f.at + Vector2(-f.dir * (0.4 + 0.2 * k) * s, y)
 		var end: Vector2 = start + Vector2(-f.dir * s * (0.35 + 0.25 * float(1 - absi(j - 1))), 0.0)
-		draw_line(start, end, Color(Palette.INK_LINE, 0.7 * a), CELL * 0.07, true)
-		draw_line(start, end, Color(Palette.SPARKLE, a), CELL * 0.04, true)
+		_bar(start, end, CELL * 0.04, Color(Palette.SPARKLE, a))
 
 
 func _draw_pulse(f: Flash, k: float) -> void:
 	var e: float = 1.0 - (1.0 - k) * (1.0 - k)
-	var r: float = f.size * (0.25 + 0.75 * e)
-	var a: float = 1.0 - k
-	draw_arc(f.at, r, 0.0, TAU, 40, Color(Palette.INK_LINE, 0.6 * a), CELL * 0.07, true)
-	draw_arc(f.at, r, 0.0, TAU, 40, Color(HUES[f.hue], a), CELL * 0.04, true)
+	_ring(f.at, f.size * (0.25 + 0.75 * e), Color(HUES[f.hue], 1.0 - k))
 
 
-func _draw_shot(look: int, p: Vector2, dir: Vector2, u: float) -> void:
-	var ink: Color = Palette.INK_LINE
-	match look:
+# Shots in flight.
+
+func _draw_shot(s: Shot, p: Vector2, dir: Vector2, u: float) -> void:
+	var white: Color = Color.WHITE
+	var angle: float = dir.angle()
+	if is_lobbed(s.look):
+		_draw_landing_mark(s, u)
+		# The shadow stays on the ground under the arc and shrinks as the shot climbs.
+		var lift: float = 4.0 * u * (1.0 - u)
+		var sr: float = (0.17 if s.look == Look.PRIZE else 0.12) * (1.0 - 0.3 * lift) / ShotPieces.DISC_R
+		_q(ShotPieces.Piece.DISC, s.from.lerp(s.to, u), sr, sr * 0.45, Color(Palette.INK_LINE, 0.4))
+	match s.look:
 		Look.PEBBLE:
-			draw_circle(p, CELL * 0.055, ink)
-			draw_circle(p, CELL * 0.035, Palette.PLASTER)
+			_streak(p, angle + PI, CELL * 0.35, CELL * 0.05, Color(Palette.PLASTER, 0.7))
+			var k: float = 0.09 / ShotPieces.PEBBLE_R
+			_q(ShotPieces.Piece.PEBBLE, p, k, k, white)
 		Look.STONE:
-			draw_circle(p, CELL * 0.085, ink)
-			draw_circle(p, CELL * 0.062, Palette.STONE)
-			draw_circle(p + Vector2(-0.02, -0.02) * CELL, CELL * 0.02, Palette.PLASTER)
+			_streak(p, angle + PI, CELL * 0.4, CELL * 0.09, Color(Palette.STONE, 0.7))
+			var k: float = 0.115 / ShotPieces.STONE_R
+			_q(ShotPieces.Piece.STONE, p, k, k, white)
 		Look.PUMPKIN:
-			draw_circle(p, CELL * 0.12, ink)
-			draw_circle(p, CELL * 0.095, Palette.PUMPKIN)
-			draw_line(p + Vector2(0.0, -0.09) * CELL, p + Vector2(0.02, -0.14) * CELL, Palette.TREE_DARK, CELL * 0.03, true)
+			_streak(p, angle + PI, CELL * 0.3, CELL * 0.08, Color(Palette.HONEY, 0.5))
+			var k: float = 0.17 / ShotPieces.PUMPKIN_R
+			_q(ShotPieces.Piece.PUMPKIN, p, k, k, white, u * TAU * 1.5)
+		Look.PRIZE:
+			_streak(p, angle + PI, CELL * 0.3, CELL * 0.12, Color(Palette.HONEY, 0.55))
+			var k: float = 0.26 / ShotPieces.PUMPKIN_R
+			_q(ShotPieces.Piece.PUMPKIN, p, k, k, white, u * TAU * 1.5)
 		Look.JAM:
-			draw_circle(p, CELL * 0.12, ink)
-			draw_circle(p, CELL * 0.095, Palette.JAM)
-			draw_circle(p + Vector2(-0.03, -0.03) * CELL, CELL * 0.025, Palette.SPARKLE_LILAC)
+			_streak(p, angle + PI, CELL * 0.3, CELL * 0.08, Color(Palette.SPARKLE_LILAC, 0.5))
+			var k: float = 0.15 / ShotPieces.JAR_R
+			_q(ShotPieces.Piece.JAR, p, k, k, white, u * TAU * 1.5)
+			# Jam drops fly behind it.
+			var side: Vector2 = Vector2(-dir.y, dir.x)
+			for i: int in 3:
+				var back: Vector2 = p - dir * CELL * 0.15 * (1.8 + 1.0 * float(i)) + side * sin(u * 30.0 + float(i) * 2.0) * CELL * 0.075
+				_bead(back, CELL * 0.15 * (0.4 - 0.08 * float(i)), Palette.JAM)
 		Look.ARROW:
-			_arrow(p, dir, 1.0)
+			_draw_arrow(p, dir, 1.0)
 		Look.GIANT_ARROW:
-			_arrow(p, dir, 2.0)
+			_draw_arrow(p, dir, 2.0)
 		Look.SKYROCKET:
-			_rocket(p, dir, u, 1.9, Palette.ROOF_CLAY, 3)
+			_draw_rocket(p, dir, u, 1.9, false)
 		Look.BLOOM:
-			_rocket(p, dir, u, 1.3, Palette.HONEY, 2)
+			_draw_rocket(p, dir, u, 1.4, true)
 		_:
-			_rocket(p, dir, u, 1.0, Palette.ROOF_CLAY, 2)
+			_draw_rocket(p, dir, u, 1.2, false)
 
 
-## An arrow whose head is at `p`. The Giant Bow's is twice as long and thick, with a bigger head.
-func _arrow(p: Vector2, dir: Vector2, k: float) -> void:
-	var tail: Vector2 = p - dir * CELL * 0.4 * k
+## The splash area of a lobbed shot, on the ground where it will land: a dashed ring of the true
+## splash radius that closes in a little and turns as the shot comes down.
+func _draw_landing_mark(s: Shot, u: float) -> void:
+	if s.radius <= 0.0:
+		return
+	var r: float = s.radius * (1.1 - 0.1 * u)
+	_disc(s.to, r, Color(Palette.SPARKLE, 0.1))
+	_dashes(s.to, r, u * 1.5, Color(1, 1, 1, 0.95))
+
+
+## An arrow whose head is at `p`. The Giant Bow's is twice as long and thick. Speed streaks run
+## behind it.
+func _draw_arrow(p: Vector2, dir: Vector2, k: float) -> void:
+	var angle: float = dir.angle()
+	var tail: Vector2 = p - dir * CELL * 0.46 * k
 	var side: Vector2 = Vector2(-dir.y, dir.x)
-	draw_line(tail, p, Palette.INK_LINE, CELL * 0.07 * k, true)
-	draw_line(tail, p, Palette.WOOD, CELL * 0.035 * k, true)
-	var tip: PackedVector2Array = PackedVector2Array([p + dir * CELL * 0.1 * k, p + side * CELL * 0.05 * k, p - side * CELL * 0.05 * k])
-	draw_colored_polygon(tip, Palette.IRON)
-	draw_line(tail, tail + (side - dir) * CELL * 0.08 * k, Palette.BONE, CELL * 0.03 * k, true)
-	draw_line(tail, tail + (-side - dir) * CELL * 0.08 * k, Palette.BONE, CELL * 0.03 * k, true)
+	for j: int in 2:
+		var o: Vector2 = side * (float(j) * 2.0 - 1.0) * CELL * 0.055 * k
+		_streak(tail + o, angle + PI, CELL * 0.3 * k, CELL * 0.03 * k, Color(Palette.SPARKLE, 0.6))
+	_q(ShotPieces.Piece.ARROW, p, k, k, Color.WHITE, angle)
 
 
-## A rocket whose head is at `p`, `big` times the normal size, with `trail` sparks behind it.
-func _rocket(p: Vector2, dir: Vector2, u: float, big: float, body: Color, trail: int) -> void:
-	var tail: Vector2 = p - dir * CELL * 0.16 * big
-	draw_circle(tail - dir * CELL * 0.05, CELL * 0.07 * big, Color(Palette.GLOW, 0.5))
-	draw_line(tail, p, Palette.INK_LINE, CELL * 0.075 * big, true)
-	draw_line(tail, p, body, CELL * 0.04 * big, true)
-	draw_circle(p, CELL * 0.03 * big, Palette.LANTERN_CORE)
-	for j: int in trail:
-		var back: Vector2 = p - dir * CELL * (0.28 + 0.12 * float(j)) * big
-		draw_circle(back, CELL * 0.02 * (1.0 - u * 0.3), Color(Palette.SPARKLE, 0.8 - 0.25 * float(j)))
+## A rocket whose head is at `p`, `big` times the normal size, with a flame and three puffs of
+## smoke behind it.
+func _draw_rocket(p: Vector2, dir: Vector2, u: float, big: float, honey: bool) -> void:
+	var angle: float = dir.angle()
+	for j: int in 3:
+		var back: Vector2 = p - dir * CELL * (0.34 + 0.15 * float(j)) * big
+		_puff(back, CELL * (0.05 + 0.02 * float(j)) * big, 0.8 - 0.22 * float(j))
+	var tail: Vector2 = p - dir * CELL * 0.18 * big
+	var flick: float = 0.8 + 0.2 * sin(u * 60.0)
+	_q(ShotPieces.Piece.FLAME, tail, big * flick, big, Color.WHITE, angle)
+	_q(ShotPieces.Piece.ROCKET_HONEY if honey else ShotPieces.Piece.ROCKET, p, big, big, Color.WHITE, angle)
