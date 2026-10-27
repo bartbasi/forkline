@@ -1,6 +1,6 @@
 # Forkline Privacy Policy
 
-Effective date: [set this to the publishing date when Bart approves the policy]
+Effective date: October 26, 2026
 
 Forkline is a tower defense game for Android made by Play, Inc. This policy explains what Forkline does with your information. The short version: nothing. Forkline collects no data at all.
 

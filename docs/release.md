@@ -97,7 +97,79 @@ godot --path . --script res://tools/store/make_screenshots.gd    # five real scr
 bash tools/store/check_store.sh
 ```
 
-It checks the character counts in listing.md (the stated count must match the real one, and stay under Google's limit), plain ASCII only (no em dashes or curly quotes), no double hyphens in prose, the required wording in the listing and the policy, and the size of every PNG. Exit 0 means it all passed. When you change a text field, change its `Characters: N of L.` line to match.
+It checks the character counts in listing.md (the stated count must match the real one, and stay under Google's limit), plain ASCII only (no em dashes or curly quotes), no double hyphens in prose, the required wording in the listing and the policy, the size of every PNG, and the Pages site (see below). Exit 0 means it all passed. When you change a text field, change its `Characters: N of L.` line to match. The site check runs Godot, so `godot` must be on PATH or GODOT must be set.
+
+## The privacy policy site (GitHub Pages)
+
+docs/store/privacy-policy.md is the one source of the policy text. `tools/store/make_site.gd` turns it into plain HTML in `docs/store/site/`, and the generated files are committed:
+
+| File | What it is |
+|---|---|
+| docs/store/site/index.html | Short home page: title, one line about the game, links to the source code, the test builds and the policy, the copyright line and "Made by Bart Basi" |
+| docs/store/site/privacy-policy/index.html | The policy, at https://bartbasi.github.io/forkline/privacy-policy/ |
+| docs/store/site/.nojekyll | Empty. Tells GitHub to serve the files as they are |
+
+The pages use inline CSS only, with a system font stack and light and dark colors from `prefers-color-scheme`. They have no script, cookie, external font, image or stylesheet, so nothing loads from any other address. The only outbound addresses are the two plain links to the source code and the test builds. The home page line about the game is the short description from listing.md.
+
+Regenerate after any change to the policy or the short description, from the repo root (no window needed):
+
+```bash
+godot --headless --path . --script res://tools/store/make_site.gd
+bash tools/store/check_store.sh
+```
+
+`check_store.sh` fails if `docs/store/site/` differs from what the generator writes now, if a page has `src=`, `@import`, `url(`, a script, a `<link>` or any address other than the two allowed links, or if a page has a non ASCII character or a double hyphen. To write the site somewhere else, add `-- --out=<folder>` to the Godot command.
+
+### Publish the site (the DM does this, after Bart's go ahead)
+
+Bart approved the policy on Pages on 2026-10-26. Agents never run these steps.
+
+1. Run the store check and the full test suite on the commit to publish.
+2. Make the `gh-pages` branch hold exactly the contents of `docs/store/site/`, including `.nojekyll`, and nothing else. A throwaway worktree keeps main untouched:
+
+   ```bash
+   scratch="$(mktemp -d)"
+   cp -r docs/store/site/. "$scratch"
+   git worktree add --detach "$TEMP/fl_pages" HEAD
+   cd "$TEMP/fl_pages"
+   git checkout --orphan gh-pages
+   git rm -rf --quiet .
+   cp -r "$scratch"/. .
+   git add -A
+   git ls-files        # must list only .nojekyll, index.html, privacy-policy/index.html
+   ```
+
+   Later runs: start from `git worktree add "$TEMP/fl_pages" gh-pages` (after fetching it), replace the files the same way, and `git add -A` so removed files go too.
+3. Commit as the bartbasi account and push `gh-pages` with the same gh credential helper used for main.
+4. Turn Pages on from that branch's root:
+
+   ```bash
+   gh api -X POST repos/bartbasi/forkline/pages -f "source[branch]=gh-pages" -f "source[path]=/"
+   ```
+
+   (If Pages is already on, use `-X PUT` to change the source.) Then remove the worktree (`git worktree remove --force "$TEMP/fl_pages"`, `git worktree prune`).
+5. After a minute, open https://bartbasi.github.io/forkline/ and https://bartbasi.github.io/forkline/privacy-policy/ and confirm both load. That second address is the one in the Play listing.
+6. To update later: regenerate, run the check, commit on main, and repeat steps 2 and 3 (a new commit on `gh-pages` with the same exact contents rule).
+
+## GitHub test builds (the DM does this)
+
+Each verified milestone gets a public pre-release with the APK attached. The full suite must pass on a clean copy and `bash scripts/check_apk.sh` must pass first. Agents never run these steps.
+
+1. Build with `bash scripts/build.sh`, then write the checksum next to the APK:
+
+   ```bash
+   cd build
+   sha256sum forkline-debug.apk > forkline-debug.apk.sha256
+   ```
+2. Tag name: `v0.1-testN`, where N counts the test builds (`v0.1-test1`, `v0.1-test2`, ...). The tag points at the verified commit.
+3. Write the release notes to a file: what changed, and that this is a debug signed test build, not a store release. Debug builds are signed with the Android debug key. Release signing is ask first and has not been approved.
+4. Create the release. Use the full 40 character sha of the verified commit for `--target`:
+
+   ```bash
+   gh release create v0.1-testN -R bartbasi/forkline --target <full 40 character sha> --prerelease \
+     --notes-file <notes> build/forkline-debug.apk build/forkline-debug.apk.sha256
+   ```
+5. Open the release page and check that both files are attached and the tag shows the right commit.
 
 ### Screenshots from the Fold5
 

@@ -8,6 +8,7 @@
 #   - no double hyphens in the prose, outside code fences
 #   - the required wording is in the full description and the policy
 #   - the image files exist and have the sizes Play needs
+#   - docs/store/site/ matches tools/store/make_site.gd and loads nothing external
 # Run from anywhere:  bash tools/store/check_store.sh
 # Exit 0 when everything passes, 1 otherwise.
 set -u
@@ -116,6 +117,72 @@ check_png feature_1024x500.png 1024 500
 for n in screen_1_front_door screen_2_modes screen_3_levels screen_4_build_phase screen_5_wave; do
 	check_png "$n.png" 1080 2160
 done
+
+# The Pages site in docs/store/site/ must match what tools/store/make_site.gd
+# writes now, and its pages may load nothing from anywhere.
+SITE=docs/store/site
+check_site() {
+	local godot="${GODOT:-godot}" tmp out f href
+	if [ ! -f "$SITE/index.html" ] || [ ! -f "$SITE/privacy-policy/index.html" ] || [ ! -f "$SITE/.nojekyll" ]; then
+		fail "$SITE is incomplete (needs index.html, privacy-policy/index.html and .nojekyll). Run make_site.gd."
+		return
+	fi
+	if [ -s "$SITE/.nojekyll" ]; then fail "$SITE/.nojekyll should be empty"; fi
+
+	# Up to date: regenerate into a temp folder and compare.
+	if ! command -v "$godot" >/dev/null 2>&1; then
+		fail "Godot was not found as '$godot', so the site cannot be compared. Set GODOT to its full path."
+	else
+		tmp="$(mktemp -d)"
+		out="$tmp"
+		if command -v cygpath >/dev/null 2>&1; then out="$(cygpath -m "$tmp")"; fi
+		if timeout 120 "$godot" --headless --path . --script res://tools/store/make_site.gd -- --out="$out/site" >/dev/null 2>&1; then
+			if diff -r "$tmp/site" "$SITE" >/dev/null 2>&1; then
+				ok "$SITE matches the generator output"
+			else
+				fail "$SITE is out of date. Run: godot --headless --path . --script res://tools/store/make_site.gd"
+			fi
+		else
+			fail "make_site.gd did not run cleanly"
+		fi
+		rm -rf "$tmp"
+	fi
+
+	# Nothing external: no loaded resources, and links only to the two constants.
+	local bad=0
+	for f in "$SITE/index.html" "$SITE/privacy-policy/index.html"; do
+		if grep -n -i -E 'src=|@import|url\(|<script|<link|<img|<iframe|<form|<object|<embed|<base|http-equiv|<meta[^>]*refresh' "$f"; then
+			fail "$f loads or may load an external resource (shown above)"
+			bad=1
+		fi
+		if LC_ALL=C grep -n -P '[^\x00-\x7F]' "$f" >/dev/null; then
+			fail "$f has characters outside plain ASCII"
+			bad=1
+		fi
+		if grep -n -E -e '--' "$f" >/dev/null; then
+			fail "$f has a double hyphen"
+			bad=1
+		fi
+		# Every href sits on an <a> tag and is a relative path or an allowed address.
+		if [ "$(grep -o -i 'href=' "$f" | wc -l)" -ne "$(grep -o -i '<a href=' "$f" | wc -l)" ]; then
+			fail "$f has an href that is not on an <a> link"
+			bad=1
+		fi
+		for href in $(grep -o -E 'href="[^"]*"' "$f" | sed 's/^href="//; s/"$//'); do
+			case "$href" in
+				https://github.com/bartbasi/forkline | https://github.com/bartbasi/forkline/releases) ;;
+				*:* | //*) fail "$f links to '$href', which is not an allowed address"; bad=1 ;;
+			esac
+		done
+		# Any address written in the text must be one of the allowed ones too.
+		if grep -o -E 'https?://[^"<> ]*' "$f" | grep -v -x -E 'https://github.com/bartbasi/forkline(/releases)?' >/dev/null; then
+			fail "$f has an address that is not allowed"
+			bad=1
+		fi
+	done
+	if [ "$bad" -eq 0 ]; then ok "$SITE pages load nothing external"; fi
+}
+check_site
 
 if [ "$failed" -gt 0 ]; then
 	echo "STORE CHECK FAILED: $failed problem(s)"
