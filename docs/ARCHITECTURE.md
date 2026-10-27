@@ -1,6 +1,6 @@
 # Forkline: Architecture
 
-Owner: architect. Status: revised for phase 7, and brought up to the built sim (S1), the run code (R1, R2), the saves (S2), the run segments (L4), the Twist and run screens (U2), the rules alignment (G1), the run tuning (G3), the security fixes (S4, R4, S5) and the ceilings on stacked effects (S6, S7), 2026-10-25.
+Owner: architect. Status: revised for phase 7, and brought up to the built sim (S1), the run code (R1, R2), the saves (S2), the run segments (L4), the Twist and run screens (U2), the rules alignment (G1), the run tuning (G3), the security fixes (S4, R4, S5) and the ceilings on stacked effects (S6, S7), 2026-10-25; then to the perk rule (G5, R5), the QA round 3 fixes (docs/reviews/qa-2026-10-26.md), the Fold5 frame times (V2) and the shot rework (commit a68c16c), 2026-10-26.
 
 This is the contract every agent builds against: folders and owners, ids and data files, every public class with its methods and data shapes, routing, saves, resume, orientation, outbound links, the performance budget, the tests and the build plans for phase 5 (section 11) and phase 7 (section 13). Do not invent a public method that another area must call. If you need a change here, put it in your report for the DM.
 
@@ -896,7 +896,7 @@ func _process(delta: float) -> void:
 
 - Render and UI only read `Battle` fields and the state objects. Player actions are command calls made between frames, so each lands between two ticks.
 - Drawing between ticks: `lerp(Vector2(prev_pos), Vector2(pos), alpha)`, scaled from sub-units to map pixels.
-- A hit lands in the sim on the tick the tower fires. The render draws a projectile from the tower to `at` and may hold the hit flash or the puff until it arrives (RULES 5.2). The creature hit may already be gone from the state.
+- A hit lands in the sim on the tick the tower fires. The render draws a projectile from the tower toward `at` and may hold the hit flash or the puff until it arrives (RULES 5.2). Lobbed and burst shots land on `at`, the spot the sim hit; other shots follow their creature while it is still on the map (9.3). The creature hit may already be gone from the state.
 - Inspect panels call the query methods every frame while open. That is cheap.
 - On a fold or any resize only the layout changes (7.5).
 
@@ -1190,6 +1190,7 @@ signal roguelite_requested()
 signal daily_requested()
 func build() -> void                                   # the layers and the front door; _ready calls it, tests may call it first
 func apply_layout(window: Vector2, safe: Rect2) -> void   # lays out every screen and modal; called on every resize
+func leave_app() -> void                               # the app is being left: BattleScreen.pause_for_leave(), else a save (step 4)
 func handle_back() -> StringName                       # &"modal", &"page", or &"quit" when nothing is left (the caller quits)
 func push_screen(screen: ScreenFrame) -> void          # only the top screen shows
 func pop_screen() -> void                              # the front door is never removed
@@ -1205,9 +1206,17 @@ const LANDSCAPE_BELOW: float = 1.5
 const MIN_TOUCH: float = 160.0                         # at least 48 dp on every screen in 7.4
 const PAD: float = 36.0                                # outer padding of every screen, inside the safe area
 const CONTENT_MAX: float = 1100.0                      # text pages never get wider
+const GESTURE_MARGIN: float = 64.0                     # Android: the least room kept clear under the safe area, for the gesture bar (7.4)
 static func is_landscape(window_size: Vector2) -> bool # height < 1.5 x width
-static func safe_rect(viewport: Viewport) -> Rect2     # the display safe area in viewport coordinates
-static func safe_in_viewport(full: Vector2, window_px: Vector2, window_pos: Vector2, safe_screen: Rect2) -> Rect2   # the pure part of safe_rect, for tests
+static func safe_rect(viewport: Viewport) -> Rect2     # the display safe area in viewport coordinates. On Android (OS.has_feature("android"))
+                                                       # it keeps GESTURE_MARGIN clear at the bottom. A viewport that is not a Window gets
+                                                       # its whole rect.
+static func safe_in_viewport(full: Vector2, window_px: Vector2, window_pos: Vector2, safe_screen: Rect2, min_bottom: float = 0.0) -> Rect2
+                                                       # the pure part of safe_rect, for tests: the safe area mapped into the viewport, or
+                                                       # the whole viewport when the display reports nothing useful, then keep_bottom_clear()
+static func keep_bottom_clear(safe: Rect2, full: Vector2, min_bottom: float) -> Rect2   # safe, shortened so at least min_bottom of the
+                                                       # viewport stays clear below it. Unchanged when its bottom inset is already that big,
+                                                       # or when it would be left shorter than MIN_TOUCH.
 static func content_width(window_width: float, safe: Rect2) -> float   # the safe width less padding, capped at CONTENT_MAX
 
 class_name BattleClock extends RefCounted              # src/ui/battle_clock.gd: real time to whole ticks, counted in whole microseconds
@@ -1232,6 +1241,11 @@ func set_run(run: RunSession) -> void                  # after setup(): this bat
 func apply_layout(window: Vector2, safe: Rect2) -> void   # from ScreenFrame; the App calls it on every resize (7.5)
 func pause() -> void                                   # freezes the clock and opens Pause
 func is_paused() -> bool
+func needs_pause_menu() -> bool                        # a wave is on, Pause is not open, and the clock runs or only the HUD's Paused strip
+                                                       # holds it. False while a first sight card holds the wave.
+func pause_for_leave() -> bool                         # the app is being left: when needs_pause_menu(), pause() and true (Pause's
+                                                       # save_requested has saved). Else false and the caller saves. While a first sight
+                                                       # card holds the wave, Pause opens when the card closes, as after a resize (7.5).
 
 class_name Links extends RefCounted                    # src/ui/links.gd (section 8)
 ```
@@ -1255,7 +1269,7 @@ App flow:
 1. **Launch.** `GameData.load_from()`. If it has problems, show the damaged message and stop. Load settings, progress and the saved games (an invalid one is deleted), and the daily record (U3). Create the AudioService (3.8). Apply `UiTheme.build()`. Show the front door. Set `get_tree().quit_on_go_back = false`.
 2. **Play** opens ModeScreen. When any game is saved, the Continue card on top resumes the most recent one in one tap. A saved game also resumes from its own way in: the Roguelite or Daily button, or the saved level's card. Playing a different campaign level or Twist while one is saved asks first; a level and its own Twist count as different, since `SavedGame` has a `twist` flag. If the player confirms, the saved game ends as if abandoned from Pause, and nothing is recorded (RULES 4.10). Roguelite and Daily stay locked until `runs_open()`. Until U3 (section 13) sets `App.RUNS_BUILT` true, the Roguelite and Daily cards are locked with "Coming in a later update." whatever the stars, and tapping them does nothing. Until then the App also starts no run or daily, loads no daily record and resumes no saved run or daily, though `SaveStore.load_games()` loads and checks them.
 3. **Battle.** A campaign level: `Battle.create(level, catalog, relaxed, effects)`, where `effects` is the level's `twist_effects` when playing its Twist and empty otherwise. A normal run (phase 7): the App draws the seed (3.4), then `RunSession.start(seed, "", relaxed, game.run.pool(progress.unlock_counters()), game.run, game.catalog)`. The daily: `RunSession.start(RunSeeds.daily_seed(today), today, false, game.run.card_ids(), game.run, game.catalog)`, where `today` is `RunSeeds.day_key(Time.get_date_dict_from_system())`. Then `BattleScreen.setup()`, and for a run or daily `set_run()`, after which every call of the next wave goes through `run.start_next_wave()`. Every battle starts at 1x, a resumed one too (Bart, hard stop B). A resumed game opens paused, on the Pause menu.
-4. **Saving.** On `save_requested` the App saves that mode's game. A new level is also saved as soon as its battle opens. On `NOTIFICATION_APPLICATION_PAUSED`, `NOTIFICATION_APPLICATION_FOCUS_OUT` and `NOTIFICATION_WM_CLOSE_REQUEST` while a battle is open, it calls `battle_screen.pause()` if a wave is running, then saves. Settings and progress save when they change.
+4. **Saving.** On `save_requested` the App saves that mode's game. A new level is also saved as soon as its battle opens. `NOTIFICATION_APPLICATION_PAUSED`, `NOTIFICATION_APPLICATION_FOCUS_OUT` and `NOTIFICATION_WM_CLOSE_REQUEST` call `leave_app()`. With a game open, it calls `battle_screen.pause_for_leave()`. During a wave with no Pause menu up, whether the clock runs or only the HUD's Paused strip holds it, that opens the Pause menu, whose `save_requested` saves the game at that tick (QA 2026-10-26, p1). Otherwise (a build phase, Pause already open, or a first sight card holding the wave) the App saves the game itself, and a card that holds the wave opens Pause when it closes. Settings and progress save when they change.
 5. **End.** On `ended` the App deletes that mode's saved game, then records and saves. A won campaign level records its stars (`Progress.record_level`). A won Twist, on Normal or Relaxed, records the Twist (`Progress.record_twist`) and no stars. A run or daily records the counters, and a daily the daily record (U3). Then EndPanel shows for a campaign level or Twist, and RunEndPanel for a run or daily (U3). An abandoned game shows no end panel: the App goes back to the front door. An abandoned campaign level or Twist records nothing. An abandoned run or daily counts as lost at its current wave (RULES 14.7). For a run or daily, from `run.result()` (RULES 14.6): `raise(&"best_run_wave", reached)`; on a win `bump(&"runs_won", 1)`, also `bump(&"runs_won_normal", 1)` when not Relaxed, and `bump(&"risky_wins", 1)` when `risks` is 3 or more; for a daily, won, lost or abandoned, `bump(&"dailies_finished", 1)` and `DailyRecord.record_finish(run.day, result)` with `won`, `waves` and `lives` from `run.result()`.
 6. **Back button.** One press does exactly one step. `handle_back()`: close or answer the top modal first (a first sight card closes whole and counts as read), then go back one screen. A page opened from a modal, such as About from Settings, goes back before that modal closes. In a battle, an open build, tower or creature panel closes first, and the next press opens Pause. In the short wait between a battle's end and its end panel, a press shows the panel at once. On the front door or the damaged message, quit; everything is already saved. `handle_back()` returns `&"modal"` for a closed modal, a closed battle panel, Pause opening, or the end panel shown at once. A back press from the go-back notification and one from `ui_cancel` go through one entry that ignores a second press within 150 ms.
 7. **Resize.** The App connects its viewport's `size_changed` and calls `apply_layout(window, safe)` with `Layout.safe_rect()`, which lays out every screen and modal (7.5).
@@ -1288,6 +1302,7 @@ func record_tick_usec(usec: int) -> void               # how long one Battle.ste
 
 - MapView draws in its own local space, where a cell is `CELL` pixels, with `MapArt` and `Silhouettes` (3.9). `fit()` changes only the node's position and scale, so a fold re-fits one transform and every child, particles in flight included, keeps its place.
 - Towers and creatures draw in row order, lower on the screen in front, because a tower reaches up to 0.85 of a cell above its center. Creatures are drawn facing right; MapView flips a creature's node to face left. `frame` steps a 4 frame walk or flap cycle.
+- A creature the sim has removed stays drawn until the shot that hit it lands, then puffs into sparkles. While a wave is paused (the game time, tick plus alpha, has not moved since the last `sync()`; MapView keeps this in `_frozen`), MapView hides such creatures at once (`_hide_dying()`), so a paused map shows only what the battle holds. They stay hidden after Resume and puff when their shot lands. `visible_ghost_count()` counts the ones still drawn whole, for tests; it is 0 while paused (QA 2026-10-26, p2).
 - Gate looks (phase 7). A placed gate takes the first look that applies: `BROKEN` while it is broken, until it mends (RULES 9.7; a locked gate can break too, RULES 14.6); `OPEN` while `battle.gates_open` is true, even when the gate is fixed, because it blocks nothing then (4.2, `closed_cells()`); `FIXED` for a Twist's `fixed_gates` or a gate locked by `gates_stay`; else `CLOSED`. So OPEN wins over FIXED (DM, 2026-10-24). An empty socket is `SOCKET`, and a refused drop shows `REFUSED` (`show_refused()`).
 - `MapAtlas.add_gates()` (src/render/map_atlas.gd) bakes every look: it loops over `MapArt.Gate.size()`, never a fixed count.
 
@@ -1295,15 +1310,18 @@ func record_tick_usec(usec: int) -> void               # how long one Battle.ste
 
 ```gdscript
 class_name AudioService extends Node                   # src/audio/audio_service.gd
+func _init(gated: bool = OS.has_feature("mobile")) -> void   # gated: silent until the app is in front (below); tests pass true on a desktop
 func set_enabled(on: bool) -> void
 func play_events(events: Array[Dictionary]) -> void    # battle events to sounds, with caps (section 9)
 func play_ui(sound: StringName) -> void                # &"tap", &"refuse" (RULES 7.4) or &"star"
 func set_music(track: StringName) -> void              # &"menu", &"battle", or &"" for silence
+func is_in_front() -> bool                             # the app is in front, or the service is not gated
 ```
 
 - The App creates the service with `AudioService.new()`, adds it as its own child (no autoload), and calls `set_enabled(settings.sound_on)` once at boot, then again whenever the setting changes. It passes the service down with `setup()`.
 - AudioService makes its Sfx and Music buses at run time, so project.godot and the bus layout need nothing.
 - A shot's sound comes from the `fired` event's `tower` and `spec` (3.1).
+- Sound only in front, on phones (QA 2026-10-26). A service made on a phone (`OS.has_feature("mobile")`) is gated: it starts silent and comes to the front on `NOTIFICATION_APPLICATION_RESUMED` or `NOTIFICATION_APPLICATION_FOCUS_IN`. If neither arrives, its second frame counts as in front (`FRONT_FRAMES`), because a frame is drawn only once the activity has a surface. That fallback ends at the first leave. `NOTIFICATION_APPLICATION_PAUSED` and `NOTIFICATION_APPLICATION_FOCUS_OUT` stop every voice and the music at once, with no fade. Back in front, the music last asked for starts again. Sound plays only while it is on and in front (`_can_play()`). The node gets these notifications itself, so the App forwards nothing. On a desktop, such as Windows, the service is not gated unless a test passes `gated` true, so it is always in front. Why: Android logs "AudioHardening background playback" when audio starts a moment before the activity shows or plays on after it leaves, and a future Android may mute that.
 
 ### 3.9 Theme: src/theme/ (art-director)
 
@@ -1604,6 +1622,7 @@ The map never rotates. The same 7 column grid shows in both layouts; only the HU
 - **What stays in sight.** On the Fold5 cover in portrait, every build spot, gate socket, entrance, the home and any tower stay fully visible in the default build state, during waves and with the hint, on maps of 8 to 13 rows: the preview folds when it does not fit, the strip is one line, and a 13 row map keeps its bottom row scenery only (2.4, 2.9). The Paused strip and messages may cover more of the lower map, but never the highlighted cell. Measured on 2026-10-24 with the real battle screen at the test insets (96 px top, 171 px bottom): the room under the map is 443 px at 11 rows, 289 px at 12 and 134 px at 13; the open preview is 364 px for 1 or 2 groups, 388 px for 3 or 4 compact groups, 588 px for 5 or more, and 478 to 830 px for boss waves. Shorter screens, such as 20:9 and 16:9 phones, are height limited: the map fills its slot there, and the dock can cover part of the lowest rows. The Fold5 cover is the design target.
 - **Landscape:** the map at full height inside the safe area, and one side panel at least 720 logical px wide for the HUD, the build panel, the draft panel and the wave preview. The preview is always open there in a build phase, and the hint sits in the side panel. The call button highlight and look are the same as in portrait.
 - The project keeps its 1080 x 2400 base with `canvas_items` stretch and `expand`, so the cover screen is 1080 x 2767 logical px and the inner screen 1998 x 2400.
+- **The safe area and the gesture bar.** Every screen and modal lays out inside `Layout.safe_rect()`, which the App passes to `apply_layout` (3.6). The game runs in immersive mode (7.2). QA measured the Fold5 in that mode on 2026-10-26 (p4): on the cover the safe area leaves out only the camera cutout at the top (85 px), and the bottom inset reads 0, though the gesture bar still takes the bottom 39 px. The inner screen reports no cutout and has the same 39 px gesture strip. Godot 4.7.2 gives no gesture inset (`DisplayServer` has only `get_display_safe_area()` and `get_display_cutouts()`). So on Android `safe_rect()` keeps at least `Layout.GESTURE_MARGIN`, 64 logical px, clear at the bottom, on every screen: about 20 dp on the cover and 22 dp on the inner screen, where the strip is about 47 and 43 logical px. A larger bottom inset that the display reports stays as it is. A thumb near the bottom edge then does not start a system swipe. The tests still use the test insets above (96 px top, 171 px bottom on the cover), and tests/ui also lays out the battle screen at the cover's immersive safe area.
 - An entrance thicket (3.9) that reaches past the map edge may sit under the HUD or the dock, or past the screen edge.
 
 Touch size, with SumUp's measured densities and the same base viewport:
@@ -1621,9 +1640,9 @@ Bart approved 7 columns by 8 to 13 rows at hard stop A, so map cells stay at 48 
 
 1. Android resizes the window. Godot keeps running (7.2).
 2. The App gets `size_changed` and calls `apply_layout(window, safe)` on every screen, BattleScreen included.
-3. If a wave is running and the game is not paused, BattleScreen's `apply_layout` first calls `pause()`. Bart chose this at hard stop A. Any size change during a wave pauses, so split screen and pop-up windows behave the same as a fold.
+3. During a wave, BattleScreen's `apply_layout` first calls `pause()` when `needs_pause_menu()` is true: the Pause menu is not open, and the clock runs or only the HUD's Paused strip holds it. So the game ends up on the Pause menu, never on the strip alone (QA 2026-10-26, p1). While a first sight card holds the wave, the card stays on top and the Pause menu opens when it closes. Leaving the app takes the same path through `pause_for_leave()` (step 5, 3.6 step 4). Bart chose the pause at hard stop A. Any size change during a wave pauses, so split screen and pop-up windows behave the same as a fold.
 4. `apply_layout` picks the layout, moves the HUD parts into the portrait or landscape container and calls `map_view.fit(map_rect)`. It never frees a node that holds state and never touches the Battle. The selection, an open panel and the speed stay. A touch in progress (a gate drag, a held button) is cancelled.
-5. If the fold comes with a focus loss (Samsung can ask whether to continue on the cover screen), the game also saves, as for any focus loss.
+5. If the fold comes with a focus loss (Samsung can ask whether to continue on the cover screen), `leave_app()` runs as for any focus loss (3.6 step 4), and the game is saved at that tick. The focus loss and the resize may come in either order, and only one Pause menu opens.
 6. If Android ever recreates the activity anyway, the engine restarts and the exact moment save resumes the battle (section 6).
 
 ### 7.6 Settings for the DM and the release engineer
@@ -1646,7 +1665,7 @@ export_presets.cfg (release-engineer):
   - `launcher_icons/adaptive_background_432x432="res://icons/icon_background_432.png"`
   - `launcher_icons/adaptive_monochrome_432x432="res://icons/icon_monochrome_432.png"`
 - `package/app_category=2` (Game, the default).
-- `screen/immersive_mode=true` and `screen/edge_to_edge=false` (the defaults). The UI uses the safe area. QA checks the cover screen's camera cutout and the inner screen's taskbar inset.
+- `screen/immersive_mode=true` and `screen/edge_to_edge=false` (the defaults). The UI uses the safe area, with the gesture margin at the bottom on Android (7.4). QA checks the cover screen's camera cutout and the inner screen's taskbar inset.
 - `screen/support_small`, `support_normal`, `support_large` and `support_xlarge` all true.
 - `gradle_build/target_sdk` and `min_sdk` empty (36 and 24).
 - `user_data_backup/allow=false` and `package/retain_data_on_uninstall=false`. The app never sends saves anywhere, and they go with an uninstall. Cloud and adb backup are off, but some phones can still move app files in a device to device transfer [7] (security review N5).
@@ -1705,10 +1724,10 @@ Target: 60 fps on the Fold5 (Snapdragon 8 Gen 2), on both screens, through the l
 |---|---|---|
 | Live creatures at once, Puffs and releases included | 200 | The planned peak. The spawn bound (2.4) holds one wave to 120 counting splits, and at most `max_waves_running` (2) waves run at once, so a failing defense can see more: up to 240 plus boss summons. The bots report the real peak. |
 | Towers | 24 | Build spots per map (2.3) |
-| Drawn projectiles in flight | 150 | The render pools them. The sim has no shots: hits land at once. |
+| Drawn projectiles in flight | 96 | `MapShots.MAX_SHOTS`: a new shot past it drops the oldest. The sim has no shots: hits land at once. |
 | Particles alive | 400 | Pooled emitters, at most 24, at most 16 particles per puff |
 | Sound voices | 12 | At most 3 of the same sound at once |
-| Draw calls per frame | about 200 | Measured |
+| Draw calls per frame | up to about 420, as measured | V2 on the Fold5, before the shot rework (docs/render/perf-fold5-2026-10-26.md): 129 to 421 a frame, about 130 to 160 in the middle of a big wave, and up to about 420 around the start of a wave and in a build phase with the full info panel. Every wave measured held 120 fps. The shot rework (commit a68c16c) draws shots and marks from the atlas in one batch, which roughly halved draw calls in real waves on the PC. The Fold5 has not been measured since. |
 
 ### 9.2 Time per frame on the Fold5 (16.7 ms)
 
@@ -1729,8 +1748,9 @@ These Fold5 numbers are the budget. The dev PC number is only an early warning.
 ### 9.3 Draw approach
 
 - The static map (`MapArt.draw_ground`) is drawn once into its own layer and redrawn only on a resize of the cell size. Gates, route lines and highlights draw on their own small layers.
-- One Node2D per tower and per creature, drawn with `Silhouettes` and redrawn only when its look or animation frame changes. Each frame only its position changes. Nodes are pooled and reused.
-- Health bars for hurt creatures and all projectiles are drawn by one overlay node each, redrawn every frame.
+- Every tower look, creature frame, status mark, gate look and shot piece is drawn once with `Silhouettes`, `MapArt` or `ShotPieces` into one sheet, `MapAtlas` (src/render/map_atlas.gd). The sheet is drawn again only when a new look joins it or the map's scale on screen calls for a different sharpness. A tower or a creature is one pooled `Sprite2D`, a region of that sheet. Each frame it only moves. Its region changes with its look or animation frame, and a tower grows in when it is built and kicks back for a moment when it fires.
+- Health bars for hurt creatures, with the drowsy, bubble and boost marks, are one overlay node (`MapStatus`). Shots and their short marks are another (`MapShots`). Each is redrawn every frame while it has something to show.
+- Shots (the shot rework, commit a68c16c, 2026-10-26). `MapShots` draws every shot and mark as tinted, scaled and turned quads of the sheet, so a frame of shots batches into very few draw calls. The pieces are `ShotPieces` (src/render/shot_pieces.gd), added to the sheet as `MapAtlas.Kind.PIECE` entries by `MapAtlas.add_shot_pieces()`, which loops over `ShotPieces.Piece.size()`. Each shot has a launch mark at the tower (`MapShots.Fx.MUZZLE`), a body with a short trail, and a landing mark. A catapult's lobbed shot (`MapShots.Look.PUMPKIN`, `JAM`, or `PRIZE` for the `prize_pumpkin` path) shows its tower's real splash area on the ground while it flies and lands in a splash of that size (`Fx.SPLASH`). Lobbed and burst shots fly to the `at` of their `fired` event, the spot the sim hit; other shots follow their creature while it is on the map (3.2). A tower kicks back when it fires, by an amount set per shot look, and most looks also lean the tower away from its first target. At most 96 shots and 90 marks; a new one drops the oldest. Render only: the sim and its `fired` events did not change, and hits still land on the tick a tower fires.
 - Sparkle puffs use pooled one-shot `CPUParticles2D` emitters (simulated in C++, predictable in the Compatibility renderer).
 - No `Light2D`, no screen-reading shaders (`SCREEN_TEXTURE`, `BackBufferCopy`), no full-screen transparent layers beyond one sky gradient. Keep shared materials, so the Compatibility renderer can batch.
 - Inside the sim: each tower keeps the list of road cells in its reach, rebuilt only when towers change. Walkers are bucketed by cell each tick, so targeting checks nearby creatures, not all of them. Flyers, being few, are checked directly.
