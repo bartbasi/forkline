@@ -82,7 +82,7 @@ The script does what `build.sh` does (version check, import with retries, a priv
 | File | What it is |
 |---|---|
 | build/forkline-release.aab | The app bundle that Play Console takes. Signed with the upload key. |
-| build/forkline-release.apk | A release APK for side loading and the GitHub release. Same key, native code compressed. |
+| build/forkline-release.apk | A release APK for checking the release build on a phone. Same key, native code compressed. It is not attached to GitHub test builds (see below). |
 
 Both have package `io.github.bartbasi.forkline`, version code and name from `export_presets.cfg` (now 1 and 0.1), arm64-v8a only, no permissions, and the same immersive and portrait settings as the debug APK. The bundle keeps the game files in an install time asset pack (`assetPackInstallTime/assets/`), which is how Godot lays out a Gradle bundle.
 
@@ -243,7 +243,7 @@ Each verified milestone gets a public pre-release with the APK attached. The ful
    sha256sum forkline-debug.apk > forkline-debug.apk.sha256
    ```
 2. Tag name: `v0.1-testN`, where N counts the test builds (`v0.1-test1`, `v0.1-test2`, ...). The tag points at the verified commit.
-3. Write the release notes to a file: what changed, and that this is a debug signed test build, not a store release. Debug builds are signed with the Android debug key. Release signing is ask first and has not been approved.
+3. Write the release notes to a file: what changed, and that this is a debug signed test build, not a store release. GitHub test builds stay debug signed, with the Android debug key, for now. That way testers can keep installing over earlier test builds and keep their progress, because a build signed with a different key would not install over them. Whether GitHub ever carries release signed builds is a later decision for Bart.
 4. Create the release. Use the full 40 character sha of the verified commit for `--target`:
 
    ```bash

@@ -18,12 +18,17 @@ const SIZE: Vector2i = Vector2i(1080, 2160)
 ## A small top inset, as a phone's camera cutout would leave.
 const SAFE: Rect2 = Rect2(0.0, 72.0, 1080.0, 2088.0)
 const SAVE_DIR: String = "user://store_shots/"
+## The build phase picture: level 1-2 before wave 5. The wave picture: level 3-2.
 const LEVEL: StringName = &"r1_l2"
+const BUILD_AT: int = 4
+const WAVE_LEVEL: StringName = &"r3_l2"
 const SCREENS: Array[String] = ["front_door", "modes", "levels", "build", "wave"]
 ## The stars shown on the level list: level id to star bits.
 const STARS: Dictionary[StringName, int] = {&"r1_l1": 7, &"r1_l2": 7, &"r1_l3": 7, &"r1_l4": 7, &"r1_l5": 1}
 ## How many waves are played out of sight before the pictures are taken.
-const WAVE_AT: int = 4
+const WAVE_AT: int = 5
+## The lowest frame score the wave picture may have.
+const MIN_SCORE: int = 30
 const WAVE_SECONDS: float = 25.0
 ## Gold given before each round of building, for the picture only.
 const SHOT_GOLD: int = 700
@@ -111,21 +116,21 @@ func _start_app() -> void:
 	await _frames(6)
 
 
-## The Fork: a few waves played out of sight with a real defense, then the build phase
-## with route lines, then a wave in progress.
-func _battle() -> void:
-	_app.start_level(LEVEL, false)
+## Plays a level through the real screens: a defense is built, a few waves are played out of
+## sight, and the screen is left in the build phase before the next wave. Null if it did not start.
+func _prepare_battle(level: StringName, waves_before: int) -> BattleScreen:
+	_app.start_level(level, false)
 	await _frames(4)
 	var screen: BattleScreen = _app.battle_screen()
 	if screen == null:
 		printerr("The battle did not start.")
 		_failed += 1
-		return
+		return null
 	var b: Battle = screen.battle
 	_spend(screen)
 	if not b.level.sockets.is_empty():
 		b.place_gate(b.level.sockets[0])
-	while b.waves_started < WAVE_AT and b.phase == Battle.Phase.BUILD:
+	while b.waves_started < waves_before and b.phase == Battle.Phase.BUILD:
 		b.start_next_wave()
 		var guard: int = 0
 		while b.phase == Battle.Phase.WAVE and guard < 20000:
@@ -137,14 +142,34 @@ func _battle() -> void:
 	screen.close_context()
 	b.gold = SHOWN_GOLD
 	await _frames(8)
+	return screen
+
+
+## The build phase on The Fork, with route lines, then a wave on a later level.
+func _battle() -> void:
 	if _wants("build"):
+		var screen: BattleScreen = await _prepare_battle(LEVEL, BUILD_AT)
+		if screen == null:
+			return
 		await _shoot("screen_4_build_phase.png")
-	if not _wants("wave") or b.phase != Battle.Phase.BUILD:
+		screen.left.emit()
+		await _frames(6)
+	if _wants("wave"):
+		await _wave_picture()
+
+
+## A wave in progress on WAVE_LEVEL. Every frame is looked at and the busiest one is kept.
+func _wave_picture() -> void:
+	var screen: BattleScreen = await _prepare_battle(WAVE_LEVEL, WAVE_AT)
+	if screen == null:
+		return
+	var b: Battle = screen.battle
+	if b.phase != Battle.Phase.BUILD:
+		printerr("The level ended before the wave picture.")
+		_failed += 1
 		return
 	b.start_next_wave()
 	screen.clock.speed = 2
-	# Look at every frame of the wave and keep the busiest one: creatures on the road, shots
-	# in the air and sparkles from beaten creatures.
 	var best: Image = null
 	var best_score: int = -1
 	var started: int = Time.get_ticks_usec()
@@ -153,17 +178,47 @@ func _battle() -> void:
 		var elapsed: float = float(Time.get_ticks_usec() - started) / 1000000.0
 		if elapsed > WAVE_SECONDS:
 			break
-		var map: MapView = screen.map_view
-		var score: int = mini(b.enemies.size(), 6) + 3 * mini(map.projectile_count(), 5) + mini(map.sparkles().active_count(), 4)
-		if b.enemies.size() >= 3 and map.projectile_count() >= 2 and score > best_score:
+		var score: int = _wave_score(b, screen.map_view)
+		if score > best_score:
 			best_score = score
 			best = _host.get_texture().get_image()
-	if best == null:
-		printerr("No frame of the wave showed shots in the air.")
+	if best == null or best_score < MIN_SCORE:
+		printerr("No frame of the wave was busy enough (best score %d)." % best_score)
 		_failed += 1
-		return
+		if best == null:
+			return
 	print("wave picture score: %d" % best_score)
 	_save(best, "screen_5_wave.png")
+
+
+## How good this frame looks for a store picture, or -1 when it is not usable. It wants
+## creatures spread along the road (not one stack), a lobbed shot or a splash, and shots of more
+## than one kind in the air.
+func _wave_score(b: Battle, map: MapView) -> int:
+	var shots: MapShots = map.get("_shots") as MapShots
+	if shots == null or b.enemies.size() < 4:
+		return -1
+	var looks: Dictionary[int, bool] = {}
+	var lobbed: int = 0
+	for s: MapShots.Shot in shots.shots:
+		looks[s.look] = true
+		if MapShots.is_lobbed(s.look):
+			lobbed += 1
+	var splashes: int = 0
+	for f: MapShots.Flash in shots.flashes:
+		if f.kind == MapShots.Fx.SPLASH:
+			splashes += 1
+	if lobbed + splashes == 0 or looks.size() < 2:
+		return -1
+	# Pairs of creatures closer than a third of a cell look like one stack.
+	var close: int = 0
+	var near: int = Sim.UNIT / 3
+	for i: int in b.enemies.size():
+		for j: int in range(i + 1, b.enemies.size()):
+			if (b.enemies[i].pos - b.enemies[j].pos).length_squared() < near * near:
+				close += 1
+	var spread: int = maxi(mini(b.enemies.size(), 8) - mini(close, 6), 0)
+	return 4 * mini(looks.size(), 4) + 5 * mini(lobbed, 2) + 3 * mini(splashes, 2) 		+ 2 * mini(shots.shots.size(), 6) + 2 * spread + mini(map.sparkles().active_count(), 4)
 
 
 ## Builds and upgrades through the screen's own panels. The gold is topped up first, so the
