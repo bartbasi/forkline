@@ -124,6 +124,40 @@ func test_a_lobbed_shot_keeps_its_splash_where_the_hit_was_worked_out() -> void:
 	assert_true(found, "a splash")
 
 
+func test_the_dashed_ring_stays_on_the_real_hit_while_the_shot_slides() -> void:
+	var b: Battle = Fx.arena([[Fx.group("scamp", 6, 200)]], 1000)
+	assert_true(Fx.build(b, Vector2i(4, 2), &"pumpkin_catapult", 1))
+	var v: MapView = _view(b)
+	var shots: MapShots = v.get("_shots") as MapShots
+	b.start_next_wave()
+	assert_true(_until_fired(b, v))
+	var shot: MapShots.Shot = shots.shots[0]
+	var spot: Vector2 = shot.spot
+	var slid: bool = false
+	var guard: int = 0
+	while not shots.shots.is_empty() and guard < 200:
+		v.sync(1.0)
+		Fx.tick(b)
+		v.sync(1.0)
+		guard += 1
+		if shot.to != spot:
+			slid = true
+		assert_eq(MapShots.landing_mark_center(shot), spot, "the ring is centered on the real hit")
+		if shots.now >= shot.t1 - 0.001:
+			break
+		v.advance_effects(0.02)
+	assert_true(slid, "the shot body slid toward the creature")
+	# The same, with a creature far away, so the slide is at its longest.
+	var lone: MapShots = MapShots.new()
+	var real: Vector2 = Vector2(5.0, 4.0) * MapShots.CELL
+	lone.launch(MapShots.Look.PUMPKIN, Vector2(2.0, 2.0) * MapShots.CELL, real, 3, 0.0, 96.0)
+	var pumpkin: MapShots.Shot = lone.shots[0]
+	lone.aim_at(pumpkin, real + Vector2(0.0, 300.0))
+	assert_ne(pumpkin.to, real, "the body slid")
+	assert_eq(MapShots.landing_mark_center(pumpkin), real, "the ring did not")
+	lone.free()
+
+
 func test_a_lobbed_shot_and_a_rocket_come_down_on_their_creature_inside_the_true_area() -> void:
 	for look: int in [MapShots.Look.PUMPKIN, MapShots.Look.JAM, MapShots.Look.PRIZE, MapShots.Look.ROCKET, MapShots.Look.BLOOM]:
 		var shots: MapShots = MapShots.new()

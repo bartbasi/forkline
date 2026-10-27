@@ -120,8 +120,9 @@ static func is_lobbed(look: int) -> bool:
 	return look == Look.PUMPKIN or look == Look.JAM or look == Look.PRIZE
 
 
-## True for the looks that end in a burst or a splash at the spot the sim hit. They fly to that
-## spot and do not follow the creature, which walks on.
+## True for the looks that end in a burst or a splash at the spot the sim hit (the lobbed shots, the
+## Rocket and the Bloom). Their picture follows the creature, which walks on, but only a short way
+## (AIM_REACH of the splash radius), so the area itself stays centered on the spot the sim hit.
 static func lands_on_spot(look: int) -> bool:
 	return is_lobbed(look) or look == Look.ROCKET or look == Look.BLOOM
 
@@ -154,8 +155,9 @@ static func _muzzle_full(tower: StringName, cell: Vector2i, tier: int, spec: int
 	return c + Vector2(0.0, -0.5) * CELL
 
 
-## Starts a shot and returns the time it arrives. `splash` is the splash radius in pixels of a
-## lobbed shot (0 draws no splash area on the ground). A mark is made where it leaves.
+## Starts a shot and returns the time it arrives. `splash` is the splash radius in pixels of a shot
+## that lands on a spot (a lobbed shot, a Rocket, a Bloom). A lobbed shot draws it on the ground while
+## it flies, and the landing splash or burst has it. 0 draws no area. A mark is made where it leaves.
 func launch(look: int, from: Vector2, to: Vector2, target: int, at_time: float, splash: float = 0.0) -> float:
 	var length_cells: float = from.distance_to(to) / CELL
 	var flight: float = clampf(length_cells / SPEED[look], SHORTEST[look], LONGEST[look])
@@ -662,14 +664,21 @@ func _draw_shot(s: Shot, p: Vector2, dir: Vector2, u: float) -> void:
 			_draw_rocket(p, dir, u, 1.2, false)
 
 
-## The splash area of a lobbed shot, on the ground where it will land: a dashed ring of the true
+## The splash area of a lobbed shot, on the ground where it will land (the spot the sim hit): a dashed ring of the true
 ## splash radius that closes in a little and turns as the shot comes down.
 func _draw_landing_mark(s: Shot, u: float) -> void:
 	if s.radius <= 0.0:
 		return
 	var r: float = s.radius * (1.1 - 0.1 * u)
-	_disc(s.to, r, Color(Palette.SPARKLE, 0.1))
-	_dashes(s.to, r, u * 1.5, Color(1, 1, 1, 0.95))
+	var at: Vector2 = landing_mark_center(s)
+	_disc(at, r, Color(Palette.SPARKLE, 0.1))
+	_dashes(at, r, u * 1.5, Color(1, 1, 1, 0.95))
+
+
+## Where the ground mark of a lobbed shot is centered: on the spot the sim hit, where the splash will
+## be. It never slides with the picture of the shot (`s.to`), which follows the creature.
+static func landing_mark_center(s: Shot) -> Vector2:
+	return s.spot
 
 
 ## An arrow whose head is at `p`. The Giant Bow's is twice as long and thick. Speed streaks run
