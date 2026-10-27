@@ -5,8 +5,13 @@ extends RefCounted
 ## One checked level or assembled run map (docs/ARCHITECTURE.md 2.3, 2.4). Read only.
 
 enum Kind { SCENERY, ROAD, SOCKET, SPOT, ENTRANCE, BASE }
+## Map features (docs/ARCHITECTURE.md 14.2, RULES 3.5 to 3.9). Each is a road tile.
+enum Feature { NONE, TUNNEL, BRIDGE, SLIDE, STUMP }
 const FORMAT: int = 1
-const GRID_CHARS: String = ".#Go1234B"
+const GRID_CHARS: String = ".#Go1234BTX^v<>PQ"
+## The characters kind_at() gives ROAD, SOCKET, ENTRANCE or BASE for.
+const ROAD_CHARS: String = "#G1234BTX^v<>PQ"
+const MAX_TOWER_KINDS: int = 10
 const MAX_SPOTS: int = 24
 const MAX_SOCKETS: int = 8
 const MAX_WAVES: int = 40
@@ -113,7 +118,41 @@ func kind_at(cell: Vector2i) -> Kind:
 			return Kind.BASE
 		49, 50, 51, 52:  # "1" to "4"
 			return Kind.ENTRANCE
+		84, 88, 94, 118, 60, 62, 80, 81:  # the features: "T", "X", "^", "v", "<", ">", "P", "Q"
+			return Kind.ROAD
 	return Kind.SCENERY
+
+
+## NONE outside the map and on every character of contract 2.3.
+func feature_at(cell: Vector2i) -> Feature:
+	if cell.x < 0 or cell.x >= Sim.MAP_COLUMNS or cell.y < 0 or cell.y >= rows:
+		return Feature.NONE
+	match grid[cell.y].unicode_at(cell.x):
+		84:  # "T"
+			return Feature.TUNNEL
+		88:  # "X"
+			return Feature.BRIDGE
+		94, 118, 60, 62:  # "^", "v", "<", ">"
+			return Feature.SLIDE
+		80, 81:  # "P", "Q"
+			return Feature.STUMP
+	return Feature.NONE
+
+
+## A slide's way out: ^ (0, -1), v (0, 1), < (-1, 0), > (1, 0); (0, 0) on any other cell.
+func slide_dir(cell: Vector2i) -> Vector2i:
+	if cell.x < 0 or cell.x >= Sim.MAP_COLUMNS or cell.y < 0 or cell.y >= rows:
+		return Vector2i.ZERO
+	match grid[cell.y].unicode_at(cell.x):
+		94:  # "^"
+			return Vector2i(0, -1)
+		118:  # "v"
+			return Vector2i(0, 1)
+		60:  # "<"
+			return Vector2i(-1, 0)
+		62:  # ">"
+			return Vector2i(1, 0)
+	return Vector2i.ZERO
 
 
 func is_road(cell: Vector2i) -> bool:
@@ -147,7 +186,7 @@ func _read(data: Variant, catalog: Catalog, chk: DataCheck) -> void:
 	if gates > sockets.size():
 		chk.fail("gates", "must be at most the socket count")
 	strength = chk.integer(top, "strength", "", 50, 1000, 1, 100)
-	var tower_list: Array = chk.array(top, "towers", "", 1, 6)
+	var tower_list: Array = chk.array(top, "towers", "", 1, MAX_TOWER_KINDS)
 	for i: int in tower_list.size():
 		var tower_id: StringName = chk.ident_value(tower_list[i], "towers[%d]" % i)
 		if tower_id == &"":
@@ -198,10 +237,13 @@ func _read_grid(lines: Array, chk: DataCheck) -> bool:
 	rows = grid.size()
 	var by_number: Dictionary[int, Vector2i] = {}
 	var bases: int = 0
+	var stumps: Dictionary[String, Array] = {"P": [], "Q": []}
 	for r: int in rows:
 		for c: int in Sim.MAP_COLUMNS:
 			var cell: Vector2i = Vector2i(c, r)
 			var ch: int = grid[r].unicode_at(c)
+			if feature_at(cell) == Feature.STUMP:
+				stumps[grid[r][c]].append(cell)
 			match kind_at(cell):
 				Kind.SOCKET:
 					sockets.append(cell)
@@ -226,6 +268,17 @@ func _read_grid(lines: Array, chk: DataCheck) -> bool:
 	if bases != 1:
 		chk.fail("grid", "must hold exactly one base")
 		good = false
+	# 14.2: twin stumps. A step between neighbors is always a walk, so twins never touch.
+	for letter: String in stumps:
+		var pair: Array = stumps[letter]
+		if pair.size() != 0 and pair.size() != 2:
+			chk.fail("grid", "%s must appear exactly twice or not at all" % letter)
+			good = false
+		elif pair.size() == 2:
+			var gap: Vector2i = (pair[1] as Vector2i) - (pair[0] as Vector2i)
+			if absi(gap.x) + absi(gap.y) == 1:
+				chk.fail("grid", "the two %s stumps must not be neighbors" % letter)
+				good = false
 	if by_number.is_empty():
 		chk.fail("grid", "must hold 1 to 4 entrances")
 		good = false

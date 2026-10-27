@@ -82,6 +82,7 @@ class Release extends RefCounted:
 	var from_cell: Vector2i = Vector2i.ZERO            # a released walker's step
 	var to_cell: Vector2i = Vector2i.ZERO
 	var progress: int = 0
+	var to_node: int = -1                              # the node that step arrives at, never saved
 	var pos: Vector2i = Vector2i.ZERO                  # a released flyer's start
 
 
@@ -125,9 +126,13 @@ var _summoners: Array[EnemyState] = []                 # creatures with a summon
 var _next_id: int = 0
 var _gates_added: int = 0                              # gates gained from cards (add_gates)
 var _events: Array[Dictionary] = []
-var _dist: PackedInt32Array = PackedInt32Array()       # walker distances for the closed set now
-var _free_dist: PackedInt32Array = PackedInt32Array()  # distances with no gates (the breaker route)
-var _closed_mask: PackedByteArray = PackedByteArray()  # 1 for a cell closed to walkers now
+var _dist: PackedInt32Array = PackedInt32Array()       # walker distances per node for the closed set now
+var _free_dist: PackedInt32Array = PackedInt32Array()  # distances per node with no gates (the breaker route)
+var _closed_mask: PackedByteArray = PackedByteArray()  # per cell: 1 for a cell closed to walkers now
+# Map features (14.2, RULES 3.5). On a map with none, no rule below costs anything a tick.
+var _tunnel: PackedByteArray = PackedByteArray()       # per cell: 1 for a tunnel tile
+var _has_stumps: bool = false                          # the map has twin steps
+var _reach_features: bool = false                      # tunnels or stumps: walkers can be out of reach
 var _has_bells: bool = false
 # Effects folded once (2.8), worked out again when they change.
 var _banned: Array[StringName] = []
@@ -212,6 +217,15 @@ func _setup(level_data: LevelData, stats: Catalog) -> void:
 	_free_dist = map.distances([])
 	_head.resize(map.size())
 	_closed_mask.resize(map.size())
+	_tunnel.resize(map.size())
+	for i: int in map.size():
+		match level.feature_at(Vector2i(i % Sim.MAP_COLUMNS, i / Sim.MAP_COLUMNS)):
+			LevelData.Feature.TUNNEL:
+				_tunnel[i] = 1
+				_reach_features = true
+			LevelData.Feature.STUMP:
+				_has_stumps = true
+				_reach_features = true
 	_refund_pct = stats.rules.refund_pct
 
 
@@ -715,6 +729,7 @@ func _spawn_step() -> void:
 			else:
 				enemy.from_cell = cell
 				enemy.to_cell = cell
+				enemy.to_node = map.node_of(cell)
 				enemy.progress = Sim.UNIT
 			_add_enemy(enemy)
 	# Boss summons (6.3): a batch begins at the boss's spot now. Summoners are kept in
@@ -744,6 +759,7 @@ func _spawn_step() -> void:
 		else:
 			enemy.from_cell = release.from_cell
 			enemy.to_cell = release.to_cell
+			enemy.to_node = release.to_node
 			enemy.progress = release.progress
 		_add_enemy(enemy)
 		release.left -= 1
@@ -764,6 +780,7 @@ func _begin_release(source: EnemyState, type: StringName, count: int, gap: int, 
 	release.gap = gap
 	release.from_cell = source.from_cell
 	release.to_cell = source.to_cell
+	release.to_node = source.to_node
 	release.progress = source.progress
 	release.pos = source.pos
 	_releases.append(release)
@@ -813,7 +830,7 @@ func _heal(mender: EnemyState) -> void:
 ## breaks now and distances are worked out again (7.8). If the gate ahead is no longer
 ## closed (another breaker broke it), the breaking is over and it walks on.
 func _break_tick(enemy: EnemyState) -> void:
-	var ahead: Vector2i = map.next_step(enemy.to_cell, _free_dist)
+	var ahead: Vector2i = map.node_cell(map.next_node(enemy.to_node, _free_dist))
 	if not _is_closed(ahead):
 		enemy.breaking = 0
 		return
@@ -866,7 +883,7 @@ func _move_step() -> void:
 				enemy.flown = enemy.fly_length
 				through = true
 			_place(enemy)
-		elif enemy.progress + amount < Sim.UNIT:
+		elif enemy.progress + amount < Sim.UNIT and not (_has_stumps and _is_twin_step(enemy)):
 			# Inside its step: the position moves exactly `amount` along the step.
 			enemy.progress += amount
 			enemy.pos += (enemy.to_cell - enemy.from_cell) * amount
@@ -887,9 +904,11 @@ func _move_step() -> void:
 	_compact()
 
 
-## Moves a walker along cell centers (7.3). Returns true when it reaches the base. A
-## breaker whose next cell holds a closed gate stops at this center and starts breaking
-## it (7.7); the rest of its movement this tick is lost.
+## Moves a walker along the node graph, deciding at cell centers (7.3, docs/ARCHITECTURE.md
+## 14.3). Returns true when it reaches the base. A breaker whose next node holds a closed
+## gate stops at this center and starts breaking it (7.7); the rest of its movement this
+## tick is lost. A twin step done this tick sets prev_pos to the twin's center, where it
+## landed, so nothing is drawn across the jump.
 func _walk(enemy: EnemyState, amount: int) -> bool:
 	var dist: PackedInt32Array = _free_dist if enemy.breaker else _dist
 	var budget: int = amount
@@ -898,18 +917,20 @@ func _walk(enemy: EnemyState, amount: int) -> bool:
 			if enemy.to_cell == level.base:
 				_place(enemy)
 				return true
-			var next: Vector2i = map.next_step(enemy.to_cell, dist)
-			if enemy.breaker and _is_closed(next):
+			var next: int = map.next_node(enemy.to_node, dist)
+			var next_cell: Vector2i = map.node_cell(next)
+			if enemy.breaker and _is_closed(next_cell):
 				# It starts breaking the moment it reaches the center (7.7).
 				if enemy.breaking == 0:
 					enemy.breaking = enemy.break_ms * 100
-					_emit({"kind": &"break_started", "id": enemy.id, "cell": next})
+					_emit({"kind": &"break_started", "id": enemy.id, "cell": next_cell})
 				break
-			if budget <= 0 or next == enemy.to_cell:
+			if budget <= 0 or next == enemy.to_node:
 				break
 			enemy.breaking = 0
 			enemy.from_cell = enemy.to_cell
-			enemy.to_cell = next
+			enemy.to_cell = next_cell
+			enemy.to_node = next
 			enemy.progress = 0
 		var room: int = Sim.UNIT - enemy.progress
 		if budget < room:
@@ -917,8 +938,26 @@ func _walk(enemy: EnemyState, amount: int) -> bool:
 			break
 		enemy.progress = Sim.UNIT
 		budget -= room
+		if _has_stumps and _is_twin_step(enemy):
+			enemy.prev_pos = Sim.center(enemy.to_cell)
 	_place(enemy)
 	return false
+
+
+## A step between two stumps that are not neighbors (14.2 keeps twins apart).
+static func _is_twin_step(enemy: EnemyState) -> bool:
+	var gap: Vector2i = enemy.to_cell - enemy.from_cell
+	return absi(gap.x) + absi(gap.y) > 1
+
+
+## RULES 8.8: a walker whose center is in a tunnel tile, or on a twin step that is not
+## done, is out of reach. Never a flyer.
+func _out_of_reach(enemy: EnemyState) -> bool:
+	if enemy.flying or not _reach_features:
+		return false
+	if _tunnel[(enemy.pos.y / Sim.UNIT) * Sim.MAP_COLUMNS + enemy.pos.x / Sim.UNIT] == 1:
+		return true
+	return _has_stumps and enemy.progress < Sim.UNIT and _is_twin_step(enemy)
 
 
 ## Step 5: attacking towers in spot order. Hits land at once (5.2, 8.2 to 8.6).
@@ -1042,6 +1081,8 @@ func _wave_step() -> void:
 # Combat.
 
 ## Buckets walkers by the cell they stand on, so a tower checks only cells in its reach.
+## Out of reach walkers are worked out here and left out, so no tower, splash or Bell
+## reaches them (RULES 8.8).
 func _bucket() -> void:
 	_head.fill(-1)
 	_link.resize(enemies.size())
@@ -1052,6 +1093,10 @@ func _bucket() -> void:
 			_flyer_list.append(i)
 			continue
 		var cell: int = (enemy.pos.y / Sim.UNIT) * Sim.MAP_COLUMNS + enemy.pos.x / Sim.UNIT
+		if _reach_features:
+			enemy.out_of_reach = _tunnel[cell] == 1 or (_has_stumps and enemy.progress < Sim.UNIT and _is_twin_step(enemy))
+			if enemy.out_of_reach:
+				continue
 		_link[i] = _head[cell]
 		_head[cell] = i
 
@@ -1073,8 +1118,7 @@ func _pick_targets(tower: TowerState, stats: TowerStats) -> Array[int]:
 					found.append(i)
 					# _to_go() for a walker, inlined: this loop is the hottest in the sim.
 					var dist: PackedInt32Array = _free_dist if enemy.breaker else _dist
-					var step_to: Vector2i = enemy.to_cell
-					to_go.append(dist[step_to.y * Sim.MAP_COLUMNS + step_to.x] * Sim.UNIT + Sim.UNIT - enemy.progress)
+					to_go.append(dist[enemy.to_node] * Sim.UNIT + Sim.UNIT - enemy.progress)
 				i = _link[i]
 	if stats.hits_air:
 		for i: int in _flyer_list:
@@ -1116,7 +1160,7 @@ func _to_go(enemy: EnemyState) -> int:
 	if enemy.flying:
 		return enemy.fly_length - enemy.flown
 	var dist: PackedInt32Array = _free_dist if enemy.breaker else _dist
-	return dist[map.index(enemy.to_cell)] * Sim.UNIT + (Sim.UNIT - enemy.progress)
+	return dist[enemy.to_node] * Sim.UNIT + (Sim.UNIT - enemy.progress)
 
 
 ## Every creature of a kind the tower hits, within the splash radius of the target's
@@ -1606,6 +1650,9 @@ func _place(enemy: EnemyState) -> void:
 		return
 	var a: Vector2i = Sim.center(enemy.from_cell)
 	var b: Vector2i = Sim.center(enemy.to_cell)
+	if _has_stumps and enemy.progress < Sim.UNIT and _is_twin_step(enemy):
+		enemy.pos = a                                  # it stands at the stump it entered (RULES 3.9)
+		return
 	enemy.pos = a + (b - a) * enemy.progress / Sim.UNIT
 
 
@@ -2032,6 +2079,7 @@ func _load_enemies(data: Variant, chk: DataCheck) -> void:
 			_load_step(item, path, enemy.breaker, chk)
 			enemy.from_cell = _loaded_from
 			enemy.to_cell = _loaded_to
+			enemy.to_node = _loaded_node
 			enemy.progress = _loaded_progress
 			if enemy.breaking > 0 and enemy.progress != Sim.UNIT:
 				chk.fail(path + ".breaking", "a breaker breaks from a cell center")
@@ -2039,6 +2087,7 @@ func _load_enemies(data: Variant, chk: DataCheck) -> void:
 			return
 		_place(enemy)
 		enemy.prev_pos = enemy.pos
+		enemy.out_of_reach = _out_of_reach(enemy)
 		enemies.append(enemy)
 		if enemy.summon_at > 0:
 			_summoners.append(enemy)
@@ -2047,26 +2096,39 @@ func _load_enemies(data: Variant, chk: DataCheck) -> void:
 var _loaded_from: Vector2i = Vector2i.ZERO
 var _loaded_to: Vector2i = Vector2i.ZERO
 var _loaded_progress: int = 0
+var _loaded_node: int = -1
 
 
-## A walker's step: two joined road cells, or one cell with the walker at its center,
-## with an open route on from there.
+## A walker's step (docs/ARCHITECTURE.md 14.3): a step of the graph, a neighbor step or a
+## twin step, with progress 0 to UNIT; or one road cell that is not a bridge, with the
+## walker at its center (old saves, and releases at an entrance). Neither cell is closed,
+## and the node it is heading to has an open route on, on the distances it walks.
 func _load_step(item: Dictionary, path: String, breaker: bool, chk: DataCheck) -> void:
+	_loaded_node = -1
 	_loaded_from = chk.cell(item["from"], path + ".from", level.rows)
 	_loaded_to = chk.cell(item["to"], path + ".to", level.rows)
 	_loaded_progress = chk.integer(item, "progress", path, 0, Sim.UNIT)
 	if not chk.ok():
 		return
-	var gap: Vector2i = _loaded_to - _loaded_from
 	if not map.is_road(_loaded_from) or not map.is_road(_loaded_to):
 		chk.fail(path, "must stand on road cells")
-	elif absi(gap.x) + absi(gap.y) > 1:
+		return
+	if _loaded_from == _loaded_to:
+		if level.feature_at(_loaded_to) == LevelData.Feature.BRIDGE:
+			chk.fail(path, "must not stand still on a bridge")
+			return
+		if _loaded_progress != Sim.UNIT:
+			chk.fail(path + ".progress", "must be at the cell center")
+			return
+	var node: int = map.arrival(_loaded_from, _loaded_to)
+	if node < 0:
 		chk.fail(path, "must walk between joined cells")
-	elif gap == Vector2i.ZERO and _loaded_progress != Sim.UNIT:
-		chk.fail(path + ".progress", "must be at the cell center")
+		return
 	var dist: PackedInt32Array = _free_dist if breaker else _dist
-	if _is_closed(_loaded_from) or _is_closed(_loaded_to) or dist[map.index(_loaded_to)] < 0:
+	if _is_closed(_loaded_from) or _is_closed(_loaded_to) or dist[node] < 0:
 		chk.fail(path, "must have an open route to the base")
+		return
+	_loaded_node = node
 
 
 func _load_releases(data: Variant, chk: DataCheck) -> void:
@@ -2105,6 +2167,7 @@ func _load_releases(data: Variant, chk: DataCheck) -> void:
 			_load_step(item, path, false, chk)
 			release.from_cell = _loaded_from
 			release.to_cell = _loaded_to
+			release.to_node = _loaded_node
 			release.progress = _loaded_progress
 		if not chk.ok():
 			return

@@ -89,6 +89,114 @@ const LOOP_GRID: Array = [
 	"...B...",
 ]
 
+# Map features (docs/ARCHITECTURE.md 14.2, 14.3; RULES 3.5 to 3.9).
+
+## A road that crosses itself at the bridge [3, 3]: it goes over the deck east, loops
+## round and passes under it north to the base. 14 steps; as a plain junction it would be 4.
+const BRIDGE_LOOP_GRID: Array = [
+	"...B...",
+	"...#...",
+	"...#...",
+	"1##X##.",
+	"...#.#.",
+	"...###.",
+	".......",
+	".......",
+]
+
+## Entrance 1 [3, 0] walks south over the bridge [3, 3] on its north-south road and round
+## the long west loop, 20 steps, while the socket [4, 1] is closed. With it open the way
+## back north is shorter (14 steps from the entrance). Entrance 2 [0, 3] crosses the
+## bridge east to west and goes down column 5. Base [5, 12].
+const BRIDGE_GATE_GRID: Array = [
+	"...1...",
+	"...#G#.",
+	"...#.#.",
+	"2##X##.",
+	"...#.#.",
+	"...#.#.",
+	"####.#.",
+	"#....#.",
+	"#....#.",
+	"#....#.",
+	"#....#.",
+	"#....#.",
+	"#####B.",
+]
+
+## Two branches like the fork, but the east one is a slide pointing north, away from the
+## base: walkers can never go down it. A gate on the west socket [1, 3] would seal.
+const SLIDE_UP_GRID: Array = [
+	"...1...",
+	"...#...",
+	".#####.",
+	".G...^.",
+	".#...^.",
+	".#...#.",
+	".#...#.",
+	".#####.",
+	"...B...",
+]
+
+## The same with the slide pointing south: the east branch is open one way, down.
+const SLIDE_DOWN_GRID: Array = [
+	"...1...",
+	"...#...",
+	".#####.",
+	".G...v.",
+	".#...v.",
+	".#...#.",
+	".#...#.",
+	".#####.",
+	"...B...",
+]
+
+## Twin stumps P at [3, 2] and [5, 5]. The twin step is the shortcut: 8 steps from the
+## entrance, against 13 by either branch.
+const STUMP_GRID: Array = [
+	"...1...",
+	"...#...",
+	".##P##.",
+	".#...#.",
+	".#...#.",
+	".#...P.",
+	".#...#.",
+	".#####.",
+	"...B...",
+]
+
+## A straight road with a tunnel of three tiles, [3, 2] to [3, 4], and spots beside it.
+const TUNNEL_GRID: Array = [
+	"...1...",
+	"..o#o..",
+	"...T...",
+	"..oT...",
+	"...T...",
+	"...#...",
+	"..o#o..",
+	"...B...",
+]
+
+## Every feature on one map. Entrance 1 [3, 0] goes through the tunnel [3, 1] and [3, 2],
+## under the bridge [3, 3], and takes the twin step from [3, 6] to [5, 9]. Entrance 2
+## [0, 3] crosses the bridge, rides the slide [5, 4] and [5, 5] down, and walks past
+## [5, 9]. A gate on the socket [5, 10] sends entrance 2 through the stumps the other way.
+const FEATURE_GRID: Array = [
+	"...1...",
+	"..oT...",
+	"...T...",
+	"2##X##.",
+	"...#.v.",
+	".o.#ov.",
+	"...P.#.",
+	"...#.#.",
+	".o.#o#.",
+	"...#.P.",
+	"...#.G.",
+	"...###.",
+	"....B..",
+]
+
 
 static func parse(path: String) -> Variant:
 	return JSON.parse_string(FileAccess.get_file_as_string(path))

@@ -33,8 +33,22 @@ func test_distances_count_steps_to_the_base_rules_7_3() -> void:
 	assert_eq(dist[map.index(Vector2i(3, 0))], 13)
 
 
+## A crossing at [3, 2] with road on all four sides. Since contract 14.3 only real steps
+## count, so the tie test needs a cell whose four neighbors are all road.
+const PLUS_GRID: Array = [
+	"...1...",
+	"...#...",
+	".#####.",
+	".#.#.#.",
+	".#.#.#.",
+	".#.#.#.",
+	".#####.",
+	"...B...",
+]
+
+
 func test_tie_break_order_is_south_west_east_north_rules_7_3() -> void:
-	var map: RoadMap = _map(Fx.TRIPLE_GRID)
+	var map: RoadMap = _map(PLUS_GRID)
 	var cell: Vector2i = Vector2i(3, 2)
 	var dist: PackedInt32Array = PackedInt32Array()
 	dist.resize(map.size())
@@ -46,15 +60,17 @@ func test_tie_break_order_is_south_west_east_north_rules_7_3() -> void:
 	var north: Vector2i = cell + Vector2i(0, -1)
 	for near: Vector2i in [south, west, east, north]:
 		dist[map.index(near)] = 4
-	assert_eq(map.next_step(cell, dist), south, "south first")
+	# Contract 14.3: next_node() takes the place of next_step(). With no feature a cell's node is its index.
+	var node: int = map.node_of(cell)
+	assert_eq(map.node_cell(map.next_node(node, dist)), south, "south first")
 	dist[map.index(south)] = 6
-	assert_eq(map.next_step(cell, dist), west, "then west")
+	assert_eq(map.node_cell(map.next_node(node, dist)), west, "then west")
 	dist[map.index(west)] = -1
-	assert_eq(map.next_step(cell, dist), east, "then east")
+	assert_eq(map.node_cell(map.next_node(node, dist)), east, "then east")
 	dist[map.index(east)] = 5
-	assert_eq(map.next_step(cell, dist), north, "then north")
+	assert_eq(map.node_cell(map.next_node(node, dist)), north, "then north")
 	dist[map.index(north)] = 3
-	assert_eq(map.next_step(cell, dist), cell, "no neighbor exactly one less: stays")
+	assert_eq(map.next_node(node, dist), node, "no neighbor exactly one less: stays")
 
 
 func test_forked_map_tie_break_sends_walkers_west_rules_7_3() -> void:

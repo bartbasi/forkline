@@ -23,7 +23,9 @@ var fly_length: int = 0
 var flown: int = 0
 var breaking: int = 0                                  # 1/100 ms of breaking left; 0 when not breaking
 var pos: Vector2i = Vector2i.ZERO                      # sub-units, after this tick
-var prev_pos: Vector2i = Vector2i.ZERO                 # sub-units, after the last tick
+var prev_pos: Vector2i = Vector2i.ZERO                 # sub-units, after the last tick, or where it last landed
+                                                       # after a jump this tick (docs/ARCHITECTURE.md 14.3)
+var out_of_reach: bool = false                         # in a tunnel or on a twin step (RULES 8.8); never saved
 
 ## Internal to src/sim/. Worked out at spawn from the type, the wave's strength and
 ## effects, and again on load, so they are not saved.
@@ -34,6 +36,7 @@ var lives: int = 1
 var bounty: int = 1
 var break_ms: int = 0                                  # a gate breaker's time per gate, 0 for none (RULES 7.7)
 var watched: bool = false                              # it has a speed up or a health release (RULES 6.3)
+var to_node: int = -1                                  # walkers: the node it is heading to (docs/ARCHITECTURE.md 14.3)
 ## Internal and saved: ticks until a popped bubble is back (0 when up), the tick of
 ## the next summon batch (0 for none), the tick of the next heal (0 for none), the
 ## speed ups taken so far, and whether its health release has begun.
