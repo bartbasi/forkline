@@ -86,6 +86,9 @@ Autoload and input map entries in project.godot are added by the DM during integ
 - 2026-10-25: Bart chose the run length: RULES 14.1 becomes "about 12 to 16 minutes at 1x, about 15 to 20 of real play with card picks". Runs stay as tuned (docs/design/TUNING_RUNS.md).
 - 2026-10-25, hard stop C: Bart searched "Forkline" in the stores and app repositories and found no one using it. He approved creating github.com/bartbasi/forkline as a public repo and the first push, and asked the DM to keep pushing as verified work lands (each push only after the full suite passes on a clean copy). His friends test from the repo with debug builds; no release signing yet.
 - 2026-10-26: Bart: "always publish a binary to github when we're building open source software". The DM attaches the APK to a GitHub release at each verified milestone (full suite passed on a clean copy, scripts/check_apk.sh passed), tagged at that commit. Until release signing is approved these are debug builds, and the release notes say so.
+- 2026-10-26: Bart approved GitHub Pages for the privacy policy. The DM publishes docs/store/site/ to the gh-pages branch (docs/release.md).
+- 2026-10-26: Bart asked for clearer shot effects on every tower, the catapult first. Done in a68c16c and approved on his Fold5.
+- 2026-10-27: Bart approved the DM's recommendations: Play App Signing with an upload key that the release engineer creates and that stays outside the repo (Bart keeps a backup); the app bundle (AAB) build that Play requires; answering the content rating questionnaire with mild fantasy violence; keeping the Buy me a coffee row in store screenshot 5. Play Console itself still waits for the DUNS number.
 
 ## Rules for every session and agent
 
