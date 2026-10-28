@@ -6,6 +6,8 @@ extends "res://tests/base_test.gd"
 
 const Fx: GDScript = preload("res://tests/sim/fixtures/sim_fixtures.gd")
 const LIMIT: int = 30000
+## Creature keys that are optional on load since A12 (docs/ARCHITECTURE.md 14.7).
+const OPTIONAL_KEYS: Array = ["fright_pct", "fright_ticks", "low_ticks"]
 
 var catalog: Catalog = null
 
@@ -368,6 +370,8 @@ func test_every_missing_key_is_refused_without_a_crash() -> void:
 	for path: Array in paths:
 		if typeof(path.back()) != TYPE_STRING or path.back() == "strength" and path.size() == 4:
 			continue                                   # an index, or a wave's optional strength
+		if path.size() == 3 and path[0] == "enemies" and OPTIONAL_KEYS.has(path.back()):
+			continue                                   # optional since A12 (14.7): test_battle_tower_saves.gd
 		var copy: Dictionary = data.duplicate(true)
 		var node: Variant = copy
 		for i: int in path.size() - 1:

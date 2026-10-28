@@ -20,7 +20,7 @@ var spent_before: int = 0                              # every other purchase: r
 ## effects, the best Bakery rate boost and damage bonus it gets (RULES 8.6), and for a
 ## Bakery, how many attacking towers it reaches.
 var near_cells: PackedInt32Array = PackedInt32Array()
-var kind: StringName = &"attack"                       # the tower type's kind
+var kind: StringName = &"attack"                       # the tower type's kind: attack, slow, boost or fright
 var stats: TowerStats = null
 var got_pct: int = 0
 var got_damage: int = 0

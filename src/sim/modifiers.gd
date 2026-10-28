@@ -222,7 +222,8 @@ static func group_count(effects: Array[Dictionary], count: int, flying: bool, la
 ## data, then every tower_add, then every tower_pct, then tower_hits_air and cost_add.
 ## first_step: the price is a build price, else an upgrade price. No stat goes below
 ## what the data allows (2.6), so no card can make a stat the sim cannot use; a stat
-## block with no slow gets no slow from a card. Each tower_pct step is clamped to
+## block with no slow gets no slow from a card, nor splash or more targets where 14.4
+## allows none. Each tower_pct step is clamped to
 ## VALUE_CEILING, so no product can overflow.
 static func tower_stats(base: TowerStats, tower: StringName, effects: Array[Dictionary], first_step: bool) -> TowerStats:
 	var out: TowerStats = base.copy()
@@ -269,6 +270,12 @@ static func tower_stats(base: TowerStats, tower: StringName, effects: Array[Dict
 	out.slow_pct = clampi(out.slow_pct, 1, 90) if base.slow_ms > 0 else 0
 	out.boost_pct = maxi(out.boost_pct, 0)
 	out.boost_damage = maxi(out.boost_damage, 0)
+	# 14.4: pulses, lines and lures have no splash, and pulses and lines one target, so no
+	# card gives them a number the sim never uses.
+	if base.pulse or base.line > 0 or base.lure_ms > 0:
+		out.splash = 0
+	if base.pulse or base.line > 0:
+		out.targets = 1
 	return out
 
 

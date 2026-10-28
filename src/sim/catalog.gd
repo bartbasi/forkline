@@ -6,7 +6,7 @@ extends RefCounted
 ## (docs/ARCHITECTURE.md 2.6). src/save/ reads the files and passes the parsed values in.
 
 const FORMAT: int = 1
-const TOWER_KINDS: PackedStringArray = ["attack", "slow", "boost"]
+const TOWER_KINDS: PackedStringArray = ["attack", "slow", "boost", "fright"]
 const HITS: PackedStringArray = ["ground", "air", "both"]
 const RULE_KEYS: PackedStringArray = [
 	"format", "start_lives", "relaxed_lives_pct", "relaxed_gold_pct", "refund_pct",
@@ -101,7 +101,7 @@ func _read_towers(data: Variant, chk: DataCheck) -> void:
 		type.info = chk.text(item, "info", path, 80)
 		var kind_value: Variant = item.get("kind", "")
 		if not DataCheck.is_string(kind_value) or not TOWER_KINDS.has(String(kind_value)):
-			chk.fail(DataCheck.join(path, "kind"), "must be attack, slow or boost")
+			chk.fail(DataCheck.join(path, "kind"), "must be attack, slow, boost or fright")
 			continue
 		type.kind = StringName(String(kind_value))
 		var tiers: Array = chk.array(item, "tiers", path, 2, 2)
@@ -121,6 +121,7 @@ func _read_towers(data: Variant, chk: DataCheck) -> void:
 			type.specs.append(spec_id)
 			type._spec_names.append(chk.text(spec, "name", spec_path, 24))
 			type._spec_infos.append(chk.text(spec, "info", spec_path, 80))
+		_check_attack_way(type, path, chk)
 		if type.id == &"":
 			continue
 		if _towers.has(type.id):
@@ -137,12 +138,14 @@ func _read_stats(data: Variant, path: String, kind: StringName, is_spec: bool, c
 	match kind:
 		&"attack":
 			required.append_array(["hits", "damage", "reload_ms"])
-			optional.append_array(["splash", "targets", "pierce", "slow_pct", "slow_ms"])
+			optional.append_array(["splash", "targets", "pierce", "slow_pct", "slow_ms", "pulse", "line", "lure_ms"])
 		&"slow":
 			required.append_array(["hits", "slow_pct", "slow_ms"])
 		&"boost":
 			required.append("boost_pct")
 			optional.append("boost_damage")
+		&"fright":
+			required.append_array(["hits", "fright_pct", "fright_ms"])
 	if is_spec:
 		required.append_array(["id", "name", "info"])
 	if not chk.object(data, path, required, optional):
@@ -168,7 +171,37 @@ func _read_stats(data: Variant, path: String, kind: StringName, is_spec: bool, c
 		chk.fail(path, "slow_pct and slow_ms come together")
 	stats.boost_pct = chk.integer(item, "boost_pct", path, 0, 500)
 	stats.boost_damage = chk.integer(item, "boost_damage", path, 0, 1000)
+	stats.fright_pct = chk.integer(item, "fright_pct", path, 1, 1000)
+	stats.fright_ms = chk.integer(item, "fright_ms", path, 50, 60000, 50)
+	stats.pulse = chk.boolean(item, "pulse", path)
+	stats.line = chk.integer(item, "line", path, 1, 500)
+	stats.lure_ms = chk.integer(item, "lure_ms", path, 50, 60000, 50)
+	# 14.4: one way of attacking at most, with no splash, and one target for pulses and lines.
+	var ways: int = (1 if stats.pulse else 0) + (1 if stats.line > 0 else 0) + (1 if stats.lure_ms > 0 else 0)
+	if ways > 1:
+		chk.fail(path, "holds at most one of pulse, line and lure_ms")
+	if ways > 0 and stats.splash > 0:
+		chk.fail(path, "pulse, line and lure_ms come without splash")
+	if (stats.pulse or stats.line > 0) and stats.targets > 1:
+		chk.fail(path, "pulse and line come with one target")
+	if stats.lure_ms > 0 and not (stats.hits_air and not stats.hits_ground):
+		chk.fail(path, "lure_ms needs hits air")
 	return stats
+
+
+## 14.4: pulse, line and lure_ms are on every stat block of a tower or on none, so its
+## way of attacking never changes with its tier.
+static func _check_attack_way(type: TowerType, path: String, chk: DataCheck) -> void:
+	var blocks: Array[TowerStats] = []
+	blocks.append_array(type._tiers)
+	blocks.append_array(type._spec_stats)
+	if blocks.is_empty():
+		return
+	for block: TowerStats in blocks:
+		if block.pulse != blocks[0].pulse or (block.line > 0) != (blocks[0].line > 0) \
+				or (block.lure_ms > 0) != (blocks[0].lure_ms > 0):
+			chk.fail(path, "pulse, line and lure_ms are on every stat block or on none")
+			return
 
 
 func _read_enemies(data: Variant, chk: DataCheck) -> void:
@@ -248,7 +281,9 @@ func _read_enemies(data: Variant, chk: DataCheck) -> void:
 		paths[type.id] = path
 	# Cross references, once every id is known. A released creature never releases
 	# others itself, so releases cannot chain, and a flyer releases only flyers
-	# (a walker needs a road step to start from, RULES 6.2). A summoned creature never heals.
+	# (a walker needs a road step to start from, RULES 6.2). So does a gate breaker: it
+	# walks the route with no gates, where a released walker could have no open way on.
+	# A summoned creature never heals.
 	for id: StringName in _enemy_ids:
 		var type: EnemyType = _enemies[id]
 		var path: String = paths[id]
@@ -281,6 +316,8 @@ func _check_released(releaser: EnemyType, id: StringName, path: String, chk: Dat
 		chk.fail(path, "a boss cannot be released")
 	if releaser.flying and not released.flying:
 		chk.fail(path, "a flyer can release only flyers")
+	if releaser.break_ms > 0 and not released.flying:
+		chk.fail(path, "a gate breaker can release only flyers")
 
 
 func _read_rules(data: Variant, chk: DataCheck) -> void:

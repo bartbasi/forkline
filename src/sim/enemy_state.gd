@@ -26,6 +26,9 @@ var pos: Vector2i = Vector2i.ZERO                      # sub-units, after this t
 var prev_pos: Vector2i = Vector2i.ZERO                 # sub-units, after the last tick, or where it last landed
                                                        # after a jump this tick (docs/ARCHITECTURE.md 14.3)
 var out_of_reach: bool = false                         # in a tunnel or on a twin step (RULES 8.8); never saved
+var fright_pct: int = 0                                # frightened: it takes this percent more from every hit (RULES 5.13)
+var fright_ticks: int = 0                              # ticks of fright left, 0 when not frightened
+var low_ticks: int = 0                                 # flyers: ticks it stays low after a lure, 0 when not low (RULES 5.15)
 
 ## Internal to src/sim/. Worked out at spawn from the type, the wave's strength and
 ## effects, and again on load, so they are not saved.

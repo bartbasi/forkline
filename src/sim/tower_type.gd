@@ -9,7 +9,7 @@ var id: StringName = &""
 var name: String = ""
 var plural: String = ""
 var info: String = ""
-var kind: StringName = &"attack"                       # &"attack", &"slow" or &"boost"
+var kind: StringName = &"attack"                       # &"attack", &"slow", &"boost" or &"fright" (14.4)
 var specs: Array[StringName] = []                      # the 2 path ids, spec 0 first
 
 var _tiers: Array[TowerStats] = []                     # tier 1, tier 2

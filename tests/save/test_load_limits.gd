@@ -259,6 +259,10 @@ func test_review_l5_four_thousand_menders_are_refused() -> void:
 	var data: Dictionary = _level_save(1)
 	var battle: Dictionary = data["battle"]
 	_only_first(battle)
+	# Keys that are optional on load since A12 (docs/ARCHITECTURE.md 14.7) are left out, so
+	# 4,000 creatures still fit under the file cap and the creature ceiling is what refuses them.
+	for key: String in Battle.ENEMY_OPTIONAL:
+		(battle["enemies"][0] as Dictionary).erase(key)
 	_add(battle, "mender", Battle.MAX_ENEMIES - 1, 1, 1000000000)
 	battle["lives"] = Battle.MAX_LIVES
 	battle["start_lives"] = Battle.MAX_LIVES
