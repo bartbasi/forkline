@@ -44,7 +44,7 @@ func test_settings_and_progress_round_trip() -> void:
 	progress.mark_seen(&"pip")
 	progress.bump(&"runs_won", 3)
 	assert_true(store.save_progress(progress))
-	assert_eq(Fx.read_text("settings.json"), "{\"format\":1,\"sound\":false}")
+	assert_eq(Fx.read_text("settings.json"), "{\"format\":1,\"music\":true,\"sound\":false}")
 	var again: SaveStore = SaveStore.new(Fx.WORK)
 	assert_false(again.load_settings().sound_on)
 	var loaded: Progress = again.load_progress()
@@ -53,12 +53,32 @@ func test_settings_and_progress_round_trip() -> void:
 	assert_false(Fx.exists("progress.json.tmp"))
 
 
+func test_settings_file_from_before_music_loads_and_saves_music() -> void:
+	Fx.write_text("settings.json", "{\"format\":1,\"sound\":false}")
+	var old: Settings = store.load_settings()
+	assert_false(old.sound_on)
+	assert_true(old.music_on, "a file without music loads with music on")
+	old.music_on = false
+	assert_true(store.save_settings(old))
+	assert_eq(Fx.read_text("settings.json"), "{\"format\":1,\"music\":false,\"sound\":false}")
+	var again: Settings = SaveStore.new(Fx.WORK).load_settings()
+	assert_eq([again.sound_on, again.music_on], [false, false])
+
+
+func test_hostile_music_in_the_file_falls_back_to_on() -> void:
+	for value: String in ["\"false\"", "0", "null", "[false]", "{\"on\":false}", "1e308"]:
+		Fx.write_text("settings.json", "{\"format\":1,\"sound\":false,\"music\":%s}" % value)
+		var loaded: Settings = SaveStore.new(Fx.WORK).load_settings()
+		assert_true(loaded.music_on, value)
+		assert_false(loaded.sound_on, "sound still read with music %s" % value)
+
+
 func test_second_write_keeps_the_first_as_backup() -> void:
 	assert_true(store.save_settings(_settings(false)))
 	assert_false(Fx.exists("settings.json.bak"))
 	assert_true(store.save_settings(_settings(true)))
-	assert_eq(Fx.read_text("settings.json.bak"), "{\"format\":1,\"sound\":false}")
-	assert_eq(Fx.read_text("settings.json"), "{\"format\":1,\"sound\":true}")
+	assert_eq(Fx.read_text("settings.json.bak"), "{\"format\":1,\"music\":true,\"sound\":false}")
+	assert_eq(Fx.read_text("settings.json"), "{\"format\":1,\"music\":true,\"sound\":true}")
 
 
 func test_same_text_is_not_written_again() -> void:

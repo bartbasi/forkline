@@ -28,10 +28,41 @@ func test_settings_defaults_and_round_trip() -> void:
 	assert_true(Settings.new().sound_on)
 	var settings: Settings = Settings.new()
 	settings.sound_on = false
-	assert_eq(settings.to_data(), {"format": 1, "sound": false})
+	assert_eq(settings.to_data(), {"format": 1, "sound": false, "music": true})
 	assert_false(Settings.from_data(JSON.parse_string(JSON.stringify(settings.to_data()))).sound_on)
 	for bad: Variant in [null, [], "x", 3.0, {"sound": "false"}, {"sound": 0.0}, {"sound": null}, {"sound": {}}]:
 		assert_true(Settings.from_data(bad).sound_on, str(bad))
+
+
+func test_music_setting_round_trip() -> void:
+	assert_true(Settings.new().music_on)
+	for pair: Array in [[true, false], [false, true], [false, false], [true, true]]:
+		var settings: Settings = Settings.new()
+		settings.sound_on = pair[0]
+		settings.music_on = pair[1]
+		assert_eq(settings.to_data(), {"format": 1, "sound": pair[0], "music": pair[1]})
+		var back: Settings = Settings.from_data(JSON.parse_string(JSON.stringify(settings.to_data())))
+		assert_eq([back.sound_on, back.music_on], pair, str(pair))
+
+
+func test_settings_file_without_music_loads_with_music_on() -> void:
+	# A settings.json written before the music setting existed.
+	var old: Settings = Settings.from_data(JSON.parse_string('{"format": 1, "sound": false}'))
+	assert_false(old.sound_on)
+	assert_true(old.music_on)
+	assert_true(Settings.from_data(JSON.parse_string('{"format": 1, "sound": true}')).music_on)
+
+
+func test_hostile_music_values_fall_back_to_on() -> void:
+	var hostile: Array = ["false", "", 0, 0.0, 1, -1, 1e308, null, [], [false], {}, {"music": false}, "true"]
+	for value: Variant in hostile:
+		var settings: Settings = Settings.from_data({"format": 1, "sound": false, "music": value})
+		assert_true(settings.music_on, "music %s" % str(value))
+		assert_false(settings.sound_on, "a bad music value leaves sound alone: %s" % str(value))
+	# A bad sound value does not touch music either.
+	var both: Settings = Settings.from_data({"format": 1, "sound": "off", "music": false})
+	assert_true(both.sound_on)
+	assert_false(both.music_on)
 
 
 func test_progress_round_trip() -> void:
