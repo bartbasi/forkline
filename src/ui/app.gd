@@ -103,6 +103,8 @@ func build() -> void:
 	if _front_door != null:
 		return
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# The icons are drawn in code. Draw them now, not in the first wave.
+	IconTex.prewarm()
 	theme = UiTheme.build()
 	_backdrop = Backdrop.new()
 	# Behind the battle map, which sits at -5.
