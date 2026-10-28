@@ -264,12 +264,14 @@ func _connect_panels() -> void:
 	gate_tray.drag_ended.connect(end_drag)
 
 
-## Gives the screen its battle. Call once, before the screen is shown.
-func setup(new_battle: Battle, new_audio: AudioService, new_progress: Progress) -> void:
+## Gives the screen its battle. Call once, before the screen is shown. `region` is the campaign
+## region that holds the level, which picks the map's ground (docs/ARCHITECTURE.md 14.10). A run
+## or daily passes &"", and its ground comes from the map's own features.
+func setup(new_battle: Battle, new_audio: AudioService, new_progress: Progress, region: StringName = &"lantern_hill") -> void:
 	battle = new_battle
 	audio = new_audio
 	progress = new_progress
-	map_view.setup(battle)
+	map_view.setup(battle, region)
 	hud.refresh(battle)
 	hud.set_speed(clock.speed)
 	_sync_warnings()

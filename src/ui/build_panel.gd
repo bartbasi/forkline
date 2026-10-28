@@ -15,6 +15,10 @@ signal range_changed(cell: Vector2i, reach: int, boost: bool)
 signal built(cell: Vector2i, type: StringName)
 
 const NO_CELL: Vector2i = Vector2i(-1, -1)
+## The space between cards, both ways.
+const CARD_GAP: int = 14
+## Most cards in one row. Ten towers make two rows of five in the roomy portrait sheet.
+const MAX_COLUMNS: int = 5
 
 var cell: Vector2i = NO_CELL
 var selected: StringName = &""
@@ -30,6 +34,11 @@ var star_warning_label: Label = null
 
 var _signature: Array = []
 var _open: bool = false
+
+
+func _init() -> void:
+	super()
+	resized.connect(_on_resized)
 
 
 ## Opens the panel on a free build spot and chooses the first tower the level offers.
@@ -102,7 +111,7 @@ func refresh() -> void:
 		ids.append(option["tower"])
 	if not ids.has(selected):
 		selected = ids[0]
-	var signature: Array = [cell, selected, wide, options, warns(&"build", selected)]
+	var signature: Array = [cell, selected, wide, options, warns(&"build", selected), _columns(options.size())]
 	if signature != _signature:
 		_signature = signature
 		_rebuild(options)
@@ -136,8 +145,8 @@ func _rebuild(options: Array[Dictionary]) -> void:
 	column.add_child(header)
 	var grid: GridContainer = GridContainer.new()
 	grid.columns = _columns(options.size())
-	grid.add_theme_constant_override(&"h_separation", 14)
-	grid.add_theme_constant_override(&"v_separation", 14)
+	grid.add_theme_constant_override(&"h_separation", CARD_GAP)
+	grid.add_theme_constant_override(&"v_separation", CARD_GAP)
 	for option: Dictionary in options:
 		var button: TapButton = _card(option)
 		card_buttons[option["tower"]] = button
@@ -216,10 +225,37 @@ func _rows(rows: Array[PackedStringArray]) -> Control:
 	return grid
 
 
+## Cards per row for `count` towers when the panel is `room` px wide inside its margins
+## (0 when it has no width yet). Two rows is the aim, and a card is never narrower than
+## MIN_TOUCH, so a narrow side panel gets fewer columns and more rows.
+static func columns_for(count: int, room: float) -> int:
+	var wanted: int = maxi(1, count)
+	if count == 4:
+		wanted = 2
+	elif count > 3:
+		wanted = mini(MAX_COLUMNS, ceili(float(count) / 2.0))
+	if room <= 0.0:
+		return wanted
+	var fit: int = maxi(1, int((room + float(CARD_GAP)) / (Layout.MIN_TOUCH + float(CARD_GAP))))
+	return mini(wanted, fit)
+
+
 func _columns(count: int) -> int:
-	if count <= 3:
-		return maxi(1, count)
-	return 2 if count == 4 else 3
+	return columns_for(count, _room())
+
+
+## The width the cards have, inside the panel's margins. 0 before the panel has been laid out.
+func _room() -> float:
+	if size.x <= 0.0:
+		return 0.0
+	var box: StyleBox = get_theme_stylebox(&"panel")
+	return size.x - box.get_margin(SIDE_LEFT) - box.get_margin(SIDE_RIGHT)
+
+
+## The panel got its width or changed it: the cards may need another number of columns.
+func _on_resized() -> void:
+	if _open:
+		refresh.call_deferred()
 
 
 func _price(type: StringName) -> int:

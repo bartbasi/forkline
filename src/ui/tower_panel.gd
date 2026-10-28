@@ -41,6 +41,9 @@ var sell_button: TapButton = null
 var refund_label: Label = null
 var star_warning_label: Label = null
 var permanent_label: Label = null
+## The value of the "Dozing" row, or null while the tower is awake. Updated in place every tick,
+## so the panel is never rebuilt under a finger while a tower dozes.
+var doze_label: Label = null
 
 var _signature: Array = []
 var _open: bool = false
@@ -163,17 +166,27 @@ func refresh() -> void:
 	if tower == null:
 		close()
 		return
-	var numbers: Dictionary = battle.tower_numbers(cell)
+	var numbers: Dictionary = _numbers()
 	var options: Array[Dictionary] = battle.upgrade_options(cell)
 	if tower.tier != 2 and picked_spec >= 0:
 		picked_spec = -1
 	var warn: Array[bool] = [warns(&"upgrade", &"", 2), warns(&"upgrade", &"", 3)]
-	var signature: Array = [cell, wide, numbers, options, picked_spec, sell_armed, tower.spent_now, tower.spent_before, warn]
+	# The time left dozing changes every tick, so only whether the tower dozes is part of the signature.
+	var shown: Dictionary = numbers.duplicate()
+	shown["doze_ms"] = int(numbers.get("doze_ms", 0)) > 0
+	var signature: Array = [cell, wide, shown, options, picked_spec, sell_armed, tower.spent_now, tower.spent_before, warn]
 	if signature != _signature:
 		_signature = signature
 		_rebuild(tower, numbers, options)
 		_announce_range(numbers)
 	_update_costs(options)
+	if doze_label != null:
+		doze_label.text = BattleText.doze_text(int(numbers.get("doze_ms", 0)))
+
+
+## The tapped tower's numbers. Tests replace this to give a tower a doze time.
+func _numbers() -> Dictionary:
+	return battle.tower_numbers(cell)
 
 
 ## "need N more" on a path card is the gold still missing now.
@@ -200,10 +213,11 @@ func _rebuild(tower: TowerState, numbers: Dictionary, options: Array[Dictionary]
 	upgrade_button = null
 	confirm_button = null
 	permanent_label = null
+	doze_label = null
 	var type: TowerType = battle.catalog.tower(tower.type)
 	column.add_child(_header(tower, type))
 	column.add_child(_stats(numbers, type))
-	if type.kind == &"attack":
+	if has_aim(numbers, type):
 		column.add_child(_aim_row(tower))
 	column.add_child(_upgrade_section(tower, type, numbers, options))
 	column.add_child(_sell_section(tower))
@@ -245,8 +259,16 @@ func _stats(numbers: Dictionary, type: TowerType) -> Control:
 	for row: PackedStringArray in rows:
 		var r: StatRow = StatRow.pair(row[0], row[1])
 		r.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if row[0] == "Dozing":
+			doze_label = r.value_label
 		grid.add_child(r)
 	return grid
+
+
+## Targeting belongs to attacking towers that aim. A pulse (the Bramble Cottage) aims at nothing,
+## and the Bell, Scarecrow and Bakery are not attackers (RULES 9.3).
+func has_aim(numbers: Dictionary, type: TowerType) -> bool:
+	return type.kind == &"attack" and not bool(numbers.get("pulse", false))
 
 
 func _aim_row(tower: TowerState) -> Control:

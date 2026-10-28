@@ -28,8 +28,10 @@ static func tiles(hundredths: int) -> String:
 	return "%d.%02d" % [whole, frac]
 
 
-## Reach, range or splash the one way everywhere: "3 tiles", "2.5 tiles", "0.75 tiles".
+## Reach, range or splash the one way everywhere: "3 tiles", "2.5 tiles", "0.75 tiles", "1 tile".
 static func tiles_text(hundredths: int) -> String:
+	if hundredths == 100:
+		return "1 tile"
 	return "%s tiles" % tiles(hundredths)
 
 
@@ -205,6 +207,7 @@ static func tower_rows(numbers: Dictionary, kind: StringName) -> Array[PackedStr
 	var got_pct: int = int(numbers.get("got_pct", 0))
 	var got_damage: int = int(numbers.get("got_damage", 0))
 	var reach: int = int(numbers.get("reach", 0))
+	var doze_ms: int = int(numbers.get("doze_ms", 0))
 	if kind == &"boost":
 		rows.append(PackedStringArray(["Rate boost", "+%d%%" % int(numbers.get("boost_pct", 0))]))
 		rows.append(PackedStringArray(["Damage bonus", "+%d" % int(numbers.get("boost_damage", 0))]))
@@ -218,13 +221,28 @@ static func tower_rows(numbers: Dictionary, kind: StringName) -> Array[PackedStr
 		rows.append(PackedStringArray(["Linger", "%s s" % seconds(int(numbers.get("slow_ms", 0)))]))
 		rows.append(PackedStringArray(["Affects", hits_text(numbers)]))
 		return rows
+	if kind == &"fright":
+		rows.append(PackedStringArray(["Fright", "%d%%" % int(numbers.get("fright_pct", 0))]))
+		rows.append(PackedStringArray(["Range", tiles_text(reach)]))
+		rows.append(PackedStringArray(["Linger", "%s s" % seconds(int(numbers.get("fright_ms", 0)))]))
+		rows.append(PackedStringArray(["Affects", hits_text(numbers)]))
+		return rows
+	var pulse: bool = bool(numbers.get("pulse", false))
+	if doze_ms > 0:
+		rows.append(PackedStringArray(["Dozing", doze_text(doze_ms)]))
 	var damage: String = str(int(numbers.get("damage", 0)))
 	if got_damage > 0:
 		damage += " +%d" % got_damage
 	rows.append(PackedStringArray(["Damage", damage]))
 	rows.append(PackedStringArray(["Rate", "%s/s" % rate(int(numbers.get("reload_ms", 0)), got_pct)]))
-	rows.append(PackedStringArray(["Range", tiles_text(reach)]))
+	rows.append(PackedStringArray([range_label(pulse), tiles_text(reach)]))
 	rows.append(PackedStringArray(["Hits", hits_text(numbers)]))
+	if pulse:
+		rows.append(PackedStringArray(["Pulse", "All in ring"]))
+	if int(numbers.get("line", 0)) > 0:
+		rows.append(PackedStringArray(["Line width", tiles_text(int(numbers["line"]))]))
+	if int(numbers.get("lure_ms", 0)) > 0:
+		rows.append(PackedStringArray(["Stays low", "%s s" % seconds(int(numbers["lure_ms"]))]))
 	if int(numbers.get("splash", 0)) > 0:
 		rows.append(PackedStringArray(["Splash", tiles_text(int(numbers["splash"]))]))
 	if bool(numbers.get("pierce", false)):
@@ -238,23 +256,42 @@ static func tower_rows(numbers: Dictionary, kind: StringName) -> Array[PackedStr
 	return rows
 
 
+## "Ring" for a pulse, which hits everything in it, and "Range" for every other attack.
+static func range_label(pulse: bool) -> String:
+	return "Ring" if pulse else "Range"
+
+
+## The time a dozing tower has left (RULES 8.8), as it reads on the tower's panel.
+static func doze_text(ms: int) -> String:
+	return "%s s left" % seconds(ms)
+
+
 ## The numbers an upgrade changes, as one entry each: {"label", "before", "after"}.
 ## Only numbers that differ are listed (RULES 9.5). `got_pct` is the Bakery boost
 ## the tower gets now, so a rate is shown as it will really be.
 static func change_rows(before: Dictionary, after: Dictionary, kind: StringName, got_pct: int = 0) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
-	if kind != &"slow" and kind != &"boost":
+	var ring_kind: bool = kind == &"slow" or kind == &"fright"
+	if kind != &"slow" and kind != &"boost" and kind != &"fright":
 		_change(out, "Damage", str(int(before.get("damage", 0))), str(int(after.get("damage", 0))))
 		_change(out, "Rate", rate(int(before.get("reload_ms", 0)), got_pct), rate(int(after.get("reload_ms", 0)), got_pct))
 		_change(out, "Targets", str(int(before.get("targets", 1))), str(int(after.get("targets", 1))))
 	if kind == &"boost":
 		_change(out, "Rate boost", "+%d%%" % int(before.get("boost_pct", 0)), "+%d%%" % int(after.get("boost_pct", 0)))
 		_change(out, "Damage bonus", "+%d" % int(before.get("boost_damage", 0)), "+%d" % int(after.get("boost_damage", 0)))
-	_change(out, "Range" if kind != &"boost" else "Reach", tiles_text(int(before.get("reach", 0))), tiles_text(int(after.get("reach", 0))))
+	if kind == &"fright":
+		_change(out, "Fright", _percent_or_none(int(before.get("fright_pct", 0))), _percent_or_none(int(after.get("fright_pct", 0))))
+	var reach_label: String = "Reach" if kind == &"boost" else range_label(bool(after.get("pulse", false)))
+	_change(out, reach_label, tiles_text(int(before.get("reach", 0))), tiles_text(int(after.get("reach", 0))))
 	_change(out, "Splash", _tiles_or_none(int(before.get("splash", 0))), _tiles_or_none(int(after.get("splash", 0))))
 	_change(out, "Slow", _percent_or_none(int(before.get("slow_pct", 0))), _percent_or_none(int(after.get("slow_pct", 0))))
-	_change(out, "Linger", _seconds_or_none(int(before.get("slow_ms", 0))), _seconds_or_none(int(after.get("slow_ms", 0))))
-	if kind == &"slow":
+	if kind == &"fright":
+		_change(out, "Linger", _seconds_or_none(int(before.get("fright_ms", 0))), _seconds_or_none(int(after.get("fright_ms", 0))))
+	else:
+		_change(out, "Linger", _seconds_or_none(int(before.get("slow_ms", 0))), _seconds_or_none(int(after.get("slow_ms", 0))))
+	_change(out, "Line width", _tiles_or_none(int(before.get("line", 0))), _tiles_or_none(int(after.get("line", 0))))
+	_change(out, "Stays low", _seconds_or_none(int(before.get("lure_ms", 0))), _seconds_or_none(int(after.get("lure_ms", 0))))
+	if ring_kind:
 		# The same label and words as the tapped tower's row (RULES 9.3).
 		_change(out, "Affects", hits_text(before), hits_text(after))
 	else:

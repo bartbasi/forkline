@@ -666,7 +666,7 @@ func _begin(saved: SavedGame, resumed: bool) -> void:
 	screen.left.connect(_on_battle_left)
 	_battle_screen = screen
 	push_screen(screen)
-	screen.setup(saved.battle, audio, progress)
+	screen.setup(saved.battle, audio, progress, region_of(saved))
 	if saved.run != null:
 		screen.set_run(saved.run)
 	audio.set_music(&"battle")
@@ -674,6 +674,17 @@ func _begin(saved: SavedGame, resumed: bool) -> void:
 		screen.pause()
 	else:
 		save_active()
+
+
+## The ground a saved game is played on (docs/ARCHITECTURE.md 14.11): the campaign region that holds
+## its level or Twist, and &"" for a run or daily, whose ground comes from the map's own features.
+func region_of(saved: SavedGame) -> StringName:
+	if saved.run != null:
+		return &""
+	for region: Dictionary in game.campaign:
+		if (region["levels"] as Array).has(saved.level_id):
+			return region["id"]
+	return &""
 
 
 ## "Back to menu" in Pause: the game stays saved.
