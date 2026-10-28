@@ -4,8 +4,9 @@ class_name InfoArt
 extends Control
 ## The small real examples in the Info guide. Each one is drawn by the same
 ## src/theme/ code the game uses, so what the guide shows is what the player
-## will see (the creatures section shows the bosses too). Kinds: walk, hud, spots, tiers, towers, creatures, gates, signals,
-## stars. Captions (names under towers and creatures) are optional: the guide
+## will see (the creatures section shows the bosses too). Kinds: walk, hud, spots, tiers, towers, creatures, features,
+## gates, signals, stars. The towers, creatures and features kinds draw the ids they are given (from the catalog and
+## the levels, never from a fixed list), and nothing when given none. Captions (names under towers and creatures) are optional: the guide
 ## passes them only when the data has names, and draws shapes alone otherwise. A name
 ## wraps onto two lines when it must, and the pictures go three to a row when the names
 ## need the room, so a name is never cut off and never shrinks below CAPTION_SIZE.
@@ -13,13 +14,26 @@ extends Control
 ## Height of each kind as a share of its width.
 const RATIOS: Dictionary[StringName, float] = {
 	&"walk": 0.4286, &"hud": 0.30, &"spots": 0.36, &"tiers": 0.30, &"towers": 0.34,
-	&"creatures": 0.50, &"gates": 0.7143, &"signals": 0.62, &"stars": 0.20,
+	&"creatures": 0.50, &"features": 0.34, &"gates": 0.7143, &"signals": 0.62, &"stars": 0.20,
 }
 ## Caption text, in logical px. It never gets smaller than this.
 const CAPTION_SIZE: int = 38
 const CAPTION_LINE: float = 46.0
 const MAX_PER_ROW: int = 6
 const MIN_PER_ROW: int = 2
+## The four map features (contract 14.1), in the order of the regions that bring them: fixed text,
+## the small map each one is drawn on, and the ground of the region that brings it.
+const FEATURE_IDS: Array[StringName] = [&"tunnel", &"bridge", &"slide", &"stumps"]
+const FEATURE_NAMES: Dictionary[StringName, String] = {
+	&"tunnel": "Tunnel", &"bridge": "Bridge", &"slide": "Ice slide", &"stumps": "Hollow stumps",
+}
+const FEATURE_GRIDS: Dictionary[StringName, PackedStringArray] = {
+	&"tunnel": ["...", "#T#", "..."], &"bridge": [".#.", "#X#", ".#."],
+	&"slide": [".v.", ".v.", ".#."], &"stumps": ["P#.", "...", ".#P"],
+}
+const FEATURE_GROUNDS: Dictionary[StringName, StringName] = {
+	&"tunnel": &"hollow_lanes", &"bridge": &"russet_orchards", &"slide": &"frostpine_ridge", &"stumps": &"starglen",
+}
 const WALK_GRID: PackedStringArray = ["..o....", "1#####B", "....o.."]
 const GATES_GRID: PackedStringArray = ["...1...", "...#...", ".#####.", ".G.o.G.", ".##B##."]
 const GATES_ROUTE: Array[Vector2i] = [
@@ -29,18 +43,20 @@ const GATES_ROUTE: Array[Vector2i] = [
 
 var kind: StringName
 var captions: PackedStringArray
+var ids: Array[StringName] = []
 
 
-func _init(art_kind: StringName, art_captions: PackedStringArray = PackedStringArray()) -> void:
+func _init(art_kind: StringName, art_captions: PackedStringArray = PackedStringArray(), art_ids: Array[StringName] = []) -> void:
 	kind = art_kind
 	captions = art_captions
+	ids = art_ids.duplicate()
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	clip_contents = true
 
 
 ## The example is as tall as its kind needs for this width.
 func fit_width(width: float) -> void:
-	if kind == &"towers" or kind == &"creatures":
+	if _lists_ids():
 		custom_minimum_size = Vector2(width, float(_grid(width)["height"]))
 		return
 	custom_minimum_size = Vector2(width, width * float(RATIOS.get(kind, 0.4)))
@@ -67,6 +83,8 @@ func _draw() -> void:
 			_towers()
 		&"creatures":
 			_creatures()
+		&"features":
+			_features()
 		&"gates":
 			_gates()
 		&"signals":
@@ -136,9 +154,9 @@ func _towers() -> void:
 	_card_background()
 	var g: Dictionary = _grid(size.x)
 	var slot: float = g["slot"]
-	for i: int in Silhouettes.TOWERS.size():
+	for i: int in ids.size():
 		var at: Vector2 = _slot_center(g, i)
-		Silhouettes.draw_tower(self, Silhouettes.TOWERS[i], 1, -1, at, float(g["picture"]))
+		Silhouettes.draw_tower(self, ids[i], 1, -1, at, float(g["picture"]))
 		_caption(i, at + Vector2(0.0, float(g["picture"]) * 0.62), slot, g)
 
 
@@ -146,11 +164,28 @@ func _creatures() -> void:
 	_card_background()
 	var g: Dictionary = _grid(size.x)
 	var slot: float = g["slot"]
-	var ids: Array[StringName] = creature_ids()
 	for i: int in ids.size():
 		var at: Vector2 = _slot_center(g, i)
 		Silhouettes.draw_enemy(self, ids[i], at, Silhouettes.enemy_size(ids[i], float(g["picture"])), 1)
 		_caption(i, at + Vector2(0.0, float(g["picture"]) * 0.62), slot, g)
+
+
+## Each map feature on a small map of the ground of the region that brings it, with its name.
+func _features() -> void:
+	_card_background()
+	var g: Dictionary = _grid(size.x)
+	var slot: float = g["slot"]
+	for i: int in ids.size():
+		var at: Vector2 = _slot_center(g, i)
+		var side: float = float(g["picture"])
+		var cell: float = side / 3.0
+		var grid: PackedStringArray = FEATURE_GRIDS.get(ids[i], PackedStringArray())
+		if not grid.is_empty():
+			draw_set_transform(at - Vector2(side, side) * 0.5)
+			MapArt.draw_ground(self, grid, cell, null, FEATURE_GROUNDS.get(ids[i], &"lantern_hill"))
+			MapArt.draw_features(self, grid, cell)
+			draw_set_transform(Vector2.ZERO)
+		_caption(i, at + Vector2(0.0, side * 0.62), slot, g)
 
 
 func _gates() -> void:
@@ -225,24 +260,18 @@ func _arrow(from: Vector2, to: Vector2, color: Color = Palette.ROUTE) -> void:
 	draw_colored_polygon(PackedVector2Array([to, to - Vector2(26.0, 16.0), to - Vector2(26.0, -16.0)]), color)
 
 
-## The ids of the pictures this kind shows.
-func _ids() -> Array[StringName]:
-	return Silhouettes.TOWERS if kind == &"towers" else creature_ids()
-
-
-## Every creature, then every boss: the pictures of the Creatures section.
-static func creature_ids() -> Array[StringName]:
-	var ids: Array[StringName] = []
-	ids.append_array(Silhouettes.CREATURES)
-	ids.append_array(Silhouettes.BOSSES)
-	return ids
+## True for the kinds that lay out one picture and caption per id.
+func _lists_ids() -> bool:
+	return kind == &"towers" or kind == &"creatures" or kind == &"features"
 
 
 ## How the pictures sit in `width`: pictures per row, the slot each gets, the picture
 ## size, each caption split into lines, the row height and the whole height. With names,
 ## the most pictures per row (6 down to 2) whose names fit their slot.
 func _grid(width: float) -> Dictionary:
-	var count: int = _ids().size()
+	var count: int = ids.size()
+	if count == 0:
+		return {"per_row": 1, "slot": width, "picture": 0.0, "lines": [] as Array[PackedStringArray], "row_height": 0.0, "rows": 0, "height": 0.0}
 	var per_row: int = MAX_PER_ROW
 	if not captions.is_empty():
 		while per_row > MIN_PER_ROW and not _fit(_caption_lines(width / float(per_row) * 0.94), width / float(per_row) * 0.94):
@@ -272,7 +301,7 @@ func _slot_center(g: Dictionary, index: int) -> Vector2:
 	var per_row: int = g["per_row"]
 	@warning_ignore("integer_division")
 	var row: int = index / per_row
-	var in_row: int = mini(per_row, _ids().size() - row * per_row)
+	var in_row: int = mini(per_row, ids.size() - row * per_row)
 	var column: int = index - row * per_row
 	var x: float = size.x * 0.5 + (float(column) - float(in_row - 1) * 0.5) * float(g["slot"])
 	var y: float = 10.0 + float(g["row_height"]) * float(row) + float(g["picture"]) * 0.62

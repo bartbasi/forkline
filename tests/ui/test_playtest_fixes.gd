@@ -372,7 +372,7 @@ func test_info_names_fit_without_shrinking() -> void:
 		names[id] = game.catalog.tower(id).name
 	for id: StringName in game.catalog.enemy_ids():
 		names[id] = game.catalog.enemy(id).name
-	var info: InfoScreen = _keep(InfoScreen.new({}, names)) as InfoScreen
+	var info: InfoScreen = _keep(InfoScreen.new({}, names, InfoContent.from_game(game))) as InfoScreen
 	var font: Font = UiTheme.font(UiTheme.WEIGHT_BOLD)
 	var checked: int = 0
 	for node: Node in info.find_children("*", "InfoArt", true, false):

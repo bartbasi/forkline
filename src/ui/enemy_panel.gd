@@ -120,7 +120,19 @@ func refresh() -> void:
 	bounty_row.value_label.text = str(int(numbers["bounty"]))
 	if type.heal > 0:
 		heal_row.value_label.text = "%d every %s s" % [int(numbers["heal"]), BattleText.seconds(type.heal_ms)]
-	_set_status(BattleText.status_lines(numbers))
+	_set_status(BattleText.status_lines(numbers, _more()))
+
+
+## What the numbers leave out: the time left dug under, and the max health a grower began with.
+func _more() -> Dictionary:
+	var enemy: EnemyState = battle.enemy_with_id(enemy_id)
+	if enemy == null:
+		return {}
+	var type: EnemyType = battle.catalog.enemy(type_id)
+	return {
+		"dig_ms": enemy.dig_ticks * Sim.MS_PER_TICK,
+		"grown_from": enemy.start_health if type.grow_pct > 0 else 0,
+	}
 
 
 func _show_gone() -> void:

@@ -781,33 +781,34 @@ func test_first_sight_cards_work_for_every_tower_and_creature() -> void:
 # The new towers and creatures in Info.
 
 func test_info_draws_every_tower_creature_and_boss_of_the_data() -> void:
-	var catalog: Catalog = Fx.game().catalog
-	var towers: Array[StringName] = catalog.tower_ids()
-	var shown_towers: Array[StringName] = Silhouettes.TOWERS
-	for id: StringName in towers:
-		assert_true(shown_towers.has(id), "%s is drawn" % id)
-	assert_eq(shown_towers.size(), towers.size(), "and nothing else")
-	var creatures: Array[StringName] = InfoArt.creature_ids()
+	var game: GameData = Fx.game()
+	var catalog: Catalog = game.catalog
+	var content: InfoContent = InfoContent.from_game(game)
+	assert_eq(content.towers, catalog.tower_ids(), "every tower of the data, in its order")
+	var creatures: Array[StringName] = content.pictures()
 	var enemies: Array[StringName] = catalog.enemy_ids()
 	for id: StringName in enemies:
 		assert_true(creatures.has(id), "%s is drawn" % id)
 	assert_eq(creatures.size(), enemies.size(), "and nothing else")
-	for boss: StringName in Silhouettes.BOSSES:
-		assert_true(creatures.has(boss), "%s, a boss, is drawn" % boss)
+	for id: StringName in content.bosses:
+		assert_true(catalog.enemy(id).boss, "%s, a boss, is drawn last" % id)
+		assert_true(creatures.find(id) >= content.creatures.size())
+	for id: StringName in content.creatures:
+		assert_false(catalog.enemy(id).boss)
 
 
 func test_info_names_every_tower_and_creature_under_its_picture() -> void:
 	var made: App = _keep(Flow.app(TAG)) as App
 	var names: Dictionary = made.names
-	var screen: InfoScreen = _keep(InfoScreen.new(made.rules, names)) as InfoScreen
+	var screen: InfoScreen = _keep(InfoScreen.new(made.rules, names, InfoContent.from_game(made.game))) as InfoScreen
 	var captioned: int = 0
 	for art: Node in screen.find_children("*", "InfoArt", true, false):
 		var info_art: InfoArt = art as InfoArt
 		if info_art.kind == &"towers":
-			assert_eq(info_art.captions.size(), Silhouettes.TOWERS.size())
+			assert_eq(info_art.captions.size(), made.game.catalog.tower_ids().size())
 			captioned += 1
 		elif info_art.kind == &"creatures":
-			assert_eq(info_art.captions.size(), InfoArt.creature_ids().size())
+			assert_eq(info_art.captions.size(), made.game.catalog.enemy_ids().size())
 			for caption: String in info_art.captions:
 				assert_false(caption.is_empty(), "every creature has a name under it")
 			captioned += 1

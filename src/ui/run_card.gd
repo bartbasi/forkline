@@ -30,6 +30,9 @@ var best_label: Label
 var streak_label: Label
 var notice_label: Label
 var saved_label: Label
+var saved_difficulty_label: Label
+var regions_label: Label
+var difficulty_heading: Label
 
 var _normal_text: String = ""
 var _relaxed_text: String = ""
@@ -37,12 +40,13 @@ var _relaxed_text: String = ""
 
 ## `data` is the run files (for the lives and gold the run starts with). `day` is the day key of a
 ## daily ("" when the phone's date is no good), `best` that day's best ({} for none) and `streak` the
-## shown streak. `saved_line` is a sentence about the saved game, or "" when there is none.
-func _init(game: GameData, data: RunData, daily_run: bool = false, day: String = "", best: Dictionary = {}, streak: int = 0, saved_line: String = "") -> void:
+## shown streak. `saved_line` is a sentence about the saved game, or "" when there is none, and
+## `saved_relaxed` is that game's difficulty. `regions` is the daily's regions sentence ("Regions 1 to 6").
+func _init(game: GameData, data: RunData, daily_run: bool = false, day: String = "", best: Dictionary = {}, streak: int = 0, saved_line: String = "", saved_relaxed: bool = false, regions: String = "") -> void:
 	super("Daily" if daily_run else "Roguelite")
 	daily = daily_run
 	if daily:
-		_add_daily(day, best, streak)
+		_add_daily(day, best, streak, regions)
 	else:
 		column.add_child(_intro())
 	var normal: Dictionary = start_numbers(game, data, false)
@@ -51,10 +55,13 @@ func _init(game: GameData, data: RunData, daily_run: bool = false, day: String =
 		if not normal.is_empty():
 			column.add_child(UiKit.label("%d lives and %d gold." % [int(normal["lives"]), int(normal["gold"])], &"SoftLabel"))
 	else:
-		column.add_child(_difficulty(normal, easy))
+		column.add_child(_difficulty(normal, easy, not saved_line.is_empty()))
 	if not saved_line.is_empty():
 		saved_label = UiKit.label(saved_line, &"Label")
 		column.add_child(saved_label)
+		if not daily:
+			saved_difficulty_label = UiKit.label("Your saved run is on %s." % ("Relaxed" if saved_relaxed else "Normal"), &"Label")
+			column.add_child(saved_difficulty_label)
 		resume_button = UiKit.button("Resume", &"PrimaryButton")
 		resume_button.tapped.connect(func() -> void: resume_requested.emit())
 		column.add_child(resume_button)
@@ -118,11 +125,41 @@ func _intro() -> Control:
 	return box.get_parent() as Control
 
 
-func _add_daily(day: String, best: Dictionary, streak: int) -> void:
+## The regions a daily covers, as the Daily button and the daily card say it (RULES 15).
+static func regions_text(last_region: int) -> String:
+	return "Regions 1 to %d" % maxi(last_region, 1)
+
+
+## The number of the last campaign region a daily of this tier covers (contract 14.8): the region
+## that holds the tier's `level`; for tier 0 one less than the region of tier 1's `level`, or the
+## number of regions when run.json has no tiers. At least 1.
+static func regions_last(game: GameData, tier: int) -> int:
+	var count: int = game.campaign.size()
+	if game.run == null or game.run.tiers.is_empty():
+		return maxi(count, 1)
+	var capped: int = clampi(tier, 0, game.run.tiers.size())
+	var region: int = _region_number(game, game.run.tiers[maxi(capped, 1) - 1]["level"])
+	if region < 1:
+		return maxi(count, 1)
+	return maxi(region if capped > 0 else region - 1, 1)
+
+
+## 1 based number of the campaign region that holds level `id`, or 0.
+static func _region_number(game: GameData, id: StringName) -> int:
+	for r: int in game.campaign.size():
+		if (game.campaign[r]["levels"] as Array).has(id):
+			return r + 1
+	return 0
+
+
+func _add_daily(day: String, best: Dictionary, streak: int, regions: String) -> void:
 	var box: VBoxContainer = UiKit.section()
 	day_label = UiKit.heading("Today: %s" % day if not day.is_empty() else "Today")
 	box.add_child(day_label)
 	box.add_child(UiKit.label("%d waves. The same run for everyone today, always on Normal." % WAVES))
+	if not regions.is_empty():
+		regions_label = UiKit.label("%s." % regions, &"Label")
+		box.add_child(regions_label)
 	best_label = UiKit.label("Best today: %s" % best_text(best), &"Label")
 	box.add_child(best_label)
 	streak_label = UiKit.label(streak_text(streak), &"Label")
@@ -130,9 +167,10 @@ func _add_daily(day: String, best: Dictionary, streak: int) -> void:
 	column.add_child(box.get_parent() as Control)
 
 
-func _difficulty(normal: Dictionary, easy: Dictionary) -> Control:
+func _difficulty(normal: Dictionary, easy: Dictionary, saved: bool) -> Control:
 	var box: VBoxContainer = UiKit.section()
-	box.add_child(UiKit.heading("Difficulty"))
+	difficulty_heading = UiKit.heading("Difficulty if you start over" if saved else "Difficulty")
+	box.add_child(difficulty_heading)
 	var row: HBoxContainer = HBoxContainer.new()
 	row.add_theme_constant_override(&"separation", 16)
 	normal_button = UiKit.button("Normal")

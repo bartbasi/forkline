@@ -257,12 +257,13 @@ func test_info_captions_come_from_names_only() -> void:
 	var plain: InfoScreen = _keep(InfoScreen.new()) as InfoScreen
 	for node: Node in plain.find_children("*", "InfoArt", true, false):
 		assert_eq((node as InfoArt).captions.size(), 0)
-	var named: InfoScreen = _keep(InfoScreen.new({}, {&"sling_post": "Test Name"})) as InfoScreen
+	var content: InfoContent = InfoContent.from_game(Fx.BattleFixtures.game())
+	var named: InfoScreen = _keep(InfoScreen.new({}, {&"sling_post": "Test Name"}, content)) as InfoScreen
 	var found: bool = false
 	for node: Node in named.find_children("*", "InfoArt", true, false):
 		var art: InfoArt = node as InfoArt
 		if art.kind == &"towers":
-			found = art.captions.size() == Silhouettes.TOWERS.size() and art.captions[0] == "Test Name"
+			found = art.captions.size() == content.towers.size() and art.captions[0] == "Test Name"
 	assert_true(found)
 
 

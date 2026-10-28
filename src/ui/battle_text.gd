@@ -328,15 +328,34 @@ static func refund_text(now: int, before: int, percent: int) -> String:
 	return "Full refund: bought this build phase."
 
 
-## The status lines of a tapped creature (RULES 9.4). Empty when there are none.
-static func status_lines(numbers: Dictionary) -> PackedStringArray:
+## The status lines of a tapped creature (RULES 8.8, 9.4). Empty when there are none.
+## `more` holds what the numbers do not: `dig_ms`, the time left dug under (a dug creature is
+## out of reach, and says why), and `grown_from`, the max health a grower started with.
+static func status_lines(numbers: Dictionary, more: Dictionary = {}) -> PackedStringArray:
 	var out: PackedStringArray = PackedStringArray()
 	if int(numbers.get("slow_pct", 0)) > 0 and int(numbers.get("slow_ms", 0)) > 0:
 		out.append("Slowed %d%% for %s s" % [int(numbers["slow_pct"]), seconds(int(numbers["slow_ms"]))])
+	if int(numbers.get("fright_pct", 0)) > 0 and int(numbers.get("fright_ms", 0)) > 0:
+		out.append("Frightened: takes %d%% more damage for %s s" % [int(numbers["fright_pct"]), seconds(int(numbers["fright_ms"]))])
 	if bool(numbers.get("bubble", false)):
 		out.append("Bubble up")
 	elif int(numbers.get("bubble_ms", 0)) > 0:
 		out.append("Bubble back in %s s" % seconds(int(numbers["bubble_ms"])))
 	if int(numbers.get("breaking_ms", 0)) > 0:
 		out.append("Breaking a gate: %s s left" % seconds(int(numbers["breaking_ms"])))
+	if int(numbers.get("low_ms", 0)) > 0:
+		out.append("Low: every tower can hit it for %s s" % seconds(int(numbers["low_ms"])))
+	if int(numbers.get("nap_ms", 0)) > 0:
+		out.append("Napping: %s s left. Health shows what it wakes with." % seconds(int(numbers["nap_ms"])))
+	elif int(more.get("dig_ms", 0)) > 0 and bool(numbers.get("out_of_reach", false)):
+		out.append("Dug under: out of reach for %s s" % seconds(int(more["dig_ms"])))
+	elif bool(numbers.get("out_of_reach", false)):
+		out.append("Out of reach: no tower can hit it")
+	if bool(numbers.get("hidden", false)):
+		out.append("Hidden: no tower can aim at it")
+	if bool(numbers.get("awake", false)):
+		out.append("Awake: it cannot be slowed")
+	var grown_from: int = int(more.get("grown_from", 0))
+	if grown_from > 0 and int(numbers.get("max_health", 0)) > grown_from:
+		out.append("Grown: max health %d, started at %d" % [int(numbers["max_health"]), grown_from])
 	return out

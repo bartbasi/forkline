@@ -10,15 +10,29 @@ extends PageFrame
 ## (docs/ARCHITECTURE.md 2.1). Numbers come from `rules` (the rules.json keys)
 ## when the App has them and are left out of the sentence when it does not.
 ## Names under the pictures come from `names` (id to name, from data/stats/)
-## and are left out when it is empty.
+## and are left out when it is empty. The towers, creatures, bosses and map features it
+## draws come from `content` (InfoContent, read from the catalog and the levels), never from
+## a fixed list, so what the data holds is what the guide shows. With no content, those
+## pictures and the Map features section are left out.
 
 const PANEL_PADDING: float = 64.0
 
+## What each map feature does, in fixed words (contract 14.1). A section line shows only for
+## the features that `content` holds.
+const FEATURE_TEXT: Dictionary[StringName, String] = {
+	&"tunnel": "Tunnel: a road under a grassy mound. A walker inside is out of reach, so no tower can hit it until it comes out.",
+	&"bridge": "Bridge: two roads cross on a plank deck and do not join. Walkers go straight across.",
+	&"slide": "Ice slide: a one-way road. A walker leaves it only the way its chevrons point.",
+	&"stumps": "Hollow stumps: twins with the same carved symbol. A walker can step from one to the other, and is out of reach on the way.",
+}
+
 var _arts: Array[InfoArt] = []
+var _content: InfoContent
 
 
-func _init(rules: Dictionary = {}, names: Dictionary = {}) -> void:
+func _init(rules: Dictionary = {}, names: Dictionary = {}, content: InfoContent = null) -> void:
 	super("Info")
+	_content = content if content != null else InfoContent.new()
 	for section: Dictionary in _sections(rules):
 		_add_section(section, names)
 
@@ -37,20 +51,35 @@ func _add_section(section: Dictionary, names: Dictionary) -> void:
 		box.add_child(UiKit.label(paragraph))
 	var art_kind: StringName = section.get("art", &"")
 	if art_kind != &"":
-		var art: InfoArt = InfoArt.new(art_kind, _captions(art_kind, names))
-		_arts.append(art)
-		box.add_child(art)
+		var ids: Array[StringName] = _ids(art_kind)
+		var listed: bool = art_kind == &"towers" or art_kind == &"creatures" or art_kind == &"features"
+		if not listed or not ids.is_empty():
+			var art: InfoArt = InfoArt.new(art_kind, _captions(art_kind, names, ids), ids)
+			_arts.append(art)
+			box.add_child(art)
 	column.add_child(box.get_parent())
 
 
-## Names to draw under the towers or creatures, or none when `names` lacks them.
-func _captions(art_kind: StringName, names: Dictionary) -> PackedStringArray:
-	var ids: Array[StringName] = []
-	if art_kind == &"towers":
-		ids = Silhouettes.TOWERS
-	elif art_kind == &"creatures":
-		ids = InfoArt.creature_ids()
+## The ids an art kind draws: from the content for the lists, none for the rest.
+func _ids(art_kind: StringName) -> Array[StringName]:
+	match art_kind:
+		&"towers":
+			return _content.towers
+		&"creatures":
+			return _content.pictures()
+		&"features":
+			return _content.features
+	return [] as Array[StringName]
+
+
+## Names to draw under the pictures: the data's names for towers and creatures (none when
+## `names` lacks them all), the fixed names for the map features.
+func _captions(art_kind: StringName, names: Dictionary, ids: Array[StringName]) -> PackedStringArray:
 	var out: PackedStringArray = PackedStringArray()
+	if art_kind == &"features":
+		for id: StringName in ids:
+			out.append(InfoArt.FEATURE_NAMES[id])
+		return out
 	var found: bool = false
 	for id: StringName in ids:
 		var name_text: String = str(names.get(id, ""))
@@ -115,9 +144,30 @@ func _sections(rules: Dictionary) -> Array[Dictionary]:
 			"Roguelite is one run of many waves. After each wave you pick a card. Daily is one run a day, the same for everyone, and always Normal.",
 			_runs_sentence(runs_built, run_stars)]},
 	]
+	var features: Dictionary = _features_section()
+	if not features.is_empty():
+		sections.insert(_index_of(sections, "Before each wave"), features)
 	if runs_built:
 		sections.append_array(_run_sections())
 	return sections
+
+
+## The Map features section, for the features the content holds. Empty when it holds none.
+func _features_section() -> Dictionary:
+	if _content.features.is_empty():
+		return {}
+	var text: Array[String] = ["Later regions add map features to the roads. Each one shows on the map by its shape."]
+	for id: StringName in _content.features:
+		text.append(FEATURE_TEXT[id])
+	text.append("The route line always shows where walkers will go.")
+	return {"title": "Map features", "art": &"features", "text": text}
+
+
+func _index_of(sections: Array[Dictionary], title: String) -> int:
+	for i: int in sections.size():
+		if sections[i]["title"] == title:
+			return i
+	return sections.size()
 
 
 ## How a run and the daily go (RULES 14, 15). Shown once the run mode is built.

@@ -300,7 +300,7 @@ func open_mode() -> void:
 
 ## The Continue card and the run locks, from the saved games and the progress.
 func _fill_mode(screen: ModeScreen) -> void:
-	screen.set_runs(runs_open, stars, int(rules.get("run_stars", RUN_STARS_DEFAULT)), RUNS_BUILT, daily_detail())
+	screen.set_runs(runs_open, stars, int(rules.get("run_stars", RUN_STARS_DEFAULT)), RUNS_BUILT, daily_detail(), daily_regions())
 	if saved_games.is_empty():
 		screen.set_continue("", "")
 		return
@@ -312,7 +312,32 @@ func daily_detail() -> String:
 	var day: String = today()
 	if day.is_empty():
 		return "Check the phone's date."
-	return ModeScreen.daily_detail(_best_for(day), _shown_streak(day))
+	var saved: SavedGame = saved_game(SavedGame.DAILY)
+	var saved_today: bool = saved != null and saved.run.day == day
+	return ModeScreen.daily_detail(_best_for(day), _shown_streak(day), saved_today)
+
+
+## The tier of the daily that is saved for today, or else of the day's record, or else the
+## player's tier, and never above the tiers run.json has (contract 14.8). A daily in progress
+## keeps its own tier, so the buttons and the card always name the regions it covers.
+func daily_tier() -> int:
+	if game == null or game.run == null:
+		return 0
+	var day: String = today()
+	var tier: int = progress.tier(game)
+	var saved: SavedGame = saved_game(SavedGame.DAILY)
+	if saved != null and not day.is_empty() and saved.run.day == day:
+		tier = saved.run.tier
+	elif daily_record != null and daily_record.day == day and not day.is_empty():
+		tier = daily_record.tier
+	return clampi(tier, 0, game.run.tiers.size())
+
+
+## "Regions 1 to 6": what the daily covers (RULES 15). "" without run data.
+func daily_regions() -> String:
+	if game == null or game.run == null:
+		return ""
+	return RunCard.regions_text(RunCard.regions_last(game, daily_tier()))
 
 
 ## The phone's date as a day key such as "2026-10-24". "" when the date is not one a daily
@@ -361,7 +386,7 @@ func _progress_text(battle: Battle) -> String:
 
 
 func open_info() -> void:
-	push_screen(InfoScreen.new(rules, names))
+	push_screen(InfoScreen.new(rules, names, InfoContent.from_game(game)))
 
 
 func open_about() -> void:
@@ -798,7 +823,9 @@ func open_run_card(daily: bool) -> void:
 		return
 	var mode: StringName = SavedGame.DAILY if daily else SavedGame.RUN
 	var day: String = today() if daily else ""
-	var card: RunCard = RunCard.new(game, game.run, daily, day, _best_for(day) if daily else {}, _shown_streak(day) if daily else 0, _saved_run_line(saved_game(mode)))
+	var saved: SavedGame = saved_game(mode)
+	var card: RunCard = RunCard.new(game, game.run, daily, day, _best_for(day) if daily else {}, _shown_streak(day) if daily else 0,
+		_saved_run_line(saved), saved != null and saved.battle.relaxed, daily_regions() if daily else "")
 	card.start_requested.connect(request_start_run.bind(daily))
 	card.resume_requested.connect(func() -> void: resume_game(saved_game(mode)))
 	push_screen(card)
@@ -848,8 +875,9 @@ func _start_mode(daily: bool, relaxed: bool) -> void:
 func start_run(relaxed: bool = false) -> void:
 	if damaged or _battle_screen != null or not RUNS_BUILT or not runs_open:
 		return
-	var pool: Array[StringName] = game.run.pool(progress.unlock_counters())
-	_begin_run(RunSession.start(_new_seed(), "", relaxed, pool, game.run, game.catalog), SavedGame.RUN)
+	var tier: int = clampi(progress.tier(game), 0, game.run.tiers.size())
+	var pool: Array[StringName] = game.run.pool(progress.unlock_counters(), tier)
+	_begin_run(RunSession.start(_new_seed(), "", relaxed, pool, game.run, game.catalog, tier), SavedGame.RUN)
 
 
 ## Starts today's daily: the seed is the phone's date, always Normal, with every card in the pool.
@@ -860,7 +888,8 @@ func start_daily() -> void:
 	var day: String = today()
 	if day.is_empty():
 		return
-	_begin_run(RunSession.start(RunSeeds.daily_seed(day), day, false, game.run.card_ids(), game.run, game.catalog), SavedGame.DAILY)
+	var tier: int = daily_tier()
+	_begin_run(RunSession.start(RunSeeds.daily_seed(day), day, false, game.run.card_ids(tier), game.run, game.catalog, tier), SavedGame.DAILY)
 
 
 ## A run that could not be made means the bundled files are broken (docs/ARCHITECTURE.md 3.4).
@@ -914,7 +943,7 @@ func _record_run(run: RunSession) -> Dictionary:
 			progress.bump(&"risky_wins", 1)
 	if run.daily:
 		progress.bump(&"dailies_finished", 1)
-		daily_record.record_finish(run.day, {"won": outcome["won"], "waves": outcome["waves"], "lives": outcome["lives"]})
+		daily_record.record_finish(run.day, {"won": outcome["won"], "waves": outcome["waves"], "lives": outcome["lives"]}, run.tier)
 		if store != null and not store.save_daily(daily_record):
 			_log_save_failure()
 	save_progress()

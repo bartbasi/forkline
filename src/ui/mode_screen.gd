@@ -25,6 +25,7 @@ var _runs_built: bool = true
 var _stars_needed: int = 12
 var _stars: int = 0
 var _daily_detail: String = ""
+var _daily_regions: String = ""
 
 
 func _init() -> void:
@@ -53,13 +54,15 @@ func set_continue(title: String, detail: String) -> void:
 
 ## Roguelite and Daily: not built yet, or open, or locked until `stars_needed` stars
 ## are earned. `built` false wins over everything else. `daily_detail` is the Daily
-## button's second line once it is open; "" keeps the plain line.
-func set_runs(runs_open: bool, stars: int, stars_needed: int, built: bool = true, daily_detail: String = "") -> void:
+## button's second line once it is open; "" keeps the plain line. `daily_regions` is the regions
+## sentence ("Regions 1 to 6", RULES 15) that goes in front of that line; "" leaves it out.
+func set_runs(runs_open: bool, stars: int, stars_needed: int, built: bool = true, daily_detail: String = "", daily_regions: String = "") -> void:
 	_runs_open = runs_open and built
 	_runs_built = built
 	_stars = stars
 	_stars_needed = stars_needed
 	_daily_detail = daily_detail
+	_daily_regions = daily_regions
 	if roguelite_button != null:
 		column.remove_child(roguelite_button)
 		roguelite_button.queue_free()
@@ -73,18 +76,24 @@ func _build_runs() -> void:
 	roguelite_button = _run_card("Roguelite", "One run. Pick a card after each wave.")
 	roguelite_button.tapped.connect(func() -> void: roguelite_pressed.emit())
 	column.add_child(roguelite_button)
-	daily_button = _run_card("Daily", _daily_detail if not _daily_detail.is_empty() else "One run a day. The same for everyone.")
+	var daily_line: String = _daily_detail if not _daily_detail.is_empty() else "One run a day. The same for everyone."
+	if not _daily_regions.is_empty() and _runs_open:
+		daily_line = "%s. %s" % [_daily_regions, daily_line]
+	daily_button = _run_card("Daily", daily_line)
 	daily_button.tapped.connect(func() -> void: daily_pressed.emit())
 	column.add_child(daily_button)
 
 
 ## The Daily button's second line from the day's best ({} for none) and the shown streak:
 ## "Best today: Won with 14 lives left. Streak: 3 days." Without a streak that part is left
-## out. With neither a best nor a streak it is "", and the plain line shows.
-static func daily_detail(best: Dictionary, streak: int) -> String:
-	if best.is_empty() and streak <= 0:
+## out. With neither a best nor a streak it is "", and the plain line shows. While today's daily
+## is saved (`saved_today`) and has no result yet, it says "No result yet today.", as the Continue
+## card above it does not say "not played".
+static func daily_detail(best: Dictionary, streak: int, saved_today: bool = false) -> String:
+	if best.is_empty() and streak <= 0 and not saved_today:
 		return ""
-	var text: String = "Not played today." if best.is_empty() else "Best today: %s" % RunCard.best_text(best)
+	var none_yet: String = "No result yet today." if saved_today else "Not played today."
+	var text: String = none_yet if best.is_empty() else "Best today: %s" % RunCard.best_text(best)
 	if streak > 0:
 		text += " %s." % RunCard.streak_text(streak)
 	return text
