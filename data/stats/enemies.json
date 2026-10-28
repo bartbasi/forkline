@@ -62,5 +62,15 @@
    "info": "Digs under, out of reach, for 2 seconds every 8. Comes up with 2 Mistwisps.",
    "health": 3200, "armor": 2, "speed": 40, "lives": 20, "bounty": 300, "boss": true,
    "dig_first_ms": 6000, "dig_every_ms": 8000, "dig_ms": 2000,
-   "summon": {"enemy": "mistwisp", "count": 2, "every_ms": 8000, "gap_ms": 300}}
+   "summon": {"enemy": "mistwisp", "count": 2, "every_ms": 8000, "gap_ms": 300}},
+  {"id": "gleamer", "name": "Gleamer",
+   "info": "Every tower that can reach it aims at it. Others slip past.",
+   "health": 160, "armor": 0, "speed": 80, "lives": 2, "bounty": 18, "dazzle": true},
+  {"id": "sleepyhead", "name": "Sleepyhead",
+   "info": "Popped once, it naps for 2 seconds, then gets up with half its health.",
+   "health": 90, "armor": 0, "speed": 90, "lives": 1, "bounty": 12, "nap_ms": 2000},
+  {"id": "old_hayrick", "name": "Old Hayrick",
+   "info": "Every tower aims at it. Popped once, it naps 3 seconds and gets up again.",
+   "health": 2600, "armor": 0, "speed": 40, "lives": 20, "bounty": 300, "boss": true,
+   "dazzle": true, "nap_ms": 3000}
 ]}

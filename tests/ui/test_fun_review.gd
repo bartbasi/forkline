@@ -630,6 +630,12 @@ func _check_rows(panel: TowerPanel, b: Battle, cell: Vector2i, where: String) ->
 		assert_eq(_stat_value(panel, "Damage bonus"), "+%d" % int(numbers["boost_damage"]), where)
 		assert_eq(_stat_value(panel, "Reach"), reach, where)
 		assert_eq(_stat_value(panel, "Boosting now"), str(int(numbers["boosting"])), where)
+	elif kind == &"fright":
+		# The Scarecrow (RULES 9.3): a ring tower like the Bell, with a fright instead of a slow.
+		assert_eq(_stat_value(panel, "Fright"), "%d%%" % int(numbers["fright_pct"]), where)
+		assert_eq(_stat_value(panel, "Range"), reach, where)
+		assert_eq(_stat_value(panel, "Linger"), "%s s" % BattleText.seconds(int(numbers["fright_ms"])), where)
+		assert_eq(_stat_value(panel, "Affects"), BattleText.hits_text(numbers), where)
 	else:
 		assert_eq(_stat_value(panel, "Damage"), str(int(numbers["damage"])), where)
 		assert_eq(_stat_value(panel, "Rate"), "%s/s" % BattleText.rate(int(numbers["reload_ms"])), where)

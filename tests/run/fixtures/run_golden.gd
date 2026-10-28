@@ -111,6 +111,19 @@ static func with_tier_1(files: Dictionary) -> Dictionary:
 	burrow["boss"] = "burrowbelly"
 	burrow["waves"][2]["groups"][0]["enemy"] = "burrowbelly"
 	(packs["packs"] as Array).insert(0, burrow)
+	# The real run.json lists tier 2 too, so its boss needs a band 6 pack until the real ones exist.
+	var has_hayrick: bool = false
+	for item: Dictionary in packs["packs"]:
+		has_hayrick = has_hayrick or item["boss"] == "old_hayrick"
+	if not has_hayrick:
+		var hayrick: Dictionary = (by_id["b6_tusk_charge"] as Dictionary).duplicate(true)
+		hayrick["id"] = "b6_hayrick_stand_in"
+		hayrick["boss"] = "old_hayrick"
+		hayrick["waves"][2]["strength"] = 140
+		for group: Dictionary in hayrick["waves"][2]["groups"]:
+			if group["enemy"] == "old_tusk":
+				group["enemy"] = "old_hayrick"
+		(packs["packs"] as Array).insert(0, hayrick)
 	(packs["packs"] as Array).insert(0, mossbud)
 	return out
 

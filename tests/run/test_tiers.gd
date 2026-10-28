@@ -122,7 +122,7 @@ func _bring_mossbud(all: Dictionary) -> void:
 
 # run.json tiers
 
-func test_the_fixtures_pass_and_the_real_run_json_lists_tier_1() -> void:
+func test_the_fixtures_pass_and_the_real_run_json_lists_tiers_1_and_2() -> void:
 	assert_eq(RunData.check(Tx.files(), catalog), PackedStringArray())
 	assert_not_null(data)
 	assert_eq(Fx.run_data().tiers.size(), 0, "the plain fixtures have no tiers")
@@ -130,8 +130,10 @@ func test_the_fixtures_pass_and_the_real_run_json_lists_tier_1() -> void:
 	assert_eq(real["status"], JsonFile.OK_STATUS)
 	assert_eq(real["data"]["tiers"], [
 		{"level": "r5_l6", "towers": ["bramble_cottage"], "creatures": ["mossbud", "mistwisp"], "bosses": ["burrowbelly"], "grid": "T"},
-	], "tier 1 of E5.1; tiers 2 to 4 come with their regions")
-	assert_eq(real["data"]["bands"][1], ["skitter", "flitter", "shellback", "mossbud"], "band 2 gains Mossbud")
+		{"level": "r6_l6", "towers": ["scarecrow"], "creatures": ["gleamer", "sleepyhead"], "bosses": ["old_hayrick"], "grid": "X"},
+	], "tier 1 of E5.1 and tier 2 of E6.1b; tiers 3 and 4 come with their regions")
+	assert_eq(real["data"]["bands"][1], ["skitter", "flitter", "shellback", "mossbud", "sleepyhead"], "band 2 gains Mossbud and Sleepyhead")
+	assert_eq(real["data"]["bands"][2], ["bubbler", "puffball", "gleamer"], "band 3 gains Gleamer")
 	assert_eq(real["data"]["bands"][3], ["mender", "dusk_moth", "mistwisp"], "band 4 gains Mistwisp")
 
 

@@ -1,7 +1,7 @@
 # Forkline. Copyright 2026 Play, Inc.
 # Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.
 extends RefCounted
-## The map feature rules that are level design rules, not load checks (RULES 3.5, 3.6, 14.2;
+## The map feature rules that are level design rules, not load checks (RULES 3.5 to 3.7, 14.2;
 ## docs/ARCHITECTURE.md 14.2, 14.13). Used on campaign levels and on assembled run maps, so a
 ## run map is checked across the seams between its segments.
 
@@ -10,6 +10,8 @@ const MAX_TUNNEL_TILES: int = 6
 const MAX_TUNNEL_RUN: int = 4
 ## RULES 3.6: tunnels hold at most a quarter of the steps of any entrance's shortest route with no gates.
 const TUNNEL_SHARE_DIVISOR: int = 4
+## RULES 3.7: a map has at most 3 bridges.
+const MAX_BRIDGES: int = 3
 const SIDES: Array[Vector2i] = [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]
 
 
@@ -94,6 +96,72 @@ static func tunnel_problems(level: LevelData) -> PackedStringArray:
 					under += 1
 			if under * TUNNEL_SHARE_DIVISOR > steps:
 				out.append("entrance %d: %d of %d steps in tunnels, at most a quarter" % [i + 1, under, steps])
+	return out
+
+
+static func bridge_tiles(level: LevelData) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for r: int in level.rows:
+		for c: int in Sim.MAP_COLUMNS:
+			var cell: Vector2i = Vector2i(c, r)
+			if level.feature_at(cell) == LevelData.Feature.BRIDGE:
+				out.append(cell)
+	return out
+
+
+## Every way the bridges of `level` break RULES 3.7, one line each. Empty when they keep every rule: each
+## bridge has four road neighbors, so it is never on the map edge; a map has at most 3; and no two bridges
+## are neighbors, so a plain road tile lies between two.
+static func bridge_problems(level: LevelData) -> PackedStringArray:
+	var out: PackedStringArray = PackedStringArray()
+	var tiles: Array[Vector2i] = bridge_tiles(level)
+	if tiles.size() > MAX_BRIDGES:
+		out.append("%d bridges, at most %d" % [tiles.size(), MAX_BRIDGES])
+	for cell: Vector2i in tiles:
+		for side: Vector2i in SIDES:
+			var next: Vector2i = cell + side
+			if not level.is_road(next):
+				out.append("bridge %s has no road at %s" % [cell, next])
+			elif tiles.has(next):
+				out.append("bridge %s is next to the bridge %s" % [cell, next])
+	return out
+
+
+## RULES 3.7 level guide: the bridges that lie on no entrance's shortest route for any placement of up to
+## `gates` gates that seals nothing. Empty when every bridge always matters.
+static func bridges_off_every_route(level: LevelData, gates: int) -> Array[Vector2i]:
+	var tiles: Array[Vector2i] = bridge_tiles(level)
+	if tiles.is_empty():
+		return tiles
+	var map: RoadMap = RoadMap.new(level)
+	var sets: Array[Array] = []
+	gate_sets(level.sockets, gates, 0, [], sets)
+	var crossed: Dictionary = {}
+	for placed: Array in sets:
+		var closed: Array[Vector2i] = []
+		closed.assign(placed)
+		if map.seals(closed):
+			continue
+		var dist: PackedInt32Array = map.distances(closed)
+		for entrance: Vector2i in level.entrances:
+			for cell: Vector2i in map.route(entrance, dist):
+				if tiles.has(cell):
+					crossed[cell] = true
+	var out: Array[Vector2i] = []
+	for cell: Vector2i in tiles:
+		if not crossed.has(cell):
+			out.append(cell)
+	return out
+
+
+## How a route crosses each bridge, in order: "over" for the east-west road on the deck, "under" for the
+## north-south road. A route lists a bridge cell once for each crossing (docs/ARCHITECTURE.md 14.3).
+static func crossings(level: LevelData, route: Array[Vector2i]) -> PackedStringArray:
+	var out: PackedStringArray = PackedStringArray()
+	for i: int in range(1, route.size() - 1):
+		if level.feature_at(route[i]) != LevelData.Feature.BRIDGE:
+			continue
+		out.append("over" if route[i - 1].y == route[i].y else "under")
 	return out
 
 

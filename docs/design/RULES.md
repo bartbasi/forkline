@@ -41,11 +41,13 @@ Clarifications, 2026-10-27, after the DM's nap ruling in docs/ARCHITECTURE.md 14
 
 Region 5 data, 2026-10-28 (task E5.1). No number changed. data/stats/ now holds region 5's tower, creatures and boss, and rules.json the star counts of all eight regions (16). Made precise, as the sim already plays it: every doze ends when a build phase begins (6.2). Two card lines are clearer, for the DM to tell Bart (6.6): the Mistwisp's no longer reads as if it hides itself, and Burrowbelly's says it is out of reach while dug under.
 
+Region 6 data, 2026-10-28 (task E6.1). No number changed. data/stats/ now holds region 6's tower, creatures and boss. Made precise: the run packs of every tier start in band 3 (14.3). The old words asked for tier 1 and tier 2 packs in band 2, where the rule on new creatures leaves no room, as the level designer found in E5.1. Region 5's packs already start in band 3. A Bramble Cottage's range row reads "Ring", which the DM accepted (9.3). Burrowbelly's two band 6 packs, built in E5.1, join the table of 14.3. The Scarecrow's card line and the 6-2 hint now say "Walkers", not "Creatures", because only the Crow Keeper frightens flyers that a Moth Lantern has not lured low (5.9, 12.4). That is for the DM to tell Bart.
+
 Names follow docs/art/NAMES.md, which Bart approved at hard stop B and which holds the names of regions 5 to 8 that he approved on 2026-10-27. The tables in 5.1, 5.3 to 5.8, 5.12 to 5.15, 6.1, 6.3 and 12.1 give each tower, tier 3 path, creature, boss and region its id from that list, so the data files have one source. In each tower's tier table, the first tier 3 row is spec 0 and the second is spec 1.
 
 This file holds every game rule and number for version 1. The sim engineer, level designer, roguelite engineer, balance analyst and UI engineer build from it. If something here is unclear or seems to conflict with docs/ARCHITECTURE.md, ask the DM. Do not guess.
 
-The numbers are starting values. The balance bots tune them, and every change comes back into this file through the game designer. data/stats/ holds this file's tower, creature and core rule numbers, with the names, plurals and card lines, as data in the contract's units (milliseconds, and hundredths of a tile). This file and those files change together, in the same step. The one exception is the expansion of 2026-10-27: its numbers join data/stats/ one region at a time, in each region's loop (contract section 13). Region 5's joined on 2026-10-28. Regions 6 to 8 follow in their own loops. Section 17 answers the assumptions in the first draft of docs/ARCHITECTURE.md. Section 19 is written for Bart. It holds no rules, and nobody builds from it.
+The numbers are starting values. The balance bots tune them, and every change comes back into this file through the game designer. data/stats/ holds this file's tower, creature and core rule numbers, with the names, plurals and card lines, as data in the contract's units (milliseconds, and hundredths of a tile). This file and those files change together, in the same step. The one exception is the expansion of 2026-10-27: its numbers join data/stats/ one region at a time, in each region's loop (contract section 13). Regions 5 and 6 joined on 2026-10-28. Regions 7 and 8 follow in their own loops. Section 17 answers the assumptions in the first draft of docs/ARCHITECTURE.md. Section 19 is written for Bart. It holds no rules, and nobody builds from it.
 
 ## Contents
 
@@ -506,7 +508,7 @@ These lines appear on the info card the first time a tower is available, and on 
 | Grand Oven | Even faster towers around it. |
 | Spice Kitchen | Faster towers that also hit 2 harder. |
 | Bramble Cottage | Thorns scratch every walker in its ring each second. Armor blunts them. |
-| Scarecrow | Creatures in its ring take more damage from every hit. Deals no damage. |
+| Scarecrow | Walkers in its ring take more damage from every hit. Deals no damage. |
 | Snow Fort | Rolls a snowball in a straight line. Every walker in its path is hit. |
 | Moth Lantern | Lures flyers low, so every tower can hit them. Can't hit walkers. |
 | Wild Bramble | A wider ring of thorns. |
@@ -1100,7 +1102,7 @@ Every status, and how it shows. Each one reads by shape, never by color alone (9
 
 | Tower kind | Shows |
 |---|---|
-| Attacking towers | Name, tier and path. Damage per hit, with any Bakery bonus shown as "+2". Rate (attacks per second, one decimal, boosts included). Range in tiles. What it hits: walkers, flyers or both. Special: splash radius, ignores armor, targets per shot when more than 1, slow percent and time, line width (Snow Fort), how long a flyer stays low (Moth Lantern), or that it hits every creature in its ring (Bramble Cottage). Bakery boost received. Dozing, with the time left, while it dozes. Targeting mode, which can be changed here, except on a Bramble Cottage. Total spent. Sell value right now. |
+| Attacking towers | Name, tier and path. Damage per hit, with any Bakery bonus shown as "+2". Rate (attacks per second, one decimal, boosts included). Range in tiles. On a Bramble Cottage that row reads "Ring" instead of "Range", here and in its upgrade numbers (9.5), because its thorns hit everything in it. What it hits: walkers, flyers or both. Special: splash radius, ignores armor, targets per shot when more than 1, slow percent and time, line width (Snow Fort), how long a flyer stays low (Moth Lantern), or that it hits every creature in its ring (Bramble Cottage). Bakery boost received. Dozing, with the time left, while it dozes. Targeting mode, which can be changed here, except on a Bramble Cottage. Total spent. Sell value right now. |
 | Lullaby Bell | Name, tier and path. Slow percent. Range. Linger 1.0 s. Affects walkers, or walkers and flyers. Total spent. Sell value. |
 | Scarecrow | Name, tier and path. Fright percent. Range. Linger 1.0 s. Affects walkers, or walkers and flyers. Total spent. Sell value. |
 | Bakery | Name, tier and path. Rate boost and damage bonus. Reach. How many towers it boosts right now. Total spent. Sell value. |
@@ -1416,7 +1418,7 @@ The number in each star 3 rule is a starting target. The level designer confirms
 | 5-5 | Use at most 3 kinds of tower. | none | none |
 | 5-6 | Have at most 8 towers. | Burrowbelly digs under, then comes up with Mistwisps. Keep Brambles near. | A spot beside its longest open stretch |
 | 6-1 | Use at most 1 gate. | At a bridge one road crosses over another. Walkers go straight across. | The socket that sends walkers over the bridge and back under it |
-| 6-2 | Have at most 6 towers. | Creatures near a Scarecrow take more damage. Put it where your towers aim. | A spot whose ring covers the road that most spots reach |
+| 6-2 | Have at most 6 towers. | Walkers near a Scarecrow take more damage. Put it where your towers aim. | A spot whose ring covers the road that most spots reach |
 | 6-3 | Build no Longbow Lofts. | Every tower aims at a Gleamer. Splash and rings still hit the rest. | A spot beside the road for a Catapult |
 | 6-4 | No tower above tier 2. | Sleepyheads nap once and get up. Keep towers further down the road. | A spot further down the road |
 | 6-5 | Call 6 waves early. | none | none |
@@ -1655,14 +1657,14 @@ All core rules (4 to 9) apply in runs: phases, pause, speeds, early calls, selli
 | Band | Waves | Creatures its packs may use, on top of earlier bands | Added by tiers 1 to 4 (14.9) |
 |---|---|---|---|
 | 1 | 1 to 3 | Scamp, Pip. Wave 1 is Scamps only. | none |
-| 2 | 4 to 6 | Skitter, Flitter, Shellback | Mossbud (tier 1), Sleepyhead (tier 2) |
+| 2 | 4 to 6 | Skitter, Flitter, Shellback | Mossbud (tier 1), Sleepyhead (tier 2), both first in band 3 packs (below) |
 | 3 | 7 to 9 | Bubbler, Puffball | Gleamer (tier 2), Snowroller (tier 3), Blinker (tier 4) |
 | 4 | 10 to 12 | Mender, Dusk Moth | Mistwisp (tier 1), Yawner (tier 3) |
 | 5 | 13 to 15 | Gatecrasher | Hootling (tier 4) |
 | 6 | 16 to 18 | All. Wave 18 is a boss with its escort. | The bosses of tiers 1 to 4 |
 
 - The seed picks the run's boss from the eligible bosses: the four of regions 1 to 4, and one more for each tier the run has (14.9). Band 6 uses a pack made for that boss.
-- Each of regions 5 to 8 adds packs that use its creatures: at least one in each band from its creatures' bands on, plus two band 6 packs for its boss.
+- Each of regions 5 to 8 adds packs that use its creatures: at least one in each band from the first band where a pack can show one of its creatures as new up to band 5, plus two band 6 packs for its boss. That first band is band 3 for every region. A band 2 pack has no room, because its three waves already show Skitter, Flitter and Shellback as new and no wave shows two creatures as new (below). So the Mossbud and the Sleepyhead, which the table lists in band 2, first come in band 3 packs. Tier 1's packs start in band 3, and so do those of tiers 2 to 4.
 - Each band 6 pack sets the strength of its third wave, the boss wave, as a campaign boss wave does (12.3). Every other pack wave takes the strength of 14.1. The level designer tunes each boss wave to the target in 14.8. Starting values:
 
 | Band 6 pack | Boss | Boss wave strength | Boss health |
@@ -1675,11 +1677,14 @@ All core rules (4 to 9) apply in runs: phases, pause, speeds, early calls, selli
 | `b6_moon_tide` | Moon Moth | 140 | 2240 |
 | `b6_tusk_charge` | Old Tusk | 200 | 6000 |
 | `b6_tusk_night` | Old Tusk | 180 | 5400 |
+| `b6_burrow_deep` | Burrowbelly | 130 | 4160 |
+| `b6_burrow_mist` | Burrowbelly | 120 | 3840 |
 
 - The band 6 packs of the bosses of regions 5 to 8 join this table when the level designer builds them, tuned to the same target.
 - Packs name entrance A or B. On a map with one entrance, B means A.
 - A creature a run has not shown yet comes in its own group, first in its wave, and no group of that wave starts before it. No wave brings two such creatures. Risk cards are the only exception, and their card says what they add.
 - Creatures of tiers 1 to 4 in packs. Every pack shows each tier 1 to 4 creature it uses as if it were new. That creature comes in the first group of the first wave of the pack that has it, no group of that wave starts before it, and a wave shows at most one such creature. The rule above for creatures the run has not shown yet still holds, and no wave shows two creatures as new, counting both kinds. Tests check every choice of packs at every tier. Why: the player has met these creatures in the campaign, but a run can bring them in any band, so each pack brings them in gently, at the front, where the player sees them first.
+- Room for them. Every pack of bands 1 to 5 shows the tier 0 creatures its band adds as new, one a wave. So a band 3 or band 4 pack has one wave left and uses at most one tier creature. A band 5 pack has two waves left, and a band 6 pack the two before its boss wave. Region 6's band 3 and band 4 packs each use the Gleamer or the Sleepyhead, not both.
 - Yawners come a few to a wave, in band 4 or later: every run map has a Bakery spot with 3 neighbors (14.2), exactly what a Yawner punishes.
 - No pack has a group of Puffs. Puffs only come from Puffballs.
 - Every pack wave stays within the 120 creature bound of 12.5, counting 3 Puffs for every Puffball, with no risk card and with any one risk card applied. The boss wave never gets a risk card (14.4).

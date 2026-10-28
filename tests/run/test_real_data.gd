@@ -54,6 +54,10 @@ const CARDS: Array = [
 
 ## The tier 1 cards of E5.1 (the tower card and the base perk of Bramble Cottage).
 const TIER_1_CARDS: Array = ["tower_bramble_cottage", "thorn_tips"]
+## The tier 2 cards of E6.1b (the tower card and the base perk of the Scarecrow).
+const TIER_2_CARDS: Array = ["tower_scarecrow", "big_hat"]
+## The tier 2 creatures: what only a tier 2 player meets (Old Hayrick is the tier 2 boss).
+const TIER_2_CREATURES: Array = [&"gleamer", &"sleepyhead"]
 
 var catalog: Catalog = null
 
@@ -69,16 +73,10 @@ func _read(path: String, cap: int) -> Variant:
 
 
 ## The real run plan and cards, with fixture segments and packs: the regions 1 to 4 fixtures
-## and the tier 1 stand-ins (a tunnel segment, a Mossbud pack, a Burrowbelly pack). The tier 2
-## stand-ins are left out, because the real run.json lists tier 1 only.
+## and the stand-ins of tiers 1 and 2 (tunnel and bridge segments, a Mossbud pack, a Gleamer
+## pack, a Burrowbelly pack, an Old Hayrick pack). The real run.json lists both tiers.
 func _files() -> Dictionary:
 	var files: Dictionary = Tx.files()
-	files.erase("segments/mid_bridge.json")
-	(files["segments/index.json"]["segments"] as Array).erase("mid_bridge")
-	var packs: Array = files["segments/packs.json"]["packs"]
-	for pack: Variant in packs.duplicate():
-		if ["band3_gleamer", "band6_hayrick"].has((pack as Dictionary)["id"]):
-			packs.erase(pack)
 	files["runs/run.json"] = _read(RUN_PATH, 16384)
 	files["cards/cards.json"] = _read(CARDS_PATH, 262144)
 	return files
@@ -108,8 +106,8 @@ func test_the_real_run_plan_is_the_one_in_the_contract() -> void:
 	assert_eq(data.rows, {"top": 4, "middle": 5, "bottom": 4})
 	assert_eq([data.spots_min, data.spots_max, data.sockets_min, data.sockets_max], [11, 12, 2, 5])
 	assert_eq(data.bands[0], [&"scamp", &"pip"])
-	assert_eq(data.bands[1], [&"skitter", &"flitter", &"shellback", &"mossbud"])
-	assert_eq(data.bands[2], [&"bubbler", &"puffball"])
+	assert_eq(data.bands[1], [&"skitter", &"flitter", &"shellback", &"mossbud", &"sleepyhead"])
+	assert_eq(data.bands[2], [&"bubbler", &"puffball", &"gleamer"])
 	assert_eq(data.bands[3], [&"mender", &"dusk_moth", &"mistwisp"])
 	assert_eq(data.bands[4], [&"gatecrasher"])
 	assert_eq(data.bands[5].size(), 0)
@@ -123,7 +121,7 @@ func test_wave_17_has_strength_260() -> void:
 
 func test_the_real_cards_are_the_34_of_the_contract_in_order() -> void:
 	var data: RunData = RunData.from_data(_files(), catalog)
-	assert_eq(data.cards.size(), CARDS.size() + TIER_1_CARDS.size(), "the 34 of tier 0 and the 2 of tier 1")
+	assert_eq(data.cards.size(), CARDS.size() + TIER_1_CARDS.size() + TIER_2_CARDS.size(), "the 34 of tier 0, 2 of tier 1 and 2 of tier 2")
 	var ids: Array[StringName] = data.card_ids()
 	for i: int in CARDS.size():
 		var want: Array = CARDS[i]
@@ -154,7 +152,7 @@ func test_the_base_pool_is_the_22_base_cards() -> void:
 
 func test_tier_1_adds_the_bramble_cottage_card_and_perk() -> void:
 	var data: RunData = RunData.from_data(_files(), catalog)
-	assert_eq(data.card_ids(1).size(), 36)
+	assert_eq(data.card_ids(1).size(), 36, "a tier 1 player does not see the Scarecrow cards")
 	assert_eq(data.card_ids(0).size(), 34, "tier 0 keeps its 34")
 	assert_eq(data.pool({}, 1).size(), 24)
 	assert_eq(data.pool({}, 0).size(), 22, "tier 0 keeps its 22")
@@ -186,9 +184,85 @@ func test_tier_1_adds_the_bramble_cottage_card_and_perk() -> void:
 	assert_eq(ids.find(&"thorn_tips"), 12, "after the six base perks")
 
 
+func test_tier_2_adds_the_scarecrow_card_and_perk() -> void:
+	var data: RunData = RunData.from_data(_files(), catalog)
+	assert_eq(data.card_ids(2).size(), 38)
+	assert_eq(data.card_ids(1).size(), 36, "tier 1 keeps its 36")
+	assert_eq(data.card_ids(0).size(), 34, "tier 0 keeps its 34")
+	assert_eq(data.pool({}, 2).size(), 26)
+	assert_eq(data.pool({}, 1).size(), 24, "tier 1 keeps its 24")
+	assert_eq(data.pool({}, 0).size(), 22, "tier 0 keeps its 22")
+	var every: Dictionary = {"stars": 1000, "best_run_wave": 1000}
+	for id: StringName in TIER_2_CARDS:
+		assert_eq(data.card(id)["tier"], 2, "%s is tier 2" % id)
+		assert_false(data.card_ids(0).has(id), "%s is not in the tier 0 daily" % id)
+		assert_false(data.card_ids(1).has(id), "%s is not in the tier 1 daily" % id)
+		assert_false(data.pool(every, 0).has(id), "%s is not in a tier 0 pool" % id)
+		assert_false(data.pool(every, 1).has(id), "%s is not in a tier 1 pool" % id)
+		assert_true(data.pool({}, 2).has(id), "%s is in the tier 2 base pool" % id)
+		assert_true(data.card_ids(2).has(id), "%s is in the tier 2 daily" % id)
+	var tower_card: Dictionary = data.card(&"tower_scarecrow")
+	assert_eq(tower_card["kind"], &"tower")
+	assert_eq(tower_card["tower"], &"scarecrow")
+	assert_eq(tower_card["name"], "Scarecrow")
+	assert_eq(tower_card["text"], "You can build Scarecrows for the rest of the run.")
+	assert_true(tower_card["once"])
+	assert_eq(tower_card["unlock"], {})
+	assert_eq(tower_card["effects"].size(), 1)
+	assert_eq(tower_card["effects"][0]["type"], "add_tower")
+	assert_eq(tower_card["effects"][0]["tower"], "scarecrow")
+	var perk: Dictionary = data.card(&"big_hat")
+	assert_eq(perk["kind"], &"perk")
+	assert_eq(perk["tower"], &"scarecrow")
+	assert_eq(perk["name"], "Big Hat")
+	assert_eq(perk["text"], "Scarecrows reach 0.5 tiles further.")
+	assert_true(perk["once"])
+	assert_eq(perk["unlock"], {}, "a base perk")
+	assert_eq(perk["effects"].size(), 1)
+	assert_eq([perk["effects"][0]["type"], perk["effects"][0]["stat"], perk["effects"][0]["amount"]], ["tower_add", "reach", 50])
+	var ids: Array[StringName] = data.card_ids(2)
+	assert_eq(ids.find(&"tower_scarecrow"), ids.find(&"tower_bramble_cottage") + 1, "after the Bramble Cottage card")
+	assert_eq(ids.find(&"big_hat"), ids.find(&"thorn_tips") + 1, "after Thorn Tips")
+
+
+func test_the_big_hat_adds_half_a_tile_of_reach_to_the_scarecrow() -> void:
+	var data: RunData = RunData.from_data(_files(), catalog)
+	var scarecrow: TowerType = catalog.tower(&"scarecrow")
+	var bramble: TowerType = catalog.tower(&"bramble_cottage")
+	assert_eq(scarecrow.kind, &"fright")
+	var effects: Array[Dictionary] = []
+	for effect: Dictionary in data.card(&"big_hat")["effects"]:
+		effects.append(effect)
+	var base: TowerStats = scarecrow.stats(1, -1)
+	var hatted: TowerStats = Modifiers.tower_stats(base, &"scarecrow", Modifiers.normalize_all(effects), true)
+	assert_eq(hatted.reach, base.reach + 50)
+	assert_eq(hatted.fright_pct, base.fright_pct, "the fright itself is unchanged")
+	var plain: TowerStats = bramble.stats(1, -1)
+	var other: TowerStats = Modifiers.tower_stats(plain, &"bramble_cottage", Modifiers.normalize_all(effects), true)
+	assert_eq(other.reach, plain.reach, "it names the Scarecrow only")
+
+
+func test_the_real_tier_2_in_run_json() -> void:
+	var data: RunData = RunData.from_data(_files(), catalog)
+	assert_eq(data.tiers.size(), 2)
+	assert_eq(data.tiers[1]["level"], &"r6_l6")
+	assert_eq(data.tiers[1]["towers"], [&"scarecrow"])
+	assert_eq(data.tiers[1]["creatures"], TIER_2_CREATURES)
+	assert_eq(data.tiers[1]["bosses"], [&"old_hayrick"])
+	assert_eq(data.tiers[1]["grid"], "X")
+	assert_eq(data.bands[1].find(&"sleepyhead"), data.bands[1].find(&"mossbud") + 1, "Sleepyhead sits after Mossbud in band 2 (RULES 14.3)")
+	assert_true(data.bands[2].has(&"gleamer"), "band 3 lists Gleamer")
+	for b: int in [0, 3, 4, 5]:
+		assert_false(data.bands[b].has(&"gleamer") or data.bands[b].has(&"sleepyhead"), "band %d adds no tier 2 creature" % (b + 1))
+	assert_eq(data.boss_ids(2).size(), 6)
+	assert_true(data.boss_ids(2).has(&"old_hayrick"))
+	assert_false(data.boss_ids(1).has(&"old_hayrick"))
+	assert_false(data.boss_ids(0).has(&"old_hayrick"))
+
+
 func test_the_real_tier_1_in_run_json() -> void:
 	var data: RunData = RunData.from_data(_files(), catalog)
-	assert_eq(data.tiers.size(), 1)
+	assert_eq(data.tiers.size(), 2)
 	assert_eq(data.tiers[0]["level"], &"r5_l6")
 	assert_eq(data.tiers[0]["towers"], [&"bramble_cottage"])
 	assert_eq(data.tiers[0]["creatures"], [&"mossbud", &"mistwisp"])
@@ -279,7 +353,7 @@ func test_every_real_card_is_accepted_by_a_battle() -> void:
 	var data: RunData = RunData.from_data(_playable_files(), catalog)
 	var level: LevelData = MapAssembler.assemble(1, data, catalog)
 	assert_not_null(level)
-	for id: StringName in data.card_ids(1):
+	for id: StringName in data.card_ids(2):
 		var card: Dictionary = data.card(id)
 		var battle: Battle = Battle.create(level, catalog, false, [])
 		var effects: Array[Dictionary] = card["effects"]
@@ -409,3 +483,154 @@ func test_a_tier_1_run_starts_from_the_tier_1_pool() -> void:
 	assert_not_null(RunSession.start(1, "", false, data.pool({}, 0), data, catalog), "a tier 0 pool at tier 0")
 	assert_null(RunSession.start(1, "", false, pool, data, catalog, 0), "a tier 1 pool is refused at tier 0")
 	assert_false(MapAssembler.plan(7, data, 1).is_empty())
+
+
+# What each tier meets, over the real files (the level designer's real packs and segments)
+
+const Player: GDScript = preload("res://tests/run/fixtures/run_player.gd")
+## Everything of tier 2 a tier 0 or tier 1 player must never meet: the creatures and the boss.
+const TIER_2_UNITS: Array = [&"gleamer", &"sleepyhead", &"old_hayrick"]
+
+
+## Every creature type the waves of a level send, as {id: true}.
+func _creatures_in(level: LevelData) -> Dictionary:
+	var out: Dictionary = {}
+	for wave: WaveData in level.waves:
+		for group: WaveGroup in wave.groups:
+			out[group.enemy] = true
+	return out
+
+
+## The creatures seen over the runs of seeds 1 to count at a tier.
+func _seen_at_tier(data: RunData, tier: int, count: int) -> Dictionary:
+	var seen: Dictionary = {}
+	for run_seed: int in range(1, count + 1):
+		var level: LevelData = MapAssembler.assemble(run_seed, data, catalog, tier)
+		assert_not_null(level, "seed %d at tier %d" % [run_seed, tier])
+		if level != null:
+			seen.merge(_creatures_in(level))
+	return seen
+
+
+func test_a_tier_2_player_meets_the_tier_2_creatures_and_the_others_do_not() -> void:
+	var data: RunData = RunData.from_data(_real_files(), catalog)
+	assert_not_null(data)
+	if data == null:
+		return
+	for tier: int in 2:
+		var seen: Dictionary = _seen_at_tier(data, tier, 120)
+		for id: StringName in TIER_2_UNITS:
+			assert_false(seen.has(id), "%s never shows to a tier %d player" % [id, tier])
+	var seen_two: Dictionary = _seen_at_tier(data, 2, 120)
+	for id: StringName in TIER_2_UNITS:
+		assert_true(seen_two.has(id), "%s shows to a tier 2 player" % id)
+	# The tier 1 things are still there for tier 2.
+	for id: StringName in [&"mossbud", &"mistwisp", &"burrowbelly"]:
+		assert_true(seen_two.has(id), "%s still shows at tier 2" % id)
+
+
+func test_a_tier_2_plan_can_end_on_old_hayrick_and_a_tier_1_plan_cannot() -> void:
+	var data: RunData = RunData.from_data(_real_files(), catalog)
+	assert_not_null(data)
+	if data == null:
+		return
+	var bosses: Dictionary = {}
+	for run_seed: int in range(1, 201):
+		assert_ne(MapAssembler.plan(run_seed, data, 1)["boss"], &"old_hayrick", "seed %d at tier 1" % run_seed)
+		bosses[MapAssembler.plan(run_seed, data, 2)["boss"]] = true
+	assert_true(bosses.has(&"old_hayrick"))
+	assert_eq(bosses.size(), 6, "all six bosses at tier 2")
+
+
+## The cards offered over the first drafts of a few runs at a tier.
+func _offers_seen(data: RunData, tier: int, seeds: int) -> Dictionary:
+	var seen: Dictionary = {}
+	for run_seed: int in range(1, seeds + 1):
+		var s: RunSession = RunSession.start(run_seed, "", false, data.pool({}, tier), data, catalog, tier)
+		assert_not_null(s)
+		if s == null:
+			continue
+		var player: RefCounted = Player.new(run_seed, 0, true)
+		player.rich = true
+		var guard: int = 0
+		while s.battle.waves_started < 5 and guard < 200000:
+			for id: StringName in s.offers():
+				seen[id] = true
+			if not player.advance(s):
+				break
+			guard += 1
+	return seen
+
+
+func test_a_tier_2_player_is_offered_the_scarecrow_cards_and_a_tier_1_player_is_not() -> void:
+	var data: RunData = RunData.from_data(_real_files(), catalog)
+	assert_not_null(data)
+	if data == null:
+		return
+	var tier_one: Dictionary = _offers_seen(data, 1, 10)
+	var tier_two: Dictionary = _offers_seen(data, 2, 10)
+	for id: StringName in TIER_2_CARDS:
+		assert_false(tier_one.has(id), "%s is never offered at tier 1" % id)
+	assert_true(tier_one.has(&"tower_bramble_cottage"), "tier 1 still offers the Bramble Cottage")
+	assert_true(tier_two.has(&"tower_scarecrow"), "tier 2 offers the Scarecrow")
+	assert_true(tier_two.has(&"big_hat"), "tier 2 offers the Big Hat")
+	assert_true(tier_two.has(&"tower_bramble_cottage"), "and keeps the Bramble Cottage")
+
+
+func test_a_tier_2_run_starts_from_the_tier_2_pool() -> void:
+	var data: RunData = RunData.from_data(_real_files(), catalog)
+	assert_not_null(data)
+	if data == null:
+		return
+	var pool: Array[StringName] = data.pool({}, 2)
+	for run_seed: int in range(1, 21):
+		var s: RunSession = RunSession.start(run_seed, "", false, pool, data, catalog, 2)
+		assert_not_null(s, "seed %d at tier 2" % run_seed)
+		if s == null:
+			return
+		assert_eq(s.tier, 2)
+		assert_eq(s.to_data()["tier"], 2)
+	assert_null(RunSession.start(1, "", false, pool, data, catalog, 1), "a tier 2 pool is refused at tier 1")
+	assert_null(RunSession.start(1, "", false, pool, data, catalog, 0), "and at tier 0")
+	assert_null(RunSession.start(1, "", false, pool, data, catalog, 3), "tier 3 is beyond the two tiers of the data")
+
+
+## The daily follows tiers (docs/ARCHITECTURE.md 14.8): the day's seed and the day's tier give the
+## run, so players at the same tier share it, and tier 0 is exactly the daily of regions 1 to 4.
+func test_the_daily_follows_its_tier() -> void:
+	var data: RunData = RunData.from_data(_real_files(), catalog)
+	assert_not_null(data)
+	if data == null:
+		return
+	var differs: int = 0
+	for day: String in Golden.days():
+		var daily_seed: int = RunSeeds.daily_seed(day)
+		var runs: Array[RunSession] = []
+		for tier: int in 3:
+			var s: RunSession = RunSession.start(daily_seed, day, false, data.card_ids(tier), data, catalog, tier)
+			assert_not_null(s, "%s at tier %d" % [day, tier])
+			if s == null:
+				return
+			assert_true(s.daily)
+			assert_eq(s.tier, tier)
+			assert_eq(s.day, day)
+			var again: RunSession = RunSession.start(daily_seed, day, false, data.card_ids(tier), data, catalog, tier)
+			assert_eq(JSON.stringify(again.to_data()), JSON.stringify(s.to_data()), "same inputs, same daily (%s, tier %d)" % [day, tier])
+			assert_eq(JSON.stringify(again.battle.level.to_data()), JSON.stringify(s.battle.level.to_data()))
+			var pool: Array = s.to_data()["pool"]
+			assert_eq(pool.has("tower_scarecrow"), tier == 2, "the Scarecrow card is in the pool of tier 2 only (%s)" % day)
+			assert_eq(pool.has("tower_bramble_cottage"), tier >= 1)
+			runs.append(s)
+		var zero: RunSession = RunSession.start(daily_seed, day, false, data.card_ids(), data, catalog)
+		assert_eq(JSON.stringify(zero.battle.level.to_data()), JSON.stringify(runs[0].battle.level.to_data()), "the default tier is tier 0")
+		assert_eq(JSON.stringify(zero.to_data()), JSON.stringify(runs[0].to_data()))
+		if JSON.stringify(runs[1].battle.level.to_data()) != JSON.stringify(runs[2].battle.level.to_data()):
+			differs += 1
+		# A daily of tier 1 holds no tier 2 creature, and one of tier 0 holds nothing above tier 0.
+		var one_seen: Dictionary = _creatures_in(runs[1].battle.level)
+		for id: StringName in TIER_2_UNITS:
+			assert_false(one_seen.has(id), "%s in the tier 1 daily of %s" % [id, day])
+			assert_false(_creatures_in(runs[0].battle.level).has(id), "%s in the tier 0 daily of %s" % [id, day])
+		for id: StringName in [&"mossbud", &"mistwisp", &"burrowbelly"]:
+			assert_false(_creatures_in(runs[0].battle.level).has(id), "%s in the tier 0 daily of %s" % [id, day])
+	assert_true(differs > 0, "a tier 2 daily is not always the tier 1 daily")

@@ -43,6 +43,12 @@ const PLAN: Dictionary = {
 	"r5_l4": {"gates": 3, "sockets": 6, "waves": 12, "strength": 245, "gold": 800, "star3": ["towers_at_most", 7], "highlight": "spot"},
 	"r5_l5": {"gates": 3, "sockets": 6, "waves": 12, "strength": 250, "gold": 800, "star3": ["kinds_at_most", 3], "highlight": "none"},
 	"r5_l6": {"gates": 3, "sockets": 6, "waves": 12, "strength": 255, "gold": 850, "star3": ["towers_at_most", 8], "highlight": "spot"},
+	"r6_l1": {"gates": 2, "sockets": 5, "waves": 12, "strength": 245, "gold": 750, "star3": ["gates_at_most", 1], "highlight": "socket"},
+	"r6_l2": {"gates": 2, "sockets": 5, "waves": 12, "strength": 250, "gold": 800, "star3": ["towers_at_most", 6], "highlight": "spot"},
+	"r6_l3": {"gates": 3, "sockets": 6, "waves": 12, "strength": 255, "gold": 800, "star3": ["tower_ban", "longbow_loft"], "highlight": "spot"},
+	"r6_l4": {"gates": 3, "sockets": 6, "waves": 12, "strength": 260, "gold": 850, "star3": ["tier_at_most", 2], "highlight": "spot"},
+	"r6_l5": {"gates": 3, "sockets": 6, "waves": 12, "strength": 265, "gold": 850, "star3": ["early_calls_at_least", 6], "highlight": "none"},
+	"r6_l6": {"gates": 3, "sockets": 6, "waves": 12, "strength": 270, "gold": 900, "star3": ["no_lives_lost", 0], "highlight": "spot"},
 }
 
 ## docs/ARCHITECTURE.md 2.8 and RULES 13: each level's Twist as effects. The level designer picks
@@ -79,6 +85,12 @@ const TWISTS: Dictionary = {
 	"r5_l4": [{"type": "ban_tower", "tower": "sling_post"}],
 	"r5_l5": [{"type": "set_lives", "lives": 5}],
 	"r5_l6": [{"type": "count_pct", "pct": 200, "flyers": false, "last_wave": true}],
+	"r6_l1": [{"type": "fixed_gates", "cells": [[5, 5], [3, 8]]}],
+	"r6_l2": [{"type": "ban_tower", "tower": "lullaby_bell"}],
+	"r6_l3": [{"type": "count_pct", "pct": 200, "flyers": true, "last_wave": false}],
+	"r6_l4": [{"type": "no_selling"}],
+	"r6_l5": [{"type": "start_gold_pct", "pct": 50}],
+	"r6_l6": [{"type": "count_pct", "pct": 200, "flyers": false, "last_wave": true}],
 }
 
 ## RULES 12.2: the towers each level brings.
@@ -89,6 +101,7 @@ const NEW_TOWERS: Dictionary = {
 	"r3_l1": ["firework_tower"],
 	"r4_l1": ["bakery"],
 	"r5_l2": ["bramble_cottage"],
+	"r6_l2": ["scarecrow"],
 }
 
 ## RULES 12.2 and 12.3: the creature each level brings and its first wave, 1 based.
@@ -110,22 +123,26 @@ const NEW_CREATURES: Dictionary = {
 	"r5_l3": ["mossbud", 2],
 	"r5_l4": ["mistwisp", 3],
 	"r5_l6": ["burrowbelly", 12],
+	"r6_l3": ["gleamer", 2],
+	"r6_l4": ["sleepyhead", 3],
+	"r6_l6": ["old_hayrick", 12],
 }
 
 ## RULES 3.5 and 12.1: the map feature each region brings, as grid characters. Regions 1 to 4 have none.
-const REGION_FEATURES: Dictionary = {"lantern_hill": "", "millbrook": "", "willow_fen": "", "moonspire_keep": "", "hollow_lanes": "T"}
+const REGION_FEATURES: Dictionary = {"lantern_hill": "", "millbrook": "", "willow_fen": "", "moonspire_keep": "", "hollow_lanes": "T", "russet_orchards": "X"}
 ## RULES 12.2: the level where each feature first appears, as that region's first level.
-const NEW_FEATURES: Dictionary = {"T": "r5_l1"}
+const NEW_FEATURES: Dictionary = {"T": "r5_l1", "X": "r6_l1"}
 ## RULES 12.5: at most 6 of each of these creatures in one wave, with the level's Twist, boss summons not counted.
 const CAPPED_CREATURES: Array[StringName] = [&"mistwisp", &"hootling"]
 const CAPPED_MOST: int = 6
 
 ## RULES 3.1 and 3.4: map rows and build spots per region, and entrances per region (12.3).
-const REGION_ROWS: Dictionary = {"lantern_hill": [8, 11], "millbrook": [10, 13], "willow_fen": [10, 13], "moonspire_keep": [10, 13], "hollow_lanes": [10, 13]}
-const REGION_SPOTS: Dictionary = {"lantern_hill": [5, 7], "millbrook": [7, 9], "willow_fen": [8, 10], "moonspire_keep": [9, 11], "hollow_lanes": [9, 11]}
-const REGION_ENTRANCES: Dictionary = {"lantern_hill": [1, 1], "millbrook": [1, 2], "willow_fen": [1, 2], "moonspire_keep": [2, 3], "hollow_lanes": [1, 2]}
-## RULES 12.3: region 5 has one entrance, then two from 5-5.
-const LEVEL_ENTRANCES: Dictionary = {"r5_l1": 1, "r5_l2": 1, "r5_l3": 1, "r5_l4": 1, "r5_l5": 2, "r5_l6": 2}
+const REGION_ROWS: Dictionary = {"lantern_hill": [8, 11], "millbrook": [10, 13], "willow_fen": [10, 13], "moonspire_keep": [10, 13], "hollow_lanes": [10, 13], "russet_orchards": [10, 13]}
+const REGION_SPOTS: Dictionary = {"lantern_hill": [5, 7], "millbrook": [7, 9], "willow_fen": [8, 10], "moonspire_keep": [9, 11], "hollow_lanes": [9, 11], "russet_orchards": [10, 12]}
+const REGION_ENTRANCES: Dictionary = {"lantern_hill": [1, 1], "millbrook": [1, 2], "willow_fen": [1, 2], "moonspire_keep": [2, 3], "hollow_lanes": [1, 2], "russet_orchards": [1, 2]}
+## RULES 12.3: region 5 has one entrance, then two from 5-5. Region 6 has one on its first level, then two.
+const LEVEL_ENTRANCES: Dictionary = {"r5_l1": 1, "r5_l2": 1, "r5_l3": 1, "r5_l4": 1, "r5_l5": 2, "r5_l6": 2,
+	"r6_l1": 1, "r6_l2": 2, "r6_l3": 2, "r6_l4": 2, "r6_l5": 2, "r6_l6": 2}
 
 ## RULES 12.5: a new creature's first wave holds 3 to 5 of it. A boss comes alone.
 const FIRST_WAVE_COUNT: Array[int] = [3, 5]
@@ -712,7 +729,7 @@ func test_gates_whole_always_puts_a_gate_on_the_dashed_line() -> void:
 	assert_true(checked >= 1, "some level asks to keep every gate whole, so the rule is exercised")
 
 
-## RULES 12.3: region 5 has one entrance on its first four levels, then two.
+## RULES 12.3: region 5 has one entrance on its first four levels, then two. Region 6 has one on 6-1, then two.
 func test_entrances_per_level() -> void:
 	for id: String in LEVEL_ENTRANCES:
 		var level: LevelData = _level(id)
@@ -831,3 +848,48 @@ func test_at_most_6_mistwisps_and_hootlings_a_wave() -> void:
 					total += count
 				assert_true(total <= CAPPED_MOST, "%s wave %d brings %d %s with its Twist, at most %d" % [id, i + 1, total, capped, CAPPED_MOST])
 	assert_true(checked >= 1, "some level brings Mistwisps, so the cap is exercised")
+
+
+## RULES 3.7: every bridge has four road neighbors, so it is never on the map edge; a map has at most 3;
+## and a plain road tile lies between two bridges.
+func test_bridges_follow_rules_3_7() -> void:
+	var with_bridges: int = 0
+	for id: String in order:
+		var level: LevelData = _level(id)
+		if level == null:
+			continue
+		if not Rules.bridge_tiles(level).is_empty():
+			with_bridges += 1
+		var found: PackedStringArray = Rules.bridge_problems(level)
+		assert_eq(found, PackedStringArray(), "%s: %s" % [id, "; ".join(found)])
+	assert_true(with_bridges >= 6, "the region 6 levels have bridges, so the rules are exercised")
+
+
+## RULES 3.7 level guide: every bridge lies on the shortest route of some placement of the level's gates,
+## so it always matters.
+func test_every_bridge_lies_on_some_route() -> void:
+	for id: String in order:
+		var level: LevelData = _level(id)
+		if level == null:
+			continue
+		var off: Array[Vector2i] = Rules.bridges_off_every_route(level, level.gates)
+		assert_true(off.is_empty(), "%s: the bridges %s lie on no route of any gate placement" % [id, off])
+
+
+## The bridge lesson (RULES 12.3 and 12.4, 6-1: "A loop passes your towers twice."): on the level that brings
+## bridges, a gate on the highlighted socket alone sends the walkers over the bridge and back under it, while
+## with no gate they cross it once.
+func test_the_first_bridge_level_highlights_the_loop() -> void:
+	var id: String = NEW_FEATURES["X"]
+	var level: LevelData = _level(id)
+	assert_not_null(level, "%s loads" % id)
+	if level == null:
+		return
+	assert_eq(level.kind_at(level.hint_cell), LevelData.Kind.SOCKET, "%s highlights a socket" % id)
+	var map: RoadMap = RoadMap.new(level)
+	var none: Array[Vector2i] = []
+	var closed: Array[Vector2i] = [level.hint_cell]
+	var open_route: Array[Vector2i] = map.route(level.entrances[0], map.distances(none))
+	var gated_route: Array[Vector2i] = map.route(level.entrances[0], map.distances(closed))
+	assert_eq(Rules.crossings(level, open_route), PackedStringArray(["over"]), "%s: with no gate the walkers cross the bridge once" % id)
+	assert_eq(Rules.crossings(level, gated_route), PackedStringArray(["over", "under"]), "%s: the highlighted socket sends them over the bridge and back under it" % id)

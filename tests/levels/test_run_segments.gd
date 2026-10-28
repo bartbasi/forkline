@@ -5,7 +5,7 @@ extends "res://tests/base_test.gd"
 ## RULES 14.2, 14.3, 14.9). Every file is listed, the files pass RunData.check, every stack of
 ## segments that fit, at every content tier, is a valid run map with a gate worth placing, a Bakery
 ## spot and tunnels that keep RULES 3.6 across the seams, every bottom segment keeps its last row
-## scenery, features sit only in middle segments, every choice of packs at every tier keeps the new
+## scenery, features sit only in middle segments, bridges keep RULES 3.7 on every stack, every choice of packs at every tier keeps the new
 ## creature rule and shows each tier creature as if new, and only boss waves set their own strength.
 
 const SEGMENT_DIR: String = "res://data/segments/"
@@ -34,10 +34,10 @@ const STRENGTH_MAX: int = 1000
 const CAPPED_CREATURES: Array[String] = ["mistwisp", "hootling"]
 const CAPPED_MOST: int = 6
 ## RULES 14.3: each content tier adds packs with its creatures in every band from the first band where a
-## pack can show them, plus two band 6 packs for its boss. Tier 1's creatures join bands 2 (Mossbud) and 4
-## (Mistwisp), but a band 2 pack already shows its three new creatures, one a wave, so no wave is left to
-## show a Mossbud as if new: tier 1 packs start in band 3. The level designer asked the DM about this.
-const TIER_FIRST_BAND: Dictionary = {1: 3}
+## pack can show them, plus two band 6 packs for its boss. A band 2 pack already shows its three new
+## creatures, one a wave, so no wave is left to show a tier creature as if new: the packs of every tier
+## start in band 3, the Mossbud and the Sleepyhead of band 2 included.
+const TIER_FIRST_BAND: Dictionary = {1: 3, 2: 3}
 ## RULES 14.2: which feature each map character belongs to.
 const FEATURE_KINDS: Dictionary = {"T": "tunnel", "X": "bridge", "^": "slide", "v": "slide", "<": "slide", ">": "slide", "P": "stump", "Q": "stump"}
 
@@ -569,6 +569,25 @@ func test_tier_zero_stacks_hold_no_features() -> void:
 		if level == null:
 			continue
 		assert_eq(Rules.feature_chars(level.grid), "", "%s / %s / %s is a tier 0 stack" % stack)
+
+
+## RULES 3.7 and 14.2 on every stack at every tier: each bridge has four road neighbors, there are at most 3
+## with a plain road tile between two, and each lies on the shortest route of some placement of the run's
+## starting gates, so it always matters.
+func test_every_stack_keeps_the_bridge_rules() -> void:
+	var bridged: int = 0
+	for stack: Array in _stacks():
+		var level: LevelData = _build(stack)
+		if level == null:
+			fail("%s / %s / %s does not build" % stack)
+			continue
+		if not Rules.bridge_tiles(level).is_empty():
+			bridged += 1
+		var found: PackedStringArray = Rules.bridge_problems(level)
+		assert_eq(found, PackedStringArray(), "%s / %s / %s: %s" % [stack[0], stack[1], stack[2], "; ".join(found)])
+		var off: Array[Vector2i] = Rules.bridges_off_every_route(level, data.gates)
+		assert_true(off.is_empty(), "%s / %s / %s: the bridges %s lie on no route" % [stack[0], stack[1], stack[2], off])
+	assert_true(bridged >= 1, "some stack has a bridge, so the rules are exercised")
 
 
 # Packs by tier (RULES 14.3, 14.9)

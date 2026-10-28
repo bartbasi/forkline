@@ -31,7 +31,7 @@ func before_each() -> void:
 
 
 ## RULES 12.6 steps 1 to 5: [{"cell", "type", "top"}] in build order, where top is the highest
-## tier the recipe buys. In region 1 it stops at tier 2.
+## tier the recipe buys. In region 1 it stops at tier 2. Bells and Scarecrows stay at tier 2.
 func _recipe(level: LevelData, first_region: bool) -> Array[Dictionary]:
 	var ranked: Array[Vector2i] = _spot_order(level)
 	var bakery_cell: Vector2i = Vector2i(-1, -1)
@@ -51,6 +51,7 @@ func _recipe(level: LevelData, first_region: bool) -> Array[Dictionary]:
 			attackers.append(type)
 	var out: Array[Dictionary] = []
 	var bell_done: bool = not level.towers.has(&"lullaby_bell")
+	var scarecrow_done: bool = not level.towers.has(&"scarecrow")
 	var turn: int = 0
 	for i: int in ranked.size():
 		var cell: Vector2i = ranked[i]
@@ -60,6 +61,12 @@ func _recipe(level: LevelData, first_region: bool) -> Array[Dictionary]:
 		if not bell_done and i == bell_index:
 			out.append({"cell": cell, "type": &"lullaby_bell", "top": 2})
 			bell_done = true
+			continue
+		# RULES 12.6 step 3: one Scarecrow on the fifth spot, or the sixth when the Bakery has the fifth.
+		var scarecrow_index: int = 5 if bakery_cell == ranked[mini(4, ranked.size() - 1)] else 4
+		if not scarecrow_done and i == scarecrow_index:
+			out.append({"cell": cell, "type": &"scarecrow", "top": 2})
+			scarecrow_done = true
 			continue
 		out.append({"cell": cell, "type": attackers[turn % attackers.size()], "top": 2 if first_region else 3})
 		turn += 1

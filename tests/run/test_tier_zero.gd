@@ -83,8 +83,10 @@ func test_tier_1_things_added_to_the_real_files_leave_tier_0_unchanged() -> void
 	assert_not_null(data, "\n".join(RunData.check(files, cat)))
 	if data == null:
 		return
-	assert_eq(data.tiers.size(), 1)
+	assert_eq(data.tiers.size(), 2, "the real run.json lists tiers 1 and 2")
 	assert_eq(data.packs_of(2, &"", 1).size(), data.packs_of(2).size() + 1, "the Mossbud pack joins at tier 1")
+	assert_true(data.boss_ids(2).has(&"old_hayrick"))
+	assert_false(data.boss_ids(0).has(&"old_hayrick"), "and Old Hayrick stays out of tier 0")
 	assert_true(data.boss_ids(1).has(&"burrowbelly"))
 	var with_tier: Dictionary = Golden.compute(files)
 	assert_eq(with_tier["pool_none"], _golden["pool_none"])
@@ -125,7 +127,11 @@ func test_nothing_real_of_tier_0_is_above_tier_0() -> void:
 	# Cards: a card is tier 0 unless its tower is listed.
 	for id: StringName in data.card_ids(4):
 		var card: Dictionary = data.card(id)
-		assert_eq(card["tier"], 1 if listed.has(card["tower"]) else 0, "tier of card %s" % id)
+		var want_tier: int = 0
+		for t: int in data.tiers.size():
+			if (data.tiers[t]["towers"] as Array).has(card["tower"]):
+				want_tier = t + 1
+		assert_eq(card["tier"], want_tier, "tier of card %s" % id)
 	# Segments: tier 0 unless a map feature of a tier is in the grid.
 	var features: String = ""
 	for tier: Dictionary in data.tiers:

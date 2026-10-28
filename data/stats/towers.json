@@ -92,5 +92,18 @@
      {"id": "holly_crown", "name": "Holly Crown", "info": "Sharp holly that ignores armor.",
       "cost": 230, "reach": 150, "hits": "ground", "damage": 12, "reload_ms": 1000, "pulse": true,
       "pierce": true}
+   ]},
+  {"id": "scarecrow", "name": "Scarecrow", "plural": "Scarecrows",
+   "info": "Walkers in its ring take more damage from every hit. Deals no damage.",
+   "kind": "fright",
+   "tiers": [
+     {"cost": 100, "reach": 200, "hits": "ground", "fright_pct": 15, "fright_ms": 1000},
+     {"cost": 100, "reach": 250, "hits": "ground", "fright_pct": 25, "fright_ms": 1000}
+   ],
+   "specs": [
+     {"id": "tall_scarecrow", "name": "Tall Scarecrow", "info": "Frightens harder: 40% more damage.",
+      "cost": 190, "reach": 250, "hits": "ground", "fright_pct": 40, "fright_ms": 1000},
+     {"id": "crow_keeper", "name": "Crow Keeper", "info": "A wider ring that frightens flyers too.",
+      "cost": 190, "reach": 300, "hits": "both", "fright_pct": 25, "fright_ms": 1000}
    ]}
 ]}
