@@ -110,6 +110,19 @@ func runs_open(game: GameData) -> bool:
 	return stars() >= game.catalog.rules.run_stars
 
 
+## The player's content tier for runs and the daily (RULES 14.9, contract 14.8): how many
+## of run.json's tiers have their `level` cleared. It comes from the level records, which
+## keep every star for good, so it only grows. 0 without run data.
+func tier(game: GameData) -> int:
+	if game == null or game.run == null:
+		return 0
+	var count: int = 0
+	for item: Dictionary in game.run.tiers:
+		if cleared(item["level"]):
+			count += 1
+	return count
+
+
 ## A level's Twist needs 3 stars on that level.
 func twist_open(id: StringName) -> bool:
 	return (levels.get(id, 0) & ALL_STARS) == ALL_STARS

@@ -95,7 +95,32 @@ func _load_run(root: String) -> void:
 	if data == null:
 		problems.append_array(RunData.check(files, catalog))
 		return
+	var tier_problems: PackedStringArray = _check_tiers(data)
+	if not tier_problems.is_empty():
+		problems.append_array(tier_problems)
+		return
 	run = data
+
+
+## Contract 14.8: each tier's `level` is the last level of a campaign region, and the
+## tiers come in campaign order, so tier k is earned with the k-th of these regions.
+func _check_tiers(data: RunData) -> PackedStringArray:
+	var found: PackedStringArray = PackedStringArray()
+	var last_region: int = -1
+	for t: int in data.tiers.size():
+		var level: StringName = data.tiers[t]["level"]
+		var region: int = -1
+		for r: int in campaign.size():
+			var ids: Array[StringName] = campaign[r]["levels"]
+			if not ids.is_empty() and ids.back() == level:
+				region = r
+				break
+		if region < 0:
+			found.append("run.json: tiers[%d].level: %s is not the last level of a campaign region" % [t, level])
+		elif region <= last_region:
+			found.append("run.json: tiers[%d].level: must come after the level of the tier before it in campaign order" % t)
+		last_region = maxi(last_region, region)
+	return found
 
 
 ## One run file into files under its path. A missing file adds nothing.

@@ -311,3 +311,91 @@ func test_time_per_tick_with_the_creatures_of_regions_7_and_8() -> void:
 	var p99: int = sorted[mini(sorted.size() - 1, sorted.size() * 99 / 100)]
 	print("    sim: regions 7 and 8 crowd, %d ticks with 150 or more creatures, peak %d: mean %d us, 99th percentile %d us, max %d us per tick" % [times.size(), peak, mean, p99, sorted.back()])
 	assert_true(mean < 2000, "mean %d us per tick" % mean)
+
+
+## Every map feature with room for 23 towers: entrance 1 through the tunnel and under the
+## bridge to the stumps, entrance 2 over the bridge and down the slide (Fx.FEATURE_GRID
+## with more build spots).
+const FEATURE_CROWD_GRID: Array = [
+	"o..1...",
+	"o.oT.oo",
+	".o.T.o.",
+	"2##X##.",
+	"o.o#ov.",
+	".o.#ov.",
+	"o.oP.#o",
+	".o.#o#.",
+	"o.o#.#o",
+	".o.#.P.",
+	"o.o#.G.",
+	"...###.",
+	"....B..",
+]
+
+
+## The crowded case of docs/ARCHITECTURE.md 14.12: about 200 live over two waves, with
+## Mistwisps, Hootlings, Yawners, Mossbuds, Gleamers, a lured flock and a digging
+## Burrowbelly, on a map with a tunnel, a bridge, a slide and stumps, against Bramble
+## Cottages, Snow Forts, Scarecrows, Moth Lanterns and today's towers. Attacking towers
+## stay at tier 1, so the crowd lives long enough to measure. The bar is the other cases':
+## a mean under 2 ms a tick on the dev PC.
+func test_time_per_tick_in_the_crowded_expansion_case() -> void:
+	var waves: Array = [
+		{"strength": 1000, "groups": [Fx.group("mossbud", 36, 0, 50), Fx.group("gleamer", 20, 0, 100, 2), Fx.group("yawner", 12, 0, 150),
+			Fx.group("mistwisp", 6, 0, 300, 2), Fx.group("hootling", 6, 0, 300), Fx.group("flitter", 26, 0, 100, 2)]},
+		{"strength": 600, "groups": [Fx.group("burrowbelly", 1), Fx.group("mossbud", 36, 0, 50, 2), Fx.group("gleamer", 16, 0, 100),
+			Fx.group("yawner", 10, 0, 150, 2), Fx.group("mistwisp", 6, 0, 300), Fx.group("hootling", 6, 0, 300, 2), Fx.group("flitter", 26, 0, 100)]},
+	]
+	var catalog: Catalog = Cx.catalog()
+	var b: Battle = Fx.battle(FEATURE_CROWD_GRID, waves, {"start_gold": 100000, "towers": Tx.ALL}, catalog, true)
+	assert_not_null(b)
+	if b == null:
+		return
+	var plan: Array = [
+		[Vector2i(2, 1), &"bramble_cottage"], [Vector2i(5, 1), &"moth_lantern"], [Vector2i(1, 2), &"snow_fort"],
+		[Vector2i(5, 2), &"scarecrow"], [Vector2i(0, 1), &"lullaby_bell"], [Vector2i(6, 1), &"bakery"],
+		[Vector2i(2, 4), &"bramble_cottage"], [Vector2i(4, 4), &"snow_fort"], [Vector2i(4, 5), &"moth_lantern"],
+		[Vector2i(1, 5), &"pumpkin_catapult"], [Vector2i(2, 6), &"scarecrow"], [Vector2i(6, 6), &"sling_post"],
+		[Vector2i(4, 7), &"bramble_cottage"], [Vector2i(2, 8), &"snow_fort"], [Vector2i(6, 8), &"moth_lantern"],
+		[Vector2i(1, 9), &"longbow_loft"], [Vector2i(2, 10), &"firework_tower"], [Vector2i(0, 8), &"lullaby_bell"],
+	]
+	for item: Array in plan:
+		assert_eq(b.place_tower(item[0], item[1]), Battle.DONE, "%s at %s" % [item[1], item[0]])
+	b.start_next_wave()
+	var times: Array[int] = []
+	var peak: int = 0
+	var kinds: Dictionary = {}
+	var low: int = 0
+	var hidden: int = 0
+	var away: int = 0
+	while b.phase == Battle.Phase.WAVE and b.tick < 4000:
+		if b.waves_started == 1 and b.next_wave_info()["refusal"] == &"":
+			b.start_next_wave()
+		var start: int = Time.get_ticks_usec()
+		b.step()
+		var spent: int = Time.get_ticks_usec() - start
+		for event: Dictionary in b.take_events():
+			kinds[event["kind"]] = true
+		if b.enemies.size() >= 150:
+			times.append(spent)
+			low = maxi(low, b._low_list.size())
+			for e: EnemyState in b.enemies:
+				hidden += 1 if e.hidden else 0
+				away += 1 if e.out_of_reach else 0
+		peak = maxi(peak, b.enemies.size())
+	for kind: StringName in [&"burrowed", &"yawned"]:
+		assert_true(kinds.has(kind), "%s happened: %s" % [kind, str(kinds.keys())])
+	assert_true(low > 0, "flyers were lured low in the crowd")
+	assert_true(hidden > 0, "creatures hid in the mist in the crowd")
+	assert_true(away > 0, "creatures were out of reach in the crowd")
+	assert_true(peak >= 180, "peak %d live creatures" % peak)
+	assert_true(times.size() >= 100, "%d ticks measured" % times.size())
+	var total: int = 0
+	for t: int in times:
+		total += t
+	var sorted: Array[int] = times.duplicate()
+	sorted.sort()
+	var mean: int = total / maxi(times.size(), 1)
+	var p99: int = sorted[mini(sorted.size() - 1, sorted.size() * 99 / 100)]
+	print("    sim: crowded expansion case, %d ticks with 150 or more creatures, peak %d, up to %d low: mean %d us, 99th percentile %d us, max %d us per tick" % [times.size(), peak, low, mean, p99, sorted.back()])
+	assert_true(mean < 2000, "mean %d us per tick" % mean)

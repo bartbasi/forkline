@@ -1508,12 +1508,15 @@ func _wave_step() -> void:
 		phase = Phase.WON
 		_emit({"kind": &"won"})
 		return
-	# A new build phase. Broken gates mend, closed, on their sockets (7.6), and a
-	# Gateless Night ends (14.5).
+	# A new build phase. Broken gates mend, closed, on their sockets (7.6), a Gateless
+	# Night ends (14.5), and every doze ends (DM, 2026-10-27).
 	phase = Phase.BUILD
 	for gate: GateState in gates:
 		gate.broken = false
 	gates_open = false
+	for tower: TowerState in towers:
+		tower.doze_ticks = 0
+	_dozes_on = false
 	_refresh_dist()
 	# 14.6 Piggy Bank: a share of unspent gold, rounded down, up to its most.
 	var interest: int = 0
@@ -2721,6 +2724,8 @@ func _load_towers(data: Variant, chk: DataCheck) -> void:
 		tower.doze_ticks = chk.integer(item, "doze_ticks", path, 0, 60000 / Sim.MS_PER_TICK)
 		if tower.doze_ticks > 0 and tower.kind != &"attack":
 			chk.fail(path + ".doze_ticks", "only an attacking tower dozes")
+		if tower.doze_ticks > 0 and phase == Phase.BUILD:
+			chk.fail(path + ".doze_ticks", "dozes end when a build phase begins")
 		_dozes_on = _dozes_on or tower.doze_ticks > 0
 		towers.append(tower)
 

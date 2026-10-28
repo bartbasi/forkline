@@ -117,7 +117,7 @@ func test_the_record_round_trips_with_ints() -> void:
 	var record: DailyRecord = _record(DAY, WIN_3)
 	record.record_finish(NEXT, LOSS_12)
 	assert_true(store.save_daily(record))
-	assert_eq(Fx.read_text("daily.json"), "{\"best\":{\"lives\":0,\"waves\":12,\"won\":false},\"day\":\"2026-10-24\",\"format\":1,\"streak\":2,\"streak_day\":\"2026-10-24\"}")
+	assert_eq(Fx.read_text("daily.json"), "{\"best\":{\"lives\":0,\"waves\":12,\"won\":false},\"day\":\"2026-10-24\",\"format\":1,\"streak\":2,\"streak_day\":\"2026-10-24\",\"tier\":0}")
 	var loaded: DailyRecord = SaveStore.new(Fx.WORK).load_daily()
 	assert_eq(JSON.stringify(loaded.to_data()), JSON.stringify(record.to_data()))
 	for key: String in ["waves", "lives"]:
@@ -198,3 +198,102 @@ func test_the_streak_saturates_at_its_ceiling() -> void:
 	assert_eq(record.streak, Daily.STREAK_MAX, "never a value its own check refuses")
 	assert_true(store.save_daily(record))
 	assert_eq(SaveStore.new(Fx.WORK).load_daily().streak, Daily.STREAK_MAX)
+
+
+# The daily's content tier (docs/ARCHITECTURE.md 14.7, 14.8; RULES 15)
+
+func test_the_first_finish_of_a_day_fixes_its_tier() -> void:
+	var record: DailyRecord = DailyRecord.new()
+	assert_eq(record.tier, 0, "a new record is tier 0")
+	record.record_finish(DAY, LOSS_9, 2)
+	assert_eq(record.tier, 2)
+	record.record_finish(DAY, WIN_8, 3)
+	assert_eq(record.best, WIN_8, "a better result of the same day")
+	assert_eq(record.tier, 2, "the same day keeps its tier, even with a better result")
+	record.record_finish(DAY, LOSS_9, 0)
+	assert_eq(record.tier, 2, "and with a worse one")
+	record.record_finish(EARLIER, WIN_8, 4)
+	assert_eq([record.day, record.tier], [DAY, 2], "an earlier day leaves the tier alone")
+	record.record_finish(NEXT, LOSS_12, 3)
+	assert_eq([record.day, record.tier], [NEXT, 3], "a later day replaces the tier along with the best")
+	record.record_finish("2026-10-25", LOSS_12)
+	assert_eq(record.tier, 0, "the tier defaults to 0, as before the expansion")
+
+
+func test_a_tier_outside_the_range_counts_as_0() -> void:
+	for bad: int in [-1, RunData.MAX_TIERS + 1, 1000000000, -9223372036854775807]:
+		var record: DailyRecord = DailyRecord.new()
+		record.record_finish(DAY, WIN_3, bad)
+		assert_eq(record.tier, 0, str(bad))
+	var top: DailyRecord = DailyRecord.new()
+	top.record_finish(DAY, WIN_3, RunData.MAX_TIERS)
+	assert_eq(top.tier, RunData.MAX_TIERS)
+	var nothing: DailyRecord = DailyRecord.new()
+	nothing.record_finish("not a day", WIN_3, 3)
+	assert_eq(nothing.tier, 0, "a finish that changes nothing leaves the tier at 0")
+
+
+func test_the_tier_round_trips_through_daily_json() -> void:
+	var record: DailyRecord = DailyRecord.new()
+	record.record_finish(DAY, WIN_3, 4)
+	assert_true(store.save_daily(record))
+	assert_true(Fx.read_text("daily.json").contains("\"tier\":4"), "always written")
+	var loaded: DailyRecord = SaveStore.new(Fx.WORK).load_daily()
+	assert_eq(loaded.tier, 4)
+	assert_eq(typeof(loaded.tier), TYPE_INT)
+	assert_eq(JSON.stringify(loaded.to_data()), JSON.stringify(record.to_data()))
+	loaded.record_finish(DAY, WIN_8, 1)
+	assert_eq(loaded.tier, 4, "a loaded day keeps its tier")
+
+
+func test_daily_json_without_a_tier_is_tier_0() -> void:
+	# The daily.json of the build before the expansion.
+	Fx.write_text("daily.json", "{\"best\":{\"lives\":3,\"waves\":18,\"won\":true},\"day\":\"2026-10-23\",\"format\":1,\"streak\":4,\"streak_day\":\"2026-10-23\"}")
+	var loaded: DailyRecord = store.load_daily()
+	assert_eq([loaded.day, loaded.best, loaded.streak], [DAY, WIN_3, 4], "the rest still loads")
+	assert_eq(loaded.tier, 0)
+	assert_eq(loaded.to_data()["tier"], 0, "and is written from then on")
+
+
+func test_a_bad_tier_falls_back_to_0_and_keeps_the_rest() -> void:
+	var base: Dictionary = {"format": 1, "day": DAY, "best": WIN_3, "streak": 4, "streak_day": DAY}
+	for bad: Variant in [null, -1, RunData.MAX_TIERS + 1, 1.5, "2", true, [], {}, [2], {"t": 2}, 1e18, -1e18, 1e999, 2147483648]:
+		var data: Dictionary = base.duplicate(true)
+		data["tier"] = bad
+		var loaded: DailyRecord = DailyRecord.from_data(JSON.parse_string(JSON.stringify(data)))
+		assert_eq(loaded.tier, 0, "tier %s" % str(bad))
+		assert_eq([loaded.day, loaded.best, loaded.streak, loaded.streak_day], [DAY, WIN_3, 4, DAY], "tier %s: the rest" % str(bad))
+	for good: int in RunData.MAX_TIERS + 1:
+		var data: Dictionary = base.duplicate(true)
+		data["tier"] = good
+		assert_eq(DailyRecord.from_data(JSON.parse_string(JSON.stringify(data))).tier, good, "tier %d" % good)
+	var whole: Dictionary = base.duplicate(true)
+	whole["tier"] = 3.0
+	assert_eq(DailyRecord.from_data(whole).tier, 3, "a whole float is read as an int")
+
+
+func test_a_record_with_no_day_has_tier_0() -> void:
+	for data: Dictionary in [
+		{"format": 1, "day": "", "best": {}, "streak": 4, "streak_day": DAY, "tier": 3},
+		{"format": 1, "day": DAY, "best": {}, "streak": 4, "streak_day": DAY, "tier": 3},
+		{"format": 1, "day": "2026-02-30", "best": WIN_3, "streak": 4, "streak_day": DAY, "tier": 3},
+		{"format": 1, "best": WIN_3, "tier": 3},
+	]:
+		var loaded: DailyRecord = DailyRecord.from_data(data)
+		assert_eq(loaded.day, "")
+		assert_eq(loaded.tier, 0, str(data))
+
+
+func test_hostile_daily_json_with_a_tier_never_crashes() -> void:
+	var cases: Dictionary = {
+		"tier huge": "{\"format\": 1, \"day\": \"2026-10-23\", \"best\": {\"won\": true, \"waves\": 18, \"lives\": 3}, \"tier\": 1e999}",
+		"tier nested": "{\"format\": 1, \"day\": \"2026-10-23\", \"best\": {\"won\": true, \"waves\": 18, \"lives\": 3}, \"tier\": [[[[1]]]]}",
+		"tier text": "{\"format\": 1, \"day\": \"2026-10-23\", \"best\": {\"won\": true, \"waves\": 18, \"lives\": 3}, \"tier\": \"../x\"}",
+		"tier negative zero": "{\"format\": 1, \"day\": \"2026-10-23\", \"best\": {\"won\": true, \"waves\": 18, \"lives\": 3}, \"tier\": -0.0}",
+	}
+	for name: String in cases:
+		Fx.fresh()
+		Fx.write_text("daily.json", cases[name])
+		var loaded: DailyRecord = SaveStore.new(Fx.WORK).load_daily()
+		assert_eq(loaded.day, DAY, name)
+		assert_eq(loaded.tier, 0, name)

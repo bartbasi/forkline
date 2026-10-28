@@ -14,14 +14,16 @@ var day: String = ""                                   # "" or the day of best
 var best: Dictionary = {}                              # that day's best {"won": bool, "waves": int, "lives": int}; {} for none
 var streak: int = 0
 var streak_day: String = ""                            # the last counted day
+var tier: int = 0                                      # the content tier of day's daily (14.8); 0 with no day
 
 
 ## A daily belonging to finished_day has ended with result ({"won", "waves", "lives"} from
 ## RunSession.result(); other keys are ignored). The streak moves by Daily.streak_after.
-## A later day than the record's replaces the best; the same day keeps the better result
-## by Daily.is_better; an earlier day leaves it alone. Day keys compare as text, which is
-## date order. A finished_day that is not a day key changes nothing.
-func record_finish(finished_day: String, result: Dictionary) -> void:
+## A later day than the record's replaces the best and the tier; the same day keeps the
+## better result by Daily.is_better and keeps its tier; an earlier day leaves both alone.
+## Day keys compare as text, which is date order. A finished_day that is not a day key
+## changes nothing. A tier outside 0 to RunData.MAX_TIERS counts as 0, as on load.
+func record_finish(finished_day: String, result: Dictionary, finished_tier: int = 0) -> void:
 	if not RunSeeds.is_day_key(finished_day):
 		return
 	var after: Dictionary = Daily.streak_after(streak, streak_day, finished_day)
@@ -31,16 +33,18 @@ func record_finish(finished_day: String, result: Dictionary) -> void:
 	if day == "" or finished_day > day:
 		day = finished_day
 		best = clean
+		tier = finished_tier if finished_tier >= 0 and finished_tier <= RunData.MAX_TIERS else 0
 	elif finished_day == day and Daily.is_better(clean, best):
 		best = clean
 
 
 func to_data() -> Dictionary:
-	return {"format": FORMAT, "day": day, "best": best.duplicate(), "streak": streak, "streak_day": streak_day}
+	return {"format": FORMAT, "day": day, "best": best.duplicate(), "streak": streak, "streak_day": streak_day, "tier": tier}
 
 
 ## Any bad field falls back to its default. Unknown keys are ignored. A day without a
-## best, or a best without a day, falls back to neither.
+## best, or a best without a day, falls back to neither. `tier` is optional (14.7): missing
+## or bad means 0, and a record with no day has tier 0.
 static func from_data(data: Variant) -> DailyRecord:
 	var record: DailyRecord = new()
 	if typeof(data) != TYPE_DICTIONARY:
@@ -51,6 +55,9 @@ static func from_data(data: Variant) -> DailyRecord:
 	if record.day == "" or record.best.is_empty():
 		record.day = ""
 		record.best = {}
+	var tier_value: Variant = top.get("tier", null)
+	if record.day != "" and DataCheck.is_whole(tier_value) and int(tier_value) >= 0 and int(tier_value) <= RunData.MAX_TIERS:
+		record.tier = int(tier_value)
 	var streak_value: Variant = top.get("streak", null)
 	if DataCheck.is_whole(streak_value) and int(streak_value) >= 0 and int(streak_value) <= Daily.STREAK_MAX:
 		record.streak = int(streak_value)
