@@ -4,6 +4,8 @@ extends RefCounted
 ## Shared helpers for tests/render/: the real stat files and region 1 levels, real Battle
 ## objects, and a simple fixed defense. Nothing here is the game's own code.
 
+const Cx: GDScript = preload("res://tests/sim/fixtures/creature_fixtures.gd")
+
 const STATS_DIR: String = "res://data/stats/"
 const LEVEL_DIR: String = "res://data/levels/"
 const REGION_1: Array[String] = ["r1_l1", "r1_l2", "r1_l3", "r1_l4", "r1_l5", "r1_l6"]
@@ -110,6 +112,61 @@ const ALL_TOWERS: Array = ["sling_post", "pumpkin_catapult", "lullaby_bell", "lo
 ## Gate sockets of the arena: left side, right side, bottom right, and a second one on the left side
 ## (in series with the first, so both can be closed without sealing).
 const ARENA_SOCKETS: Array[Vector2i] = [Vector2i(1, 5), Vector2i(5, 5), Vector2i(4, 7), Vector2i(1, 6)]
+
+
+## The four towers of the expansion, and every tower with them. data/stats/ has none of the new
+## content until E5.1, so the expansion's fixtures play on the sim's test catalog (docs/ARCHITECTURE.md
+## 14.4): tests/sim/fixtures/creature_fixtures.gd.
+const EXPANSION_TOWER_IDS: Array = ["bramble_cottage", "scarecrow", "snow_fort", "moth_lantern"]
+const EXPANSION_ENEMY_IDS: Array = ["mossbud", "mistwisp", "gleamer", "sleepyhead", "snowroller", "yawner", "blinker", "hootling"]
+const EXPANSION_BOSS_IDS: Array = ["burrowbelly", "old_hayrick", "snowsnore", "glimmertoad"]
+
+## A long serpentine road, 7 x 10, with 24 build spots: room for every look of the new towers at once.
+const GALLERY_GRID: Array = [
+	"1######", "oooooo#", "#######", "#oooooo", "#######", "oooooo#", "#######", "#oooooo", "#######", "......B",
+]
+
+
+## The arena (or `grid`) played on the sim's expansion catalog, with every tower on offer unless
+## `towers` names the ones to offer. Lives are 1000 and gold plentiful.
+static func expansion(waves: Array, strength: int = 100, grid: Array = ARENA_GRID, gates: int = 2, towers: Array = []) -> Battle:
+	var stats: Catalog = Cx.catalog()
+	var list: Array = []
+	for groups: Array in waves:
+		list.append({"groups": groups})
+	var all: Array = ALL_TOWERS.duplicate()
+	all.append_array(EXPANSION_TOWER_IDS)
+	if not towers.is_empty():
+		all = towers.duplicate()
+	var data: Dictionary = {
+		"format": 1, "id": "expansion", "name": "Expansion", "grid": grid.duplicate(), "start_gold": 50000,
+		"gates": gates, "strength": strength, "towers": all,
+		"star3": {"kind": "no_lives_lost"}, "waves": list,
+	}
+	var twist: Array[Dictionary] = [{"type": "set_lives", "lives": 1000}]
+	return Battle.create(LevelData.from_data(data, stats), stats, false, twist)
+
+
+## The busiest wave the new cast makes: two waves of 120 on the serpentine road, every new creature
+## and flitters for the lanterns, against a defense of every new tower and old ones, with the strength
+## up so they live long enough to be drawn crowded. Bosses are left out (the stress map has them).
+static func expansion_crowd() -> Battle:
+	var groups: Array = []
+	for id: String in ["mossbud", "sleepyhead", "snowroller", "blinker", "yawner"]:
+		groups.append(group(id, 20, 150))
+	groups.append(group("hootling", 6, 300))
+	groups.append(group("mistwisp", 6, 300))
+	groups.append(group("flitter", 8, 200))
+	var b: Battle = expansion([groups, groups], 1000, SNAKE_GRID, 0)
+	var order: Array = [
+		["bramble_cottage", 3, 0], ["snow_fort", 3, 1], ["moth_lantern", 3, 1], ["scarecrow", 3, 1],
+		["sling_post", 3, 0], ["pumpkin_catapult", 2, -1], ["longbow_loft", 3, 1], ["firework_tower", 3, 0],
+		["bramble_cottage", 2, -1], ["snow_fort", 2, -1], ["moth_lantern", 2, -1], ["bakery", 2, -1],
+	]
+	for i: int in mini(b.level.spots.size(), order.size()):
+		var o: Array = order[i]
+		build(b, b.level.spots[i], StringName(o[0]), o[1], o[2])
+	return b
 
 
 ## A wave group for the arena: `count` of `enemy`, one every `every_ms`, from `at_ms`.

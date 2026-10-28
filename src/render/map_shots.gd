@@ -18,23 +18,30 @@ const MAX_FLASHES: int = 90
 ## The pictures of the shots. The Longbow Loft fires ARROW (its Triple Bow fires three at three
 ## targets) or GIANT_ARROW; the Firework Tower fires ROCKET with a small burst, BLOOM with a
 ## wide burst, or one heavy SKYROCKET. The Pumpkin Catapult lobs PUMPKIN, JAM (the jam pot) or
-## PRIZE (the huge pumpkin).
-enum Look { PEBBLE, STONE, PUMPKIN, JAM, ARROW, GIANT_ARROW, ROCKET, BLOOM, SKYROCKET, PRIZE }
+## PRIZE (the huge pumpkin). The Bramble Cottage sends one ring of THORNS out to its reach, the Snow
+## Fort rolls one SNOWBALL (BIG_SNOWBALL for the Big Snowball path) from its center to the end of its
+## line, and the Moth Lantern sends a BEAM of light to each flyer it lures.
+enum Look { PEBBLE, STONE, PUMPKIN, JAM, ARROW, GIANT_ARROW, ROCKET, BLOOM, SKYROCKET, PRIZE, THORNS, SNOWBALL, BIG_SNOWBALL, BEAM }
 ## The short marks, in the order of their lifetimes below.
 enum Fx { HIT, RING, BURST, PLUS, COIN, WHOOSH, PULSE, MUZZLE, SPLASH }
-## PULSE colors: a heal ring, a release ring, a gate ring.
-enum Hue { HEAL, RELEASE, GATE }
+## PULSE colors: a heal ring, a release ring, a gate ring, a yawn ring.
+enum Hue { HEAL, RELEASE, GATE, YAWN }
 
 ## Per look: speed in cells a second, the shortest and longest flight in seconds, the arc height
 ## in cells.
-const SPEED: Array[float] = [22.0, 18.0, 18.0, 18.0, 34.0, 30.0, 28.0, 28.0, 24.0, 16.0]
-const SHORTEST: Array[float] = [0.05, 0.05, 0.11, 0.11, 0.05, 0.05, 0.05, 0.05, 0.05, 0.12]
-const LONGEST: Array[float] = [0.16, 0.18, 0.16, 0.16, 0.14, 0.16, 0.13, 0.13, 0.2, 0.17]
-const ARC: Array[float] = [0.08, 0.1, 0.9, 0.9, 0.0, 0.0, 0.1, 0.15, 0.05, 1.1]
+## A thorn ring has no length: it takes SHORTEST (= LONGEST) to open out to its reach.
+const SPEED: Array[float] = [22.0, 18.0, 18.0, 18.0, 34.0, 30.0, 28.0, 28.0, 24.0, 16.0, 1.0, 14.0, 12.0, 40.0]
+const SHORTEST: Array[float] = [0.05, 0.05, 0.11, 0.11, 0.05, 0.05, 0.05, 0.05, 0.05, 0.12, 0.3, 0.14, 0.16, 0.06]
+const LONGEST: Array[float] = [0.16, 0.18, 0.16, 0.16, 0.14, 0.16, 0.13, 0.13, 0.2, 0.17, 0.3, 0.36, 0.4, 0.14]
+const ARC: Array[float] = [0.08, 0.1, 0.9, 0.9, 0.0, 0.0, 0.1, 0.15, 0.05, 1.1, 0.0, 0.0, 0.0, 0.0]
 ## Per Fx: how long it lasts, in seconds.
 const LIFE: Array[float] = [0.18, 0.28, 0.5, 0.6, 0.55, 0.35, 0.45, 0.26, 0.75]
 const BURST_COLORS: Array[Color] = [Palette.HONEY, Palette.ROOF_CLAY, Palette.SPARKLE, Palette.SPARKLE_LILAC]
-const HUES: Array[Color] = [Palette.HP_FILL, Palette.SPARKLE_LILAC, Palette.SPARKLE]
+const HUES: Array[Color] = [Palette.HP_FILL, Palette.SPARKLE_LILAC, Palette.SPARKLE, Palette.BUBBLE]
+## The most hit marks one pulse or one line makes, so a crowd stays calm and the cap of MAX_FLASHES holds.
+const MAX_MARKED: int = 12
+## A snowball is drawn this much smaller than the line it hits, which is as wide as the sim's.
+const SNOW_FIT: float = 0.8
 ## How far the picture of a pumpkin or rocket landing may slide toward its creature, which walks on
 ## while the shot flies, as a fraction of the true splash radius. The splash area itself never moves.
 const AIM_REACH: float = 0.35
@@ -90,7 +97,7 @@ var shots: Array[Shot] = []
 var flashes: Array[Flash] = []
 var now: float = 0.0
 ## For tests: how many shots of each look were launched, and how many marks of each Fx.
-var launched: PackedInt32Array = PackedInt32Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+var launched: PackedInt32Array = PackedInt32Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
 var marked: PackedInt32Array = PackedInt32Array([0, 0, 0, 0, 0, 0, 0, 0, 0])
 var _drawn_last: bool = false
 var _tex: Texture2D
@@ -100,6 +107,12 @@ var _pieces: Array[MapAtlas.Entry] = []
 ## Which look a tower's shot has. Bells and Bakeries never fire.
 static func look_for(tower: StringName, spec: int) -> int:
 	match tower:
+		&"bramble_cottage":
+			return Look.THORNS
+		&"snow_fort":
+			return Look.BIG_SNOWBALL if spec == 0 else Look.SNOWBALL
+		&"moth_lantern":
+			return Look.BEAM
 		&"sling_post":
 			return Look.STONE if spec == 1 else Look.PEBBLE
 		&"pumpkin_catapult":
@@ -113,6 +126,23 @@ static func look_for(tower: StringName, spec: int) -> int:
 				return Look.BLOOM
 			return Look.SKYROCKET if spec == 1 else Look.ROCKET
 	return Look.PEBBLE
+
+
+## True for the Snow Fort's looks: one ball along the sim's line.
+static func is_line(look: int) -> bool:
+	return look == Look.SNOWBALL or look == Look.BIG_SNOWBALL
+
+
+## True for the looks whose picture has a true size, kept in Shot.radius: a thorn ring's reach and a
+## snowball's half width.
+static func has_extent(look: int) -> bool:
+	return look == Look.THORNS or is_line(look)
+
+
+## True for the looks that make their hit marks when they are launched, on each target at the moment
+## the picture passes it: the thorn ring and the rolling snowball.
+static func look_is_placed(look: int) -> bool:
+	return look == Look.THORNS or is_line(look)
 
 
 ## True for the catapult's looks: they fly high, show their splash area and land with a splash.
@@ -152,6 +182,14 @@ static func _muzzle_full(tower: StringName, cell: Vector2i, tier: int, spec: int
 			return c + Vector2(x, -0.56 - lift - rise) * CELL
 		&"firework_tower":
 			return c + Vector2(0.0, -0.58 - lift) * CELL
+		&"moth_lantern":
+			# Where the lantern hangs: one big one, or one of the three of the Garland.
+			if tier == 3 and spec == 0:
+				return c + Vector2(0.08, -0.49 - lift) * CELL
+			if tier == 3 and spec == 1:
+				var lamps: Array[Vector2] = [Vector2(0.30, -0.34), Vector2(0.35, -0.16), Vector2(0.44, 0.02)]
+				return c + (lamps[index % 3] + Vector2(0.0, -lift)) * CELL
+			return c + Vector2(0.30, -0.31 - lift) * CELL
 	return c + Vector2(0.0, -0.5) * CELL
 
 
@@ -171,7 +209,7 @@ func launch(look: int, from: Vector2, to: Vector2, target: int, at_time: float, 
 	s.t0 = at_time
 	s.t1 = at_time + flight
 	s.target = target
-	s.radius = splash if lands_on_spot(look) else 0.0
+	s.radius = splash if (lands_on_spot(look) or has_extent(look)) else 0.0
 	shots.append(s)
 	launched[look] += 1
 	_add_flash(Fx.MUZZLE, from, at_time, 1.0, look, 1.0, (to - from).angle())
@@ -257,6 +295,8 @@ func _wake() -> void:
 ## small fireworks, else a hit mark. The splash and the burst are centered on the spot the sim hit
 ## and show its true radius. What flies out of them lands on the creature.
 func _land(s: Shot) -> void:
+	if look_is_placed(s.look):
+		return
 	var radius: float = s.radius if s.radius > 0.0 else CELL * 0.75
 	if is_lobbed(s.look):
 		var hue: int = 1 if s.look == Look.JAM else (2 if s.look == Look.PRIZE else 0)
@@ -445,6 +485,26 @@ func _draw_muzzle(f: Flash, k: float) -> void:
 			for j: int in 2:
 				var o: Vector2 = side * (float(j) * 2.0 - 1.0) * CELL * 0.06 * big
 				_streak(f.at + o, f.ang + PI, CELL * (0.16 + 0.2 * e) * big, CELL * 0.05 * big, Color(Palette.SPARKLE, 0.8 * a))
+		Look.THORNS:
+			# Four thorns pop up from the ground round the cottage and a puff of leaf dust.
+			for j: int in 4:
+				var up: float = TAU * (float(j) + 0.5) / 4.0
+				var o: Vector2 = f.at + Vector2.from_angle(up) * CELL * (0.1 + 0.1 * e)
+				_q(ShotPieces.Piece.THORN, o, 0.5, 0.5, Color(Palette.HOLLY.lightened(0.3), a), up)
+			_puff(f.at, CELL * (0.12 + 0.1 * k), 0.6 * a)
+		Look.SNOWBALL, Look.BIG_SNOWBALL:
+			var big: float = 1.4 if f.hue == Look.BIG_SNOWBALL else 1.0
+			for j: int in 3:
+				var off: Vector2 = Vector2((float(j) - 1.0) * 0.14, -0.04 - 0.14 * e - 0.04 * float(j % 2)) * CELL * big
+				_disc(f.at + off, CELL * (0.07 + 0.07 * k) * big, Color(Palette.SNOW_WARM, 0.85 * a))
+			for j: int in 3:
+				var fp: Vector2 = f.at + d.rotated((float(j) - 1.0) * 0.5) * CELL * (0.1 + 0.22 * e) * big
+				_bead(fp, CELL * 0.03 * big, Color(Palette.SNOW_WARM, a))
+		Look.BEAM:
+			# The lantern flares: a soft glow and a four point twinkle.
+			_disc(f.at, CELL * 0.2 * (1.0 - 0.4 * k), Color(Palette.GLOW, 0.55 * a))
+			_disc(f.at, CELL * 0.08 * (1.0 - 0.4 * k), Color(Palette.LANTERN_CORE, a))
+			_star(f.at, CELL * 0.16 * (0.6 + 0.4 * e), false, k * 1.2, Color(Palette.LANTERN_CORE, a))
 		_:
 			var big: float = 1.0
 			if f.hue == Look.SKYROCKET:
@@ -482,6 +542,10 @@ func _draw_hit(f: Flash, k: float) -> void:
 	var r: float = hit_reach(heavy, k)
 	_disc(f.at, r * 0.8, Color(Palette.SPARKLE, 0.55 * a))
 	var col: Color = Palette.LANTERN if f.hue == Look.SKYROCKET else Palette.SPARKLE
+	if f.hue == Look.BEAM:
+		col = Palette.GLOW
+	elif f.hue == Look.SNOWBALL or f.hue == Look.BIG_SNOWBALL:
+		col = Palette.SNOW_WARM
 	# A star's drawn tips reach 1.11 times the size given.
 	_star(f.at, r / 1.11, heavy or f.hue == Look.STONE, PI / 4.0, Color(col, a))
 	match f.hue:
@@ -509,6 +573,22 @@ func _draw_hit(f: Flash, k: float) -> void:
 			for j: int in 3:
 				var off: Vector2 = Vector2((float(j) - 1.0) * 0.4 * r, -(0.35 + 0.2 * e) * r)
 				_puff(f.at + off, r * 0.26, 0.7 * a)
+		Look.THORNS:
+			# Four thorns round the creature, tips inward, all inside the reach r.
+			var len_k: float = r * 0.6 / (ShotPieces.THORN_LENGTH * CELL)
+			for j: int in 4:
+				var up: float = TAU * float(j) / 4.0 + 0.4
+				_q(ShotPieces.Piece.THORN, f.at + Vector2.from_angle(up) * r * 0.92, len_k, len_k, Color(Palette.HOLLY.lightened(0.3), a), up + PI)
+		Look.SNOWBALL, Look.BIG_SNOWBALL:
+			for j: int in 4:
+				var d: Vector2 = Vector2.from_angle(TAU * float(j) / 4.0 + 0.2)
+				var cp: Vector2 = f.at + d * (r - CELL * 0.045) + Vector2(0.0, -sin(PI * k) * CELL * 0.04)
+				_bead(cp, CELL * 0.026, Color(Palette.SNOW_WARM, a))
+			_ring(f.at, r / RING_INK, Color(Palette.SNOW_WARM, 0.9 * a))
+		Look.BEAM:
+			# The flyer is pulled down: a ring closes in on it.
+			_ring(f.at, r / RING_INK * (1.0 - 0.35 * e), Color(Palette.BUBBLE, a))
+			_disc(f.at, r * 0.45 * (1.0 - 0.6 * k), Color(Palette.LANTERN_CORE, a))
 
 
 ## A lobbed shot lands: the splash area spreads out to its true radius around the spot the sim hit
@@ -656,12 +736,63 @@ func _draw_shot(s: Shot, p: Vector2, dir: Vector2, u: float) -> void:
 			_draw_arrow(p, dir, 1.0)
 		Look.GIANT_ARROW:
 			_draw_arrow(p, dir, 2.0)
+		Look.THORNS:
+			_draw_thorns(s, u)
+		Look.SNOWBALL, Look.BIG_SNOWBALL:
+			_draw_snowball(s, p, dir, u)
+		Look.BEAM:
+			_draw_beam(s, p, dir, u)
 		Look.SKYROCKET:
 			_draw_rocket(p, dir, u, 1.9, false)
 		Look.BLOOM:
 			_draw_rocket(p, dir, u, 1.4, true)
 		_:
 			_draw_rocket(p, dir, u, 1.2, false)
+
+
+## The Bramble Cottage's pulse: a ring of thorns opens out from the cottage to its true reach. The
+## thorns point inward, so the ring's outer edge is exactly where the sim stops.
+func _draw_thorns(s: Shot, u: float) -> void:
+	var e: float = 1.0 - (1.0 - u) * (1.0 - u)
+	var r: float = s.radius * (0.2 + 0.8 * e)
+	var fade: float = 1.0 - maxf(u - 0.6, 0.0) / 0.4
+	var color: Color = Palette.HOLLY.lightened(0.3)
+	_disc(s.from, r, Color(Palette.HOLLY, 0.2 * fade))
+	_ring(s.from, r / RING_INK, Color(color, fade))
+	var n: int = 14
+	var len_k: float = minf(0.55, r * 0.5 / (ShotPieces.THORN_LENGTH * CELL))
+	for j: int in n:
+		var a: float = TAU * float(j) / float(n) + 0.5 * u
+		_q(ShotPieces.Piece.THORN, s.from + Vector2.from_angle(a) * r / RING_INK, len_k, len_k, Color(color, fade), a + PI)
+
+
+## The Snow Fort's line: a faint band as wide as the line the sim used, and one snowball rolling along
+## it from the fort to the end, with a spray of snow behind it.
+func _draw_snowball(s: Shot, p: Vector2, dir: Vector2, u: float) -> void:
+	var angle: float = dir.angle()
+	var length: float = s.from.distance_to(s.to)
+	var half: float = s.radius
+	var band_alpha: float = 0.2 * (1.0 - 0.5 * u)
+	var width_k: float = half / (ShotPieces.DISC_R * CELL)
+	_q(ShotPieces.Piece.DISC, s.from.lerp(s.to, 0.5), length / (2.0 * ShotPieces.DISC_R * CELL), width_k, Color(Palette.SNOW_WARM, band_alpha), angle)
+	var ball: float = half * SNOW_FIT
+	var k: float = ball / (ShotPieces.SNOW_R * CELL)
+	_streak(p, angle + PI, CELL * 0.6, ball * 1.5, Color(Palette.SNOW_WARM, 0.45))
+	for j: int in 3:
+		var back: Vector2 = p - dir * (ball * (1.2 + 0.9 * float(j))) + Vector2(-dir.y, dir.x) * sin(u * 24.0 + float(j) * 2.0) * ball * 0.5
+		_disc(back, ball * (0.4 - 0.08 * float(j)), Color(Palette.SNOW_WARM, 0.7 - 0.15 * float(j)))
+	var fade: float = 1.0 - maxf(u - 0.85, 0.0) / 0.15
+	_q(ShotPieces.Piece.SNOWBALL, p, k, k, Color(1, 1, 1, fade), (u * length) / maxf(ball, 1.0))
+
+
+## The Moth Lantern's light: a soft beam from the lantern to the flyer, with a bright head.
+func _draw_beam(s: Shot, p: Vector2, dir: Vector2, u: float) -> void:
+	var angle: float = dir.angle()
+	var length: float = s.from.distance_to(p)
+	_streak(p, angle + PI, length, CELL * 0.16, Color(Palette.GLOW, 0.5))
+	_streak(p, angle + PI, length, CELL * 0.055, Color(Palette.LANTERN_CORE, 0.95))
+	_disc(p, CELL * 0.11, Color(Palette.GLOW, 0.8))
+	_star(p, CELL * 0.1, false, u * TAU, Color(Palette.LANTERN_CORE, 1.0))
 
 
 ## The splash area of a lobbed shot, on the ground where it will land (the spot the sim hit): a dashed ring of the true

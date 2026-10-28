@@ -23,6 +23,12 @@ extends Node2D
 ## node in that order, so the order needs no z values. A walker inside a tunnel fades out at one
 ## mouth and back in at the other. A walker on a twin step is not drawn, with sparkles where it
 ## went in. Maps with no tunnel, bridge or stump make none of this.
+##
+## Statuses (14.10, RULES 8.8). A napping creature lies on its side. A creature that dug under is
+## its dirt mound. A flyer a Moth Lantern pulled low is drawn lower, above the ring at its shadow. A
+## grower is drawn larger as it grows, up to 1.5 times. Hidden, frightened, awake and napping
+## creatures wear a small mark, and a dozing tower wears the doze mark (MapStatus). A blink or a hop
+## shows as a snap, never a streak: the sim puts `prev_pos` at the landing.
 
 const CELL: float = 128.0
 ## Sub-units of the sim to local pixels.
@@ -36,9 +42,9 @@ const HEAL_MARKS: int = 6
 ## The recoil of a tower that fires: seconds, squash and lean in radians, by shot look (the order
 ## of MapShots.Look). The catapult kicks hardest and slowest, the sling quickest.
 const KICK_SECONDS: float = 0.15
-const KICK_TIME: Array[float] = [0.14, 0.2, 0.32, 0.32, 0.2, 0.26, 0.24, 0.28, 0.3, 0.38]
-const KICK_SQUASH: Array[float] = [0.07, 0.1, 0.14, 0.14, 0.07, 0.1, 0.11, 0.13, 0.15, 0.18]
-const KICK_LEAN: Array[float] = [0.03, 0.05, 0.1, 0.1, 0.04, 0.06, 0.0, 0.0, 0.0, 0.14]
+const KICK_TIME: Array[float] = [0.14, 0.2, 0.32, 0.32, 0.2, 0.26, 0.24, 0.28, 0.3, 0.38, 0.3, 0.28, 0.34, 0.2]
+const KICK_SQUASH: Array[float] = [0.07, 0.1, 0.14, 0.14, 0.07, 0.1, 0.11, 0.13, 0.15, 0.18, 0.1, 0.12, 0.16, 0.03]
+const KICK_LEAN: Array[float] = [0.03, 0.05, 0.1, 0.1, 0.04, 0.06, 0.0, 0.0, 0.0, 0.14, 0.0, 0.0, 0.0, 0.0]
 ## A breaker stands at the center of the cell before its gate, one tile away.
 const BREAK_REACH: int = Sim.UNIT * 13 / 10
 const DIRS: Array[Vector2i] = [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]
@@ -55,6 +61,16 @@ const TUNNEL_FADE: float = 0.3
 const TWIN_FADE: float = 0.15
 ## Farther than this (in cells) in one frame is a jump (a twin step), not a walk.
 const JUMP_CELLS: float = 0.9
+## What a creature looks like: as it is, lowered to its shadow (a lured flyer), or its dirt mound.
+const LOOK_HIGH: int = 0
+const LOOK_LOW: int = 1
+const LOOK_DUG: int = 2
+## A grower is drawn up to this much larger than its box (RULES 6.2, Grow).
+const GROW_MAX: float = 1.5
+## A creature laid on its side (RULES 6.2, Nap) stands this far (a fraction of its box) to the side of
+## where it stood, so it lies about where its body was, and lower, so it lies on the ground.
+const LIE_SHIFT: float = 0.4
+const LIE_DROP: float = 0.06
 
 
 class TowerView:
@@ -101,6 +117,14 @@ class CreatureView:
 	var landed_t: float = -10.0
 	## False until _place_walker has seen it once.
 	var placed: bool = false
+	## The picture it wears (LOOK_), its growth (1 to 1.5), whether it lies down, and the anchor of its
+	## own sprite in local pixels (the feet), for the offset.
+	var look: int = LOOK_HIGH
+	var grow: float = 1.0
+	var lying: bool = false
+	var anchor: Vector2 = Vector2.ZERO
+	## Its type grows (RULES 6.2): the cap, as a percent of its starting max health. 0 for no growth.
+	var grow_cap_pct: int = 0
 
 
 ## A straight run of tunnel tiles: the box of the run in local pixels, and its direction.
@@ -156,6 +180,15 @@ var _real_dt: float = 0.0
 ## True while a wave is on but the game clock did not move since the last sync (a pause).
 var _frozen: bool = false
 var _boosted: Array[Vector2] = []
+var _dozing: Array[Vector2] = []
+## Bit masks of the status marks (Silhouettes.MARKS) in MapStatus.Item.marks.
+var _bit_hidden: int = 0
+var _bit_napping: int = 0
+var _bit_fright: int = 0
+var _bit_awake: int = 0
+var _bit_low: int = 0
+## The level has a tower that lures flyers, so flyers get their lowered pictures.
+var _lures: bool = false
 ## Gates a breaker is working on this frame, and how far along each is. MapGates draws them.
 var _crack_cells: Array[Vector2i] = []
 var _crack_progress: PackedFloat32Array = PackedFloat32Array()
@@ -186,6 +219,12 @@ func setup(new_battle: Battle, region: StringName = &"lantern_hill") -> void:
 	level = battle.level
 	_premult = CanvasItemMaterial.new()
 	_premult.blend_mode = CanvasItemMaterial.BLEND_MODE_PREMULT_ALPHA
+	_bit_hidden = _mark_bit(&"hidden")
+	_bit_napping = _mark_bit(&"napping")
+	_bit_fright = _mark_bit(&"fright")
+	_bit_awake = _mark_bit(&"awake")
+	_bit_low = _mark_bit(&"low")
+	_lures = false
 	_ground_id = MapArt.ground_of(region, level.grid)
 	_ground = MapGround.new()
 	add_child(_ground)
@@ -236,11 +275,13 @@ func setup(new_battle: Battle, region: StringName = &"lantern_hill") -> void:
 	add_child(_leaks)
 	for id: StringName in level.towers:
 		_atlas.add_tower_looks(id)
+		_lures = _lures or _lures_flyers(id)
 	for id: StringName in _level_enemy_types():
-		_atlas.add_enemy(id)
+		_add_enemy_pictures(id)
 	_prepared = Vector2i(-1, -1)
 	_prepare_atlas()
 	_atlas.add_marks()
+	_atlas.add_status_marks()
 	_atlas.add_shot_pieces()
 	_atlas.add_gates()
 	_atlas.add_route_pieces()
@@ -362,6 +403,12 @@ func play_events(events: Array[Dictionary]) -> void:
 				_on_released(e)
 			&"sped_up":
 				_on_sped_up(int(e["id"]))
+			&"blinked":
+				_on_blinked(e)
+			&"yawned":
+				_on_yawned(e)
+			&"burrowed", &"surfaced":
+				_on_dug(e, kind == &"burrowed")
 			&"break_started":
 				_on_break_started(e["cell"] as Vector2i)
 			&"gate_broken":
@@ -565,7 +612,10 @@ func _advance_clock(alpha: float) -> void:
 # Towers.
 
 func _sync_towers() -> void:
+	_dozing.clear()
 	for t: TowerState in battle.towers:
+		if t.doze_ticks > 0:
+			_dozing.append(_tower_center(t.cell))
 		var v: TowerView = _towers.get(t.cell)
 		if v == null:
 			v = _add_tower(t)
@@ -644,7 +694,6 @@ func _sync_creatures(alpha: float) -> void:
 	_status_items.clear()
 	_crack_cells.clear()
 	_crack_progress.clear()
-	var anim_rate: float = WALK_FPS
 	for e: EnemyState in battle.enemies:
 		var v: CreatureView = _creatures.get(e.id)
 		if v == null:
@@ -652,7 +701,7 @@ func _sync_creatures(alpha: float) -> void:
 		v.gen = _gen
 		var p: Vector2 = Vector2(e.prev_pos).lerp(Vector2(e.pos), alpha)
 		var c: Vector2 = p * PX_PER_SUB if v.flyer else _curve(p)
-		# A jump (the end of a twin step) is not a walk: it must not turn the creature round.
+		# A jump (the end of a twin step, a blink) is not a walk: it must not turn the creature round.
 		if c.distance_to(v.center) < JUMP_CELLS * CELL:
 			if c.x < v.center.x - 0.05:
 				v.left = true
@@ -661,22 +710,35 @@ func _sync_creatures(alpha: float) -> void:
 		v.center = c
 		if _layered or _has_twins:
 			_place_walker(v, e, p * PX_PER_SUB)
-		v.sprite.position = Vector2(c.x, c.y + v.feet)
+		var napping: bool = e.nap_ticks > 0
+		var f: int = 0
+		if not napping:
+			f = int(_fx_time * (FLAP_FPS if v.flyer else WALK_FPS) + float(e.id) * 0.37) & 3
+		var look: int = _style_creature(v, e, c, f, napping)
 		v.sprite.flip_h = v.left
-		anim_rate = FLAP_FPS if v.flyer else WALK_FPS
-		var f: int = int(_fx_time * anim_rate + float(e.id) * 0.37) & 3
-		if f != v.frame:
-			v.frame = f
-			v.sprite.region_rect = (_atlas.enemy_rects[v.type] as Array)[f]
 		var it: MapStatus.Item = v.item
-		it.center = c
-		it.size = v.size_px
+		it.size = v.size_px * v.grow
+		# A grower grows from its feet, so the middle of its body rises.
+		it.center = v.center + Vector2(0.0, v.feet * (1.0 - v.grow))
+		it.ground_center = c
 		it.hp = float(e.health) / float(maxi(e.max_health, 1))
 		it.bar = e.health < e.max_health or v.boss
 		it.drowsy = e.slow_ticks > 0 and e.slow_pct > 0
 		it.bubble = e.bubble or v.bubble_hold > _fx_time
 		it.frame = f
-		if (it.bar or it.drowsy or it.bubble) and v.alpha >= 0.5:
+		var marks: int = 0
+		if e.hidden:
+			marks |= _bit_hidden
+		if v.lying:
+			marks |= _bit_napping
+		if e.fright_ticks > 0:
+			marks |= _bit_fright
+		if e.awake:
+			marks |= _bit_awake
+		if look == LOOK_LOW:
+			marks |= _bit_low
+		it.marks = marks
+		if (it.bar or it.drowsy or it.bubble or marks != 0) and v.alpha >= 0.5:
 			_status_items.append(it)
 		if e.breaking > 0:
 			_note_breaker(e)
@@ -692,22 +754,91 @@ func _sync_creatures(alpha: float) -> void:
 			_creatures.erase(id)
 
 
+## Gives a creature the picture and the pose its statuses call for (RULES 8.8): its dirt mound while
+## it is dug under, its lowered picture while a lantern holds it low, larger as it grows, and on its
+## side while it naps. Returns the look it wears (LOOK_). `c` is its place on the ground line of
+## flight (a flyer's center, a walker's center); the sprite stands on its feet.
+func _style_creature(v: CreatureView, e: EnemyState, c: Vector2, f: int, napping: bool) -> int:
+	var look: int = LOOK_HIGH
+	if e.dig_ticks > 0:
+		look = LOOK_DUG
+	elif v.flyer and e.low_ticks > 0:
+		look = LOOK_LOW
+		if not _atlas.low_rects.has(v.type):
+			_atlas.add_enemy(v.type, true)
+			_rebake()
+	var grow: float = 1.0
+	if v.grow_cap_pct > 0:
+		grow = growth(e.start_health, e.max_health, v.grow_cap_pct)
+	if look != v.look or grow != v.grow or f != v.frame:
+		v.look = look
+		v.grow = grow
+		v.frame = f
+		_set_picture(v, f)
+	var lying: bool = napping and look != LOOK_DUG
+	if lying:
+		var dir: float = -1.0 if v.left else 1.0
+		var size: float = v.size_px * grow
+		v.sprite.position = Vector2(c.x - dir * LIE_SHIFT * size, c.y + LIE_DROP * size)
+		v.sprite.rotation = dir * PI * 0.5
+	else:
+		v.sprite.position = Vector2(c.x, c.y + v.feet)
+		if v.lying:
+			v.sprite.rotation = 0.0
+	v.lying = lying
+	if look == LOOK_LOW:
+		v.center = Vector2(c.x, c.y + MapAtlas.LOW_DROP * v.size_px)
+	return look
+
+
+## Sets the part of the sheet, its offset and its scale for a creature's look, growth and frame.
+func _set_picture(v: CreatureView, f: int) -> void:
+	var k: float = _atlas.texel_scale
+	var frame: int = clampi(f, 0, 3)
+	var s: float = v.grow / k
+	if v.look == LOOK_DUG:
+		var mound: MapAtlas.Entry = _atlas.entry_for(MapAtlas.mark_key(&"dug", frame))
+		v.sprite.region_rect = mound.rect
+		v.sprite.offset = -mound.anchor * k
+		s *= v.size_px / CELL
+	else:
+		var rects: Dictionary[StringName, Array] = _atlas.low_rects if v.look == LOOK_LOW else _atlas.enemy_rects
+		v.sprite.region_rect = (rects[v.type] as Array)[frame]
+		v.sprite.offset = -v.anchor * k
+	v.sprite.scale = Vector2(s, s)
+
+
+## How much larger a grower is drawn than its box, 1 to GROW_MAX (RULES 6.2, Grow): halfway to
+## GROW_MAX when its max health is halfway between its starting max health and its cap. `cap_pct`
+## is the cap as a percent of the starting max health, so the cap is `start * cap_pct / 100`
+## truncated as the sim does (docs/ARCHITECTURE.md 14.5). A cap that is no higher than the start
+## cannot be grown to, so the creature stays its own size.
+static func growth(start_health: int, max_health: int, cap_pct: int) -> float:
+	var span: int = start_health * cap_pct / 100 - start_health
+	if span <= 0:
+		return 1.0
+	return 1.0 + (GROW_MAX - 1.0) * clampf(float(max_health - start_health) / float(span), 0.0, 1.0)
+
+
 func _add_creature(e: EnemyState) -> CreatureView:
 	var v: CreatureView = CreatureView.new()
+	var type: EnemyType = battle.catalog.enemy(e.type)
 	v.id = e.id
 	v.type = e.type
 	v.flyer = e.flying
-	v.boss = Silhouettes.BOSSES.has(e.type)
+	v.boss = type != null and type.boss
+	v.grow_cap_pct = type.grow_cap_pct if type != null and type.grow_pct > 0 else 0
 	v.size_px = Silhouettes.enemy_size(e.type, CELL)
 	v.feet = Silhouettes.FEET * v.size_px
 	if not _atlas.enemy_rects.has(e.type):
-		_atlas.add_enemy(e.type)
+		_add_enemy_pictures(e.type)
 		_rebake()
 	v.sprite = _acquire_sprite()
 	v.sprite.z_index = Z_FLYER if v.flyer else 0
 	v.sprite.flip_h = false
-	var entry: MapAtlas.Entry = _atlas.entry_for(MapAtlas.enemy_key(e.type, 0))
-	v.sprite.offset = -entry.anchor * _atlas.texel_scale
+	v.sprite.rotation = 0.0
+	v.anchor = _atlas.entry_for(MapAtlas.enemy_key(e.type, 0)).anchor
+	v.sprite.offset = -v.anchor * _atlas.texel_scale
 	v.sprite.scale = Vector2.ONE / _atlas.texel_scale
 	v.center = Vector2(e.pos) * PX_PER_SUB
 	_creatures[e.id] = v
@@ -913,13 +1044,15 @@ func _prepare_atlas() -> bool:
 	var before: int = _atlas.entries.size()
 	for effect: Dictionary in battle.card_effects:
 		if String(effect.get("type", "")) == "add_tower":
-			_atlas.add_tower_looks(StringName(effect.get("tower", "")))
+			var added: StringName = StringName(effect.get("tower", ""))
+			_atlas.add_tower_looks(added)
+			_lures = _lures or _lures_flyers(added)
 	var wanted: Array[StringName] = []
 	for card: Dictionary in battle.risk_waiting:
 		if String(card.get("type", "")) == "add_group":
 			_add_enemy_closure(StringName(card.get("enemy", "")), wanted)
 	for id: StringName in wanted:
-		_atlas.add_enemy(id)
+		_add_enemy_pictures(id)
 	return _atlas.entries.size() != before
 
 
@@ -944,6 +1077,12 @@ func _on_fired(e: Dictionary) -> void:
 			away = -1.0
 		v.kick_lean = KICK_LEAN[look] * away
 		tier = v.tier
+	if look == MapShots.Look.THORNS:
+		_fire_pulse(cell, ids, ats)
+		return
+	if MapShots.is_line(look):
+		_fire_line(e, look, cell, ids, ats)
+		return
 	var splash_px: float = 0.0
 	if MapShots.lands_on_spot(look):
 		# A burst or a splash shows the tower's real splash, card effects included.
@@ -957,6 +1096,44 @@ func _on_fired(e: Dictionary) -> void:
 		_arrival_ids[id] = maxf(float(_arrival_ids.get(id, 0.0)), arrives)
 		_arrival_pos.append(to)
 		_arrival_time.append(arrives)
+
+
+## The Bramble Cottage's pulse: one ring of thorns that opens out from the cottage to its reach, and a
+## hit mark on each creature as the ring reaches it. The ring is one drawn shot, however many it hits.
+func _fire_pulse(cell: Vector2i, ids: Array, ats: Array) -> void:
+	var state: TowerState = battle.tower_at(cell)
+	var reach: float = float(state.stats.reach) / 100.0 * CELL if state != null and state.stats != null else CELL * 1.5
+	var center: Vector2 = _center_px(cell)
+	var arrives: float = _shots.launch(MapShots.Look.THORNS, center, center, -1, _fx_time, reach)
+	for i: int in ids.size():
+		var to: Vector2 = Vector2(ats[i] as Vector2i) * PX_PER_SUB
+		var at_time: float = _fx_time + (arrives - _fx_time) * clampf(center.distance_to(to) / maxf(reach, 1.0), 0.2, 1.0)
+		_note_arrival(int(ids[i]), to, at_time, i, MapShots.Look.THORNS, (to - center).angle())
+
+
+## The Snow Fort's line: one snowball that rolls from the fort's center to the end of the sim's line
+## (`to`), and a hit mark on each creature as it passes. The ball is as wide as the line.
+func _fire_line(e: Dictionary, look: int, cell: Vector2i, ids: Array, ats: Array) -> void:
+	var state: TowerState = battle.tower_at(cell)
+	var half: float = float(state.stats.line) / 200.0 * CELL if state != null and state.stats != null else CELL * 0.4
+	var from: Vector2 = _center_px(cell)
+	var to: Vector2 = Vector2(e["to"] as Vector2i) * PX_PER_SUB if e.has("to") else from
+	var arrives: float = _shots.launch(look, from, to, -1, _fx_time, half)
+	var along: Vector2 = to - from
+	for i: int in ids.size():
+		var hit: Vector2 = Vector2(ats[i] as Vector2i) * PX_PER_SUB
+		var u: float = clampf((hit - from).dot(along) / maxf(along.length_squared(), 1.0), 0.0, 1.0)
+		_note_arrival(int(ids[i]), hit, _fx_time + (arrives - _fx_time) * u, i, look, along.angle())
+
+
+## Remembers when the picture of a shot reaches creature `id` (so it puffs then, not before) and puts
+## a hit mark there, for the first MapShots.MAX_MARKED creatures of a shot.
+func _note_arrival(id: int, at: Vector2, at_time: float, index: int, look: int, angle: float) -> void:
+	_arrival_ids[id] = maxf(float(_arrival_ids.get(id, 0.0)), at_time)
+	_arrival_pos.append(at)
+	_arrival_time.append(at_time)
+	if index < MapShots.MAX_MARKED:
+		_shots.add_hit(at, at_time, 1.0, look, angle)
 
 
 func _on_popped(id: int) -> void:
@@ -974,7 +1151,7 @@ func _on_popped(id: int) -> void:
 func _on_leaked(e: Dictionary) -> void:
 	var home: Vector2 = _center_px(level.base)
 	var lives: int = maxi(int(e["lives"]), 1)
-	var boss: bool = Silhouettes.BOSSES.has(e["enemy"])
+	var boss: bool = _is_boss(e["enemy"])
 	_sparkles.burst(home, MapSparkles.Kind.LEAK, 1.4 if boss else (1.0 if lives > 1 else 0.8))
 	_leaks.spawn(home, lives, boss, _fx_time)
 
@@ -1020,8 +1197,9 @@ func _on_healed(e: Dictionary) -> void:
 func _on_released(e: Dictionary) -> void:
 	var source: StringName = e["source"]
 	var pos_sub: Vector2 = Vector2(e["pos"] as Vector2i)
-	var at: Vector2 = pos_sub * PX_PER_SUB if Silhouettes.is_flyer(source) else _curve(pos_sub)
-	var boss: bool = Silhouettes.BOSSES.has(source)
+	var type: EnemyType = battle.catalog.enemy(source)
+	var at: Vector2 = pos_sub * PX_PER_SUB if type != null and type.flying else _curve(pos_sub)
+	var boss: bool = type != null and type.boss
 	_shots.add_pulse(at, _fx_time, CELL * (1.0 if boss else 0.5), MapShots.Hue.RELEASE)
 	_sparkles.burst(at, MapSparkles.Kind.RELEASE, 1.4 if boss else 0.8)
 
@@ -1033,6 +1211,32 @@ func _on_sped_up(id: int) -> void:
 		return
 	_shots.add_whoosh(v.center, _fx_time, v.size_px, v.left)
 	_sparkles.burst(Vector2(v.center.x, v.center.y + v.feet), MapSparkles.Kind.DUST, 1.0)
+
+
+## A blink or a hop: sparkles where the creature was and where it landed. The creature itself snaps,
+## because the sim holds the landing in `prev_pos`.
+func _on_blinked(e: Dictionary) -> void:
+	_sparkles.burst(_curve(Vector2(e["from"] as Vector2i)), MapSparkles.Kind.BUBBLE, 0.6)
+	_sparkles.burst(_curve(Vector2(e["pos"] as Vector2i)), MapSparkles.Kind.BUBBLE, 0.6)
+
+
+## A yawn: a soft ring spreads from the yawner, and a few sparkles show on the towers that doze (the
+## doze mark itself shows on the next frame).
+func _on_yawned(e: Dictionary) -> void:
+	var at: Vector2 = _curve(Vector2(e["pos"] as Vector2i))
+	_shots.add_pulse(at, _fx_time, CELL * (1.4 if _is_boss(e["enemy"]) else 0.8), MapShots.Hue.YAWN)
+	var cells: Array = e["cells"]
+	for i: int in mini(cells.size(), 3):
+		_sparkles.burst(_tower_center(cells[i] as Vector2i) + Vector2(0.0, -CELL * 0.3), MapSparkles.Kind.BUBBLE, 0.4)
+
+
+## A digger goes under or comes up: dirt at its feet.
+func _on_dug(e: Dictionary, under: bool) -> void:
+	var boss: bool = _is_boss(e["enemy"])
+	var feet: Vector2 = _curve(Vector2(e["pos"] as Vector2i)) + Vector2(0.0, Silhouettes.FEET * Silhouettes.enemy_size(e["enemy"], CELL))
+	_sparkles.burst(feet, MapSparkles.Kind.DUST, 1.2 if boss else 0.8)
+	if not under:
+		_sparkles.burst(feet, MapSparkles.Kind.DUST, 0.7)
 
 
 func _on_break_started(cell: Vector2i) -> void:
@@ -1054,6 +1258,35 @@ func _on_wave_cleared(gold: int) -> void:
 	var home: Vector2 = _center_px(level.base)
 	for i: int in 3:
 		_shots.add_coin(home + Vector2((float(i) - 1.0) * 0.22 * CELL, 0.0), _fx_time + 0.12 * float(i), 1.1)
+
+
+func _is_boss(id: StringName) -> bool:
+	var type: EnemyType = battle.catalog.enemy(id)
+	return type != null and type.boss
+
+
+## A creature type's pictures; a flyer gets its lowered one too when a tower here can lure it.
+func _add_enemy_pictures(id: StringName) -> void:
+	var type: EnemyType = battle.catalog.enemy(id)
+	_atlas.add_enemy(id, _lures and type != null and type.flying)
+
+
+## True when this tower lures flyers (a Moth Lantern): lure_ms is on every stat block or none.
+func _lures_flyers(tower: StringName) -> bool:
+	var type: TowerType = battle.catalog.tower(tower)
+	var stats: TowerStats = type.stats(1, -1) if type != null else null
+	return stats != null and stats.lure_ms > 0
+
+
+static func _mark_bit(mark: StringName) -> int:
+	var i: int = Silhouettes.MARKS.find(mark)
+	return (1 << i) if i >= 0 else 0
+
+
+## Where a tower is drawn from, as Silhouettes.draw_tower takes it (the sheet draws it a little
+## smaller about its ground line, MapAtlas.TOWER_SCALE).
+func _tower_center(cell: Vector2i) -> Vector2:
+	return _center_px(cell) + Vector2(0.0, Silhouettes.TOWER_GROUND * (1.0 - MapAtlas.TOWER_SCALE) * CELL)
 
 
 func _find_view(id: int) -> CreatureView:
@@ -1158,7 +1391,7 @@ func _sync_layers() -> void:
 	for t: TowerState in battle.towers:
 		if t.kind == &"attack" and (t.got_pct > 0 or t.got_damage > 0):
 			_boosted.append(_center_px(t.cell))
-	_status.set_items(_status_items, _boosted)
+	_status.set_items(_status_items, _boosted, _dozing)
 
 
 ## A shot follows its target while the target is still on the map. A pumpkin or a rocket comes down
@@ -1228,10 +1461,7 @@ func _rebake() -> void:
 	all.append_array(_gone.values())
 	all.append_array(_dying)
 	for v: CreatureView in all:
-		var e: MapAtlas.Entry = _atlas.entry_for(MapAtlas.enemy_key(v.type, 0))
-		v.sprite.offset = -e.anchor * k
-		v.sprite.scale = Vector2.ONE / k
-		v.frame = -1
+		_set_picture(v, v.frame)
 
 
 func _clear() -> void:
@@ -1245,6 +1475,7 @@ func _clear() -> void:
 	_pool.clear()
 	_status_items.clear()
 	_boosted.clear()
+	_dozing.clear()
 	_crack_cells.clear()
 	_crack_progress.clear()
 	_break_total.clear()

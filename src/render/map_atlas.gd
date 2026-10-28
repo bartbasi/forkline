@@ -14,6 +14,11 @@ extends SubViewport
 
 const CELL: float = 128.0
 const WIDTH: int = 2048
+## The sheet never grows taller than this (contract 14.10). When the pictures would not fit at the
+## asked sharpness, bake() lowers it in steps of SCALE_STEP until they do.
+const MAX_HEIGHT: int = 4096
+const SCALE_STEP: float = 0.25
+const MIN_SCALE: float = 0.25
 const PAD: int = 2
 ## Tower tile, as fractions of a cell: the building reaches 0.86 up and 0.42 down.
 const TOWER_TILE: Vector2 = Vector2(1.12, 1.36)
@@ -35,8 +40,13 @@ const BOOST_TILE: float = 1.1
 
 const GATE_TILE: float = 1.3
 const HEART_TILE: float = 1.0
+## A lured flyer is drawn this far (a fraction of its box) lower than a high one, just above the
+## ring at its shadow (Silhouettes.draw_mark, &"low"), which stays where the shadow is.
+const LOW_DROP: float = 0.14
+## Room round a recorded mark, in drawing units (a cell is 100), for its ink edge.
+const MARK_MARGIN: float = 4.0
 
-enum Kind { TOWER, ENEMY, DROWSY, BUBBLE, BOOST, GATE, HEART, PIECE, ROUTE }
+enum Kind { TOWER, ENEMY, DROWSY, BUBBLE, BOOST, GATE, HEART, PIECE, ROUTE, MARK, LOW }
 
 
 ## One picture on the sheet.
@@ -71,6 +81,9 @@ var entries: Array[Entry] = []
 var bakes: int = 0
 ## Frame rects per creature type, four each, for the per frame lookups.
 var enemy_rects: Dictionary[StringName, Array] = {}
+## The same for the lowered picture of each flyer, and for each status mark (one rect, four for &"dug").
+var low_rects: Dictionary[StringName, Array] = {}
+var mark_rects: Dictionary[StringName, Array] = {}
 
 var _index: Dictionary[String, int] = {}
 var _painter: Painter
@@ -95,6 +108,14 @@ static func tower_key(type: StringName, tier: int, spec: int) -> String:
 
 static func enemy_key(type: StringName, frame: int) -> String:
 	return "e:%s:%d" % [type, frame]
+
+
+static func low_key(type: StringName, frame: int) -> String:
+	return "l:%s:%d" % [type, frame]
+
+
+static func mark_key(mark: StringName, frame: int) -> String:
+	return "k:%s:%d" % [mark, frame]
 
 
 func has_key(key: String) -> bool:
@@ -131,7 +152,10 @@ func add_tower_looks(type: StringName) -> void:
 	add_tower(type, 3, 1)
 
 
-func add_enemy(type: StringName) -> void:
+## `flyer` also makes the lowered picture a lured flyer is drawn with.
+func add_enemy(type: StringName, flyer: bool = false) -> void:
+	if flyer and not low_rects.has(type):
+		_add_low(type)
 	if enemy_rects.has(type):
 		return
 	var box: float = Silhouettes.enemy_size(type, CELL)
@@ -147,6 +171,59 @@ func add_enemy(type: StringName) -> void:
 		e.anchor = e.center + Vector2(0.0, Silhouettes.FEET * box)
 		_add(e)
 	enemy_rects[type] = [Rect2(), Rect2(), Rect2(), Rect2()]
+
+
+## The picture of a flyer a Moth Lantern pulled low: the body sits LOW_DROP lower, the shadow stays.
+func _add_low(type: StringName) -> void:
+	var box: float = Silhouettes.enemy_size(type, CELL)
+	var side: float = box * ENEMY_TILE
+	for frame: int in 4:
+		var e: Entry = Entry.new()
+		e.key = low_key(type, frame)
+		e.kind = Kind.LOW
+		e.type = type
+		e.frame = frame
+		e.tile = Vector2(side, side + LOW_DROP * box)
+		e.center = Vector2(side, side) * 0.5
+		e.anchor = e.center + Vector2(0.0, Silhouettes.FEET * box)
+		_add(e)
+	low_rects[type] = [Rect2(), Rect2(), Rect2(), Rect2()]
+
+
+## One picture for every status mark of Silhouettes.MARKS (four for &"dug", the only one that moves),
+## each sized to what it draws. A creature mark is drawn for a box of CELL, centered on the creature,
+## so MapStatus scales it to the creature. The doze mark is drawn for a tower. The &"dug" picture
+## stands on the feet line, so it can take the place of a creature's sprite.
+func add_status_marks() -> void:
+	if not mark_rects.is_empty():
+		return
+	for mark: StringName in Silhouettes.MARKS:
+		var frames: int = 4 if mark == &"dug" else 1
+		var rects: Array = []
+		for frame: int in frames:
+			var pen: InkPen = InkPen.new(null)
+			Silhouettes.mark_into(pen, mark, Vector2.ZERO, 100.0, frame)
+			var box: Rect2 = Rect2()
+			var first: bool = true
+			for sh: InkPen.Shape in pen.shapes:
+				if sh.color.a < 0.5:
+					continue
+				for p: Vector2 in sh.points:
+					var r: Rect2 = Rect2(p, Vector2.ZERO).grow(sh.width * 0.5)
+					box = r if first else box.merge(r)
+					first = false
+			box = box.grow(MARK_MARGIN)
+			var e: Entry = Entry.new()
+			e.key = mark_key(mark, frame)
+			e.kind = Kind.MARK
+			e.type = mark
+			e.frame = frame
+			e.tile = box.size * CELL / 100.0
+			e.center = -box.position * CELL / 100.0
+			e.anchor = e.center + (Vector2(0.0, Silhouettes.FEET * CELL) if mark == &"dug" else Vector2.ZERO)
+			_add(e)
+			rects.append(Rect2())
+		mark_rects[mark] = rects
 
 
 ## The status marks: the drowsy "z z" (four frames), the bubble ring, the boost chevrons and
@@ -237,30 +314,66 @@ static func gate_key(look: int, across: bool) -> String:
 	return "g:%d:%d" % [look, 1 if across else 0]
 
 
-## Lays the sheet out at `scale` texels per local pixel and queues one draw.
+## Lays the sheet out at `scale` texels per local pixel and queues one draw. When that would be
+## taller than MAX_HEIGHT it lowers the scale in steps of SCALE_STEP until it fits; texel_scale
+## says what was used.
 func bake(scale: float) -> void:
-	texel_scale = maxf(scale, 0.25)
-	var x: int = PAD
-	var y: int = PAD
-	var row_h: int = 0
-	for e: Entry in entries:
-		var w: int = ceili(e.tile.x * texel_scale)
-		var h: int = ceili(e.tile.y * texel_scale)
-		if x + w + PAD > WIDTH:
-			x = PAD
-			y += row_h + PAD
-			row_h = 0
-		e.rect = Rect2(float(x), float(y), float(w), float(h))
-		x += w + PAD
-		row_h = maxi(row_h, h)
-	size = Vector2i(WIDTH, maxi(y + row_h + PAD, 8))
+	var used: float = maxf(scale, MIN_SCALE)
+	var height: int = _layout(used)
+	while height > MAX_HEIGHT and used > MIN_SCALE + 0.001:
+		used = maxf(used - SCALE_STEP, MIN_SCALE)
+		height = _layout(used)
+	size = Vector2i(WIDTH, maxi(height, 8))
 	for type: StringName in enemy_rects:
 		var rects: Array = enemy_rects[type]
 		for frame: int in 4:
 			rects[frame] = entries[_index[enemy_key(type, frame)]].rect
+	for type: StringName in low_rects:
+		var low: Array = low_rects[type]
+		for frame: int in 4:
+			low[frame] = entries[_index[low_key(type, frame)]].rect
+	for mark: StringName in mark_rects:
+		var marks: Array = mark_rects[mark]
+		for frame: int in marks.size():
+			marks[frame] = entries[_index[mark_key(mark, frame)]].rect
 	bakes += 1
 	_painter.queue_redraw()
 	render_target_update_mode = SubViewport.UPDATE_ONCE
+
+
+## The height the sheet would need at `scale`, without changing it. For tests and measuring.
+func height_at(scale: float) -> int:
+	return _layout(scale, false)
+
+
+## Puts every entry on shelves, tallest first so a shelf wastes little, at `scale`. With `place` it
+## sets texel_scale and every rect. Returns the height the sheet needs.
+func _layout(scale: float, place: bool = true) -> int:
+	if place:
+		texel_scale = scale
+	var order: Array[int] = []
+	for i: int in entries.size():
+		order.append(i)
+	order.sort_custom(func(a: int, b: int) -> bool:
+		var ha: int = ceili(entries[a].tile.y * scale)
+		var hb: int = ceili(entries[b].tile.y * scale)
+		return ha > hb if ha != hb else a < b)
+	var x: int = PAD
+	var y: int = PAD
+	var row_h: int = 0
+	for i: int in order:
+		var e: Entry = entries[i]
+		var w: int = ceili(e.tile.x * scale)
+		var h: int = ceili(e.tile.y * scale)
+		if x + w + PAD > WIDTH:
+			x = PAD
+			y += row_h + PAD
+			row_h = 0
+		if place:
+			e.rect = Rect2(float(x), float(y), float(w), float(h))
+		x += w + PAD
+		row_h = maxi(row_h, h)
+	return y + row_h + PAD
 
 
 ## Called by the painter, inside its _draw().
@@ -289,6 +402,29 @@ func paint(canvas: CanvasItem) -> void:
 				ShotPieces.draw(canvas, e.frame, at, CELL * texel_scale)
 			Kind.ROUTE:
 				RoutePieces.draw(canvas, e.frame, at, CELL * texel_scale)
+			Kind.MARK:
+				Silhouettes.draw_mark(canvas, e.type, at, CELL * texel_scale, e.frame)
+			Kind.LOW:
+				_paint_low(canvas, e, at)
+
+
+## A flyer with its body LOW_DROP lower and its soft shadow where it was. Silhouettes records the
+## shapes (an InkPen with no canvas) and they are replayed here, the shadow apart.
+func _paint_low(canvas: CanvasItem, e: Entry, at: Vector2) -> void:
+	var box: float = Silhouettes.enemy_size(e.type, CELL) * texel_scale
+	var pen: InkPen = InkPen.new(null)
+	Silhouettes.enemy_into(pen, e.type, at, box, e.frame)
+	var drop: Vector2 = Vector2(0.0, LOW_DROP * box)
+	for s: InkPen.Shape in pen.shapes:
+		var points: PackedVector2Array = s.points
+		if s.width > 0.0 or s.color != Palette.SHADOW:
+			points = PackedVector2Array()
+			for p: Vector2 in s.points:
+				points.append(p + drop)
+		if s.width <= 0.0:
+			canvas.draw_colored_polygon(points, s.color)
+		else:
+			canvas.draw_polyline(points, s.color, maxf(s.width, 1.0), true)
 
 
 ## How many times the sheet's pictures were really drawn (not just queued).

@@ -7,7 +7,7 @@ extends SceneTree
 ##
 ##     godot --path . --script res://tests/render/perf_run.gd
 ##
-## Optional: --only=synthetic (only the crowd), --only=cover (only the cover screen), --only=storm, --only=build (the build phase only).
+## Optional: --only=synthetic (only the crowd), --only=cover (only the cover screen), --only=storm, --only=build (the build phase only), --only=expansion (the new cast, V4).
 ## Prints one block per run. The numbers are for this PC, not the phone (docs/ARCHITECTURE.md 9.4).
 
 const Fx: GDScript = preload("res://tests/render/render_fixtures.gd")
@@ -28,6 +28,11 @@ func _run() -> void:
 			only = arg.trim_prefix("--only=")
 	if only == "storm":
 		await _storm()
+		quit(0)
+		return
+	if only == "expansion":
+		for s: Array in [["cover", Vector2i(904, 2316), Fx.COVER], ["inner", Vector2i(1812, 2176), Fx.INNER]]:
+			await _measure("%s expansion crowd, two waves of 120, 3x" % s[0], Fx.expansion_crowd(), s[1], s[2], 0, true)
 		quit(0)
 		return
 	if only == "build":
@@ -162,7 +167,7 @@ func _measure(label: String, b: Battle, pixels: Vector2i, logical: Vector2i, fro
 		sorted.sort()
 		print("   frames with 20+ creatures: %d, peak live %d, bake scale %.2f" % [frames.size(), peak, view.bake_scale()])
 		print("   frame: mean %.2f ms (%.0f fps), p99 %.2f ms, worst %.2f ms" % [mean * 1000.0, 1.0 / mean, sorted[mini(sorted.size() - 1, frames.size() * 99 / 100)] * 1000.0, sorted[sorted.size() - 1] * 1000.0])
-		print("   map view scripts: sync mean %.2f ms worst %.2f ms, events mean %.2f ms worst %.2f ms" % [_mean_us(syncs), _max_us(syncs), _mean_us(eventus), _max_us(eventus)])
+		print("   map view scripts: sync mean %.2f ms p99 %.2f ms worst %.2f ms, events mean %.2f ms worst %.2f ms" % [_mean_us(syncs), _p99_us(syncs), _max_us(syncs), _mean_us(eventus), _max_us(eventus)])
 		print("   sim: mean %.3f ms per tick, p99 %.3f ms over %d ticks" % [_mean_us(ticks), _p99_us(ticks), ticks.size()])
 		print("   draw calls per frame: mean %.1f, p99 %.0f, max %.0f" % [_mean_us(draws) * 1000.0, _p99_us(draws) * 1000.0, _max_us(draws) * 1000.0])
 	host.queue_free()

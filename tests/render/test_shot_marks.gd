@@ -76,11 +76,14 @@ func test_every_shot_has_a_mark_where_it_leaves_and_where_it_lands() -> void:
 		var from: Vector2 = Vector2(2.0, 2.0) * MapShots.CELL
 		var arrives: float = shots.launch(look, from, from + Vector2(3.0, 1.0) * MapShots.CELL, 1, 0.0, 96.0)
 		assert_eq(shots.marked[MapShots.Fx.MUZZLE], 1, "look %d: a mark at the tower" % look)
-		assert_true(arrives <= 0.25, "look %d: flies for %.2f s" % [look, arrives])
+		var placed: bool = MapShots.look_is_placed(look)
+		assert_true(arrives <= (0.4 if placed else 0.25), "look %d: flies for %.2f s" % [look, arrives])
 		shots.advance(arrives + 0.01)
 		assert_eq(shots.shots.size(), 0, "look %d: it landed" % look)
 		var landed: int = shots.marked[MapShots.Fx.HIT] + shots.marked[MapShots.Fx.SPLASH]
-		assert_eq(landed, 1, "look %d: one mark where it landed" % look)
+		# A thorn ring and a snowball put their hit marks on each creature when they are launched
+		# (MapView), so the shot itself leaves none where it ends.
+		assert_eq(landed, 0 if placed else 1, "look %d: one mark where it landed" % look)
 		if MapShots.is_lobbed(look):
 			assert_eq(shots.marked[MapShots.Fx.SPLASH], 1, "look %d: a splash" % look)
 		shots.advance(arrives + 2.0)

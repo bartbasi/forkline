@@ -177,12 +177,13 @@ func test_a_burst_shows_the_towers_real_splash() -> void:
 # Every creature and boss.
 
 func test_every_creature_and_boss_plays_a_full_wave_with_no_leak() -> void:
-	var ids: Array[StringName] = []
-	ids.append_array(Silhouettes.CREATURES)
-	ids.append_array(Silhouettes.BOSSES)
+	# The ids come from the data (docs/ARCHITECTURE.md 14.10), so a creature that E5.1 to E8.1 add
+	# is played here the moment it is in data/stats/.
+	var cat: Catalog = Fx.catalog()
+	var ids: Array[StringName] = cat.enemy_ids()
 	for id: StringName in ids:
 		var before: int = _nodes()
-		var boss: bool = Silhouettes.BOSSES.has(id)
+		var boss: bool = cat.enemy(id).boss
 		var groups: Array = [Fx.group(String(id), 1 if boss else 8, 500)]
 		if id == &"mender":
 			groups = [Fx.group("scamp", 6, 300, 0), Fx.group("mender", 2, 500, 0)]

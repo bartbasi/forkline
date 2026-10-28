@@ -11,7 +11,7 @@ extends RefCounted
 
 enum Piece {
 	DISC, RING, DASH, STAR4, STAR8, SPLAT, BEAD, PUFF, BAR, TRAIL, ARC,
-	PUMPKIN, JAR, PEBBLE, STONE, ARROW, ROCKET, ROCKET_HONEY, FLAME,
+	PUMPKIN, JAR, PEBBLE, STONE, ARROW, ROCKET, ROCKET_HONEY, FLAME, THORN, SNOWBALL,
 }
 
 ## Tile size in cells, and the anchor (the point the piece is placed by) in cells.
@@ -19,13 +19,13 @@ const TILES: Array[Vector2] = [
 	Vector2(1.0, 1.0), Vector2(2.0, 2.0), Vector2(2.0, 2.0), Vector2(1.0, 1.0), Vector2(1.0, 1.0),
 	Vector2(1.0, 1.0), Vector2(0.6, 0.6), Vector2(1.0, 1.0), Vector2(1.0, 0.2), Vector2(1.0, 0.4), Vector2(2.0, 2.0),
 	Vector2(1.2, 1.2), Vector2(1.2, 1.2), Vector2(0.6, 0.6), Vector2(0.6, 0.6), Vector2(1.0, 0.4),
-	Vector2(0.7, 0.3), Vector2(0.7, 0.3), Vector2(0.5, 0.2),
+	Vector2(0.7, 0.3), Vector2(0.7, 0.3), Vector2(0.5, 0.2), Vector2(0.56, 0.3), Vector2(0.9, 0.9),
 ]
 const ANCHORS: Array[Vector2] = [
 	Vector2(0.5, 0.5), Vector2(1.0, 1.0), Vector2(1.0, 1.0), Vector2(0.5, 0.5), Vector2(0.5, 0.5),
 	Vector2(0.5, 0.5), Vector2(0.3, 0.3), Vector2(0.5, 0.5), Vector2(0.0, 0.1), Vector2(1.0, 0.2), Vector2(1.0, 1.0),
 	Vector2(0.6, 0.6), Vector2(0.6, 0.6), Vector2(0.3, 0.3), Vector2(0.3, 0.3), Vector2(0.85, 0.2),
-	Vector2(0.55, 0.15), Vector2(0.55, 0.15), Vector2(0.4, 0.1),
+	Vector2(0.55, 0.15), Vector2(0.55, 0.15), Vector2(0.4, 0.1), Vector2(0.06, 0.15), Vector2(0.45, 0.45),
 ]
 ## What size 1.0 means for the round pieces, as a radius in cells.
 const DISC_R: float = 0.46
@@ -34,6 +34,10 @@ const PUMPKIN_R: float = 0.38
 const JAR_R: float = 0.28
 const PEBBLE_R: float = 0.2
 const STONE_R: float = 0.2
+## The Snow Fort's snowball at size 1.0, as a radius in cells.
+const SNOW_R: float = 0.3
+## A thorn at size 1.0 reaches this far from its base, in cells.
+const THORN_LENGTH: float = 0.4
 
 static func key(piece: int) -> String:
 	return "s:%d" % piece
@@ -106,6 +110,14 @@ static func draw(canvas: CanvasItem, piece: int, at: Vector2, px: float) -> void
 		Piece.FLAME:
 			canvas.draw_colored_polygon(PackedVector2Array([at + Vector2(0.0, -0.07) * px, at + Vector2(-0.3, 0.0) * px, at + Vector2(0.0, 0.07) * px]), Palette.GLOW)
 			canvas.draw_colored_polygon(PackedVector2Array([at + Vector2(0.0, -0.035) * px, at + Vector2(-0.17, 0.0) * px, at + Vector2(0.0, 0.035) * px]), Palette.LANTERN_CORE)
+		Piece.THORN:
+			# A spike pointing right from its base at the anchor, white so a quad can tint it.
+			var ink_spike: PackedVector2Array = PackedVector2Array([at + Vector2(-0.05, -0.14) * px, at + Vector2(THORN_LENGTH + 0.04, 0.0) * px, at + Vector2(-0.05, 0.14) * px])
+			var spike: PackedVector2Array = PackedVector2Array([at + Vector2(0.0, -0.085) * px, at + Vector2(THORN_LENGTH - 0.03, 0.0) * px, at + Vector2(0.0, 0.085) * px])
+			canvas.draw_colored_polygon(ink_spike, ink)
+			canvas.draw_colored_polygon(spike, Color.WHITE)
+		Piece.SNOWBALL:
+			_snowball(canvas, at, px)
 
 
 ## A star of `n` points: tips of `tip` and `short` cells (even and odd), notches of `notch`, with an
@@ -172,3 +184,13 @@ static func _rocket(canvas: CanvasItem, at: Vector2, px: float, body: Color) -> 
 	canvas.draw_line(tail, at, body, 0.065 * px, true)
 	canvas.draw_line(at + Vector2(-0.05, 0.0) * px, at, Palette.PLASTER, 0.065 * px, true)
 	canvas.draw_circle(at, 0.04 * px, Palette.LANTERN_CORE, true, -1.0, true)
+
+
+## A round ball of warm snow with a shaded curve that shows it roll.
+static func _snowball(canvas: CanvasItem, at: Vector2, px: float) -> void:
+	var r: float = SNOW_R * px
+	canvas.draw_circle(at, r * 1.18, Palette.INK_LINE, true, -1.0, true)
+	canvas.draw_circle(at, r, Palette.SNOW_WARM, true, -1.0, true)
+	canvas.draw_arc(at, r * 0.62, 0.5, 3.3, 10, Palette.SNOW_WARM_SHADE, r * 0.16, true)
+	canvas.draw_arc(at, r * 0.3, 3.8, 5.6, 6, Palette.SNOW_WARM_SHADE, r * 0.12, true)
+	canvas.draw_circle(at + Vector2(-0.36, -0.4) * r, r * 0.16, Color.WHITE, true, -1.0, true)

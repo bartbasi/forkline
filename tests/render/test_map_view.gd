@@ -215,7 +215,10 @@ func test_shots_arrive_about_when_the_hit_lands() -> void:
 	var shots: MapShots = MapShots.new()
 	for look: int in MapShots.Look.values():
 		var done: float = shots.launch(look, Vector2(0, 0), Vector2(5.0 * MapShots.CELL, 0), 1, 0.0)
-		assert_true(done <= 0.25, "look %d arrives in %.2f s" % [look, done])
+		# A thorn ring or a snowball covers a whole reach, but the creatures near the tower are marked
+		# at once: each hit mark is timed when the picture passes it.
+		var limit: float = 0.4 if MapShots.look_is_placed(look) else 0.25
+		assert_true(done <= limit, "look %d arrives in %.2f s" % [look, done])
 	shots.free()
 
 
