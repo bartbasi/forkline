@@ -372,6 +372,8 @@ func test_every_missing_key_is_refused_without_a_crash() -> void:
 			continue                                   # an index, or a wave's optional strength
 		if path.size() == 3 and path[0] == "enemies" and OPTIONAL_KEYS.has(path.back()):
 			continue                                   # optional since A12 (14.7): test_battle_tower_saves.gd
+		if path.size() == 3 and path[0] == "towers" and path.back() == "doze_ticks":
+			continue                                   # optional since A12 (14.7): test_battle_late_creature_saves.gd
 		var copy: Dictionary = data.duplicate(true)
 		var node: Variant = copy
 		for i: int in path.size() - 1:

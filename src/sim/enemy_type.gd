@@ -31,6 +31,14 @@ var nap_ms: int = 0                                    # RULES 6.2: naps this lo
 var dig_first_ms: int = 0                              # RULES 6.3: digs under dig_first_ms after it appears, then every
 var dig_every_ms: int = 0                              # dig_every_ms, for dig_ms each time; 0 for none
 var dig_ms: int = 0
+var grow_pct: int = 0                                  # RULES 6.2: grows by grow_pct of its starting max health at each
+var grow_cap_pct: int = 0                              # tile center, up to grow_cap_pct of it; 0 for none
+var yawn_ms: int = 0                                   # RULES 6.2: every yawn_ms, attacking towers within yawn_reach
+var yawn_reach: int = 0                                # doze for doze_ms; 0 for none
+var doze_ms: int = 0
+var blink_ms: int = 0                                  # RULES 6.2: every blink_ms it moves blink_tiles along its route
+var blink_tiles: int = 0                               # at once; 0 for none
+var wake_reach: int = 0                                # RULES 6.2: it and every creature within this reach are awake; 0 for none
 ## {"enemy": StringName, "count": int, "every_ms": int, "gap_ms": int}, or {} for none.
 var summon: Dictionary = {}
 ## {"at_pct": Array[int], "add": int}, or {} for none.

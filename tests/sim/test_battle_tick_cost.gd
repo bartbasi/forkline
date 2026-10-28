@@ -77,6 +77,21 @@ func test_shortcuts_change_nothing_with_every_new_creature() -> void:
 	_same(make, plan, "every new creature on the feature map")
 
 
+func test_shortcuts_change_nothing_with_every_late_creature() -> void:
+	var cat: Catalog = Cx.catalog()
+	var waves: Array = [
+		{"groups": [Fx.group("snowroller", 8, 0, 300), Fx.group("yawner", 4, 200, 1200), Fx.group("blinker", 6, 400, 600),
+			Fx.group("hootling", 3, 100, 1500), Fx.group("flitter", 6, 0, 400), Fx.group("scamp", 10, 0, 300, 2)]},
+		{"groups": [Fx.group("snowsnore", 1), Fx.group("glimmertoad", 1, 1500, 1000, 2), Fx.group("pip", 30, 0, 100),
+			Fx.group("yawner", 2, 0, 2000, 2)]},
+	]
+	var make: Callable = func() -> Battle:
+		return Battle.create(Fx.level(Fx.FEATURE_GRID, waves, {"towers": Tx.ALL, "start_gold": 20000}, cat), cat, true, [])
+	var plan: Array = [[Vector2i(2, 1), &"moth_lantern", 2], [Vector2i(1, 5), &"lullaby_bell", 2], [Vector2i(4, 5), &"pumpkin_catapult", 3, 1],
+		[Vector2i(1, 8), &"snow_fort", 2], [Vector2i(4, 8), &"bramble_cottage", 2]]
+	_same(make, plan, "every late creature on the feature map")
+
+
 func test_shortcuts_change_nothing_on_a_plain_map_with_rings() -> void:
 	var cat: Catalog = Tx.catalog()
 	var waves: Array = [

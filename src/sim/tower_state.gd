@@ -14,6 +14,7 @@ var aim: Aim = Aim.FIRST
 var reload: int = 0                                    # 1/100 ms until it may fire, 0 to its reload between ticks; 0 is ready
 var spent_now: int = 0                                 # bought in the current build phase: refunded in full
 var spent_before: int = 0                              # every other purchase: refunded at the refund percent
+var doze_ticks: int = 0                                # ticks of doze left, above 0 while dozing (RULES 6.2, Yawn)
 
 ## Internal to src/sim/, worked out again whenever towers or card effects change:
 ## cell indexes a walker in reach could stand on, the tower's own stats with card

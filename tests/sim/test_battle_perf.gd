@@ -9,6 +9,7 @@ extends "res://tests/base_test.gd"
 
 const Fx: GDScript = preload("res://tests/sim/fixtures/sim_fixtures.gd")
 const Tx: GDScript = preload("res://tests/sim/fixtures/tower_fixtures.gd")
+const Cx: GDScript = preload("res://tests/sim/fixtures/creature_fixtures.gd")
 
 ## A long serpentine road, 41 steps, 11 rows and 7 spots, like the largest region 1 maps.
 const SNAKE_GRID: Array = [
@@ -250,4 +251,63 @@ func test_time_per_tick_in_the_level_2_2_crowd() -> void:
 	var mean: int = total / maxi(times.size(), 1)
 	var p99: int = sorted[mini(sorted.size() - 1, sorted.size() * 99 / 100)]
 	print("    sim: level 2-2 crowd, %d ticks with 100 or more creatures, peak %d: mean %d us, 99th percentile %d us, max %d us per tick" % [times.size(), peak, mean, p99, sorted.back()])
+	assert_true(mean < 2000, "mean %d us per tick" % mean)
+
+
+## The creatures of regions 7 and 8 in a crowd on the same road: growers, Yawners dozing
+## the towers, Blinkers, the most Hootlings a wave brings (RULES 12.5) under Bells, and
+## both bosses, against the expansion towers and today's (docs/ARCHITECTURE.md 14.12).
+## Attacking towers stay at tier 1, so the crowd lives long enough to measure.
+func test_time_per_tick_with_the_creatures_of_regions_7_and_8() -> void:
+	var waves: Array = [
+		{"strength": 1000, "groups": [Fx.group("snowroller", 30, 0, 50), Fx.group("blinker", 30, 0, 50), Fx.group("yawner", 14, 0, 100),
+			Fx.group("hootling", 6, 0, 500), Fx.group("pip", 25, 0, 50), Fx.group("flitter", 15, 0, 100)]},
+		{"strength": 400, "groups": [Fx.group("snowsnore", 1), Fx.group("glimmertoad", 1, 500), Fx.group("hootling", 6, 0, 300),
+			Fx.group("snowroller", 30, 0, 100), Fx.group("blinker", 30, 0, 100)]},
+	]
+	var catalog: Catalog = Cx.catalog()
+	var b: Battle = Fx.battle(PAIRS_GRID, waves, {"start_gold": 100000, "towers": Tx.ALL}, catalog, true)
+	assert_not_null(b)
+	var plan: Array = [
+		[Vector2i(0, 1), &"moth_lantern"], [Vector2i(1, 1), &"lullaby_bell"],
+		[Vector2i(4, 1), &"bramble_cottage"], [Vector2i(5, 1), &"snow_fort"],
+		[Vector2i(1, 3), &"scarecrow"], [Vector2i(2, 3), &"sling_post"],
+		[Vector2i(5, 3), &"lullaby_bell"], [Vector2i(6, 3), &"snow_fort"],
+		[Vector2i(0, 5), &"pumpkin_catapult"], [Vector2i(1, 5), &"bakery"],
+		[Vector2i(4, 5), &"lullaby_bell"], [Vector2i(5, 5), &"bramble_cottage"],
+		[Vector2i(1, 7), &"longbow_loft"], [Vector2i(2, 7), &"lullaby_bell"],
+		[Vector2i(5, 7), &"sling_post"], [Vector2i(6, 7), &"firework_tower"],
+	]
+	for item: Array in plan:
+		assert_eq(b.place_tower(item[0], item[1]), Battle.DONE)
+	b.start_next_wave()
+	var times: Array[int] = []
+	var peak: int = 0
+	var kinds: Dictionary = {}
+	var awake: int = 0
+	while b.phase == Battle.Phase.WAVE and b.tick < 4000:
+		if b.waves_started == 1 and b.next_wave_info()["refusal"] == &"":
+			b.start_next_wave()
+		var start: int = Time.get_ticks_usec()
+		b.step()
+		var spent: int = Time.get_ticks_usec() - start
+		for event: Dictionary in b.take_events():
+			kinds[event["kind"]] = true
+		if b.enemies.size() >= 150:
+			times.append(spent)
+			for e: EnemyState in b.enemies:
+				awake += 1 if e.awake else 0
+		peak = maxi(peak, b.enemies.size())
+	assert_true(kinds.has(&"yawned") and kinds.has(&"blinked"), "yawns and blinks happened: %s" % str(kinds.keys()))
+	assert_true(awake > 0, "creatures were kept awake in the crowd")
+	assert_true(peak >= 150, "peak %d live creatures" % peak)
+	assert_true(times.size() >= 100, "%d ticks measured" % times.size())
+	var total: int = 0
+	for t: int in times:
+		total += t
+	var sorted: Array[int] = times.duplicate()
+	sorted.sort()
+	var mean: int = total / maxi(times.size(), 1)
+	var p99: int = sorted[mini(sorted.size() - 1, sorted.size() * 99 / 100)]
+	print("    sim: regions 7 and 8 crowd, %d ticks with 150 or more creatures, peak %d: mean %d us, 99th percentile %d us, max %d us per tick" % [times.size(), peak, mean, p99, sorted.back()])
 	assert_true(mean < 2000, "mean %d us per tick" % mean)

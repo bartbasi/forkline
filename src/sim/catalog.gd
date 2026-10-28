@@ -17,7 +17,8 @@ const ENEMY_REQUIRED: PackedStringArray = ["id", "name", "info", "health", "armo
 const ENEMY_OPTIONAL: PackedStringArray = [
 	"flying", "boss", "bubble", "heal", "heal_reach", "heal_ms", "split_into", "split_count",
 	"split_gap_ms", "break_ms", "summon", "speed_up", "release", "regrow", "regrow_ms", "mist", "dazzle",
-	"nap_ms", "dig_first_ms", "dig_every_ms", "dig_ms",
+	"nap_ms", "dig_first_ms", "dig_every_ms", "dig_ms", "grow_pct", "grow_cap_pct", "yawn_ms", "yawn_reach",
+	"doze_ms", "blink_ms", "blink_tiles", "wake_reach",
 ]
 
 var rules: GameRules = null
@@ -241,6 +242,7 @@ func _read_enemies(data: Variant, chk: DataCheck) -> void:
 			chk.fail(path, "split_into, split_count and split_gap_ms come together")
 		type.break_ms = chk.integer(item, "break_ms", path, 50, 600000, 50)
 		_read_rules_of_regions_5_and_6(item, path, type, chk)
+		_read_rules_of_regions_7_and_8(item, path, type, chk)
 		if item.has("summon"):
 			var summon_path: String = DataCheck.join(path, "summon")
 			if chk.object(item["summon"], summon_path, ["enemy", "count", "every_ms", "gap_ms"]):
@@ -298,6 +300,9 @@ func _read_enemies(data: Variant, chk: DataCheck) -> void:
 			var summoned: EnemyType = _enemies.get(type.summon["enemy"], null)
 			if summoned != null and summoned.heal > 0:
 				chk.fail(DataCheck.join(path, "summon.enemy"), "a summoned creature cannot heal")
+			# The same for wakers (Battle.MAX_WAKERS, docs/ARCHITECTURE.md 14.4).
+			if summoned != null and summoned.wake_reach > 0:
+				chk.fail(DataCheck.join(path, "summon.enemy"), "a summoned creature cannot wake others")
 		if not type.release.is_empty():
 			_check_released(type, type.release["enemy"], DataCheck.join(path, "release.enemy"), chk)
 
@@ -321,6 +326,33 @@ static func _read_rules_of_regions_5_and_6(item: Dictionary, path: String, type:
 		chk.fail(DataCheck.join(path, "dig_ms"), "must be below dig_every_ms")
 	if digs > 0 and type.flying:
 		chk.fail(path, "only walkers dig")
+
+
+## docs/ARCHITECTURE.md 14.4: grow, yawn, blink and wake (RULES 6.2, 6.3).
+static func _read_rules_of_regions_7_and_8(item: Dictionary, path: String, type: EnemyType, chk: DataCheck) -> void:
+	type.grow_pct = chk.integer(item, "grow_pct", path, 1, 100)
+	type.grow_cap_pct = chk.integer(item, "grow_cap_pct", path, 101, 1000)
+	if item.has("grow_pct") != item.has("grow_cap_pct"):
+		chk.fail(path, "grow_pct and grow_cap_pct come together")
+	if item.has("grow_pct") and type.flying:
+		chk.fail(path, "only walkers grow")
+	type.yawn_ms = chk.integer(item, "yawn_ms", path, 50, 600000, 50)
+	type.yawn_reach = chk.integer(item, "yawn_reach", path, 1, 1000)
+	type.doze_ms = chk.integer(item, "doze_ms", path, 50, 60000, 50)
+	var yawns: int = (1 if item.has("yawn_ms") else 0) + (1 if item.has("yawn_reach") else 0) + (1 if item.has("doze_ms") else 0)
+	if yawns != 0 and yawns != 3:
+		chk.fail(path, "yawn_ms, yawn_reach and doze_ms come together")
+	type.blink_ms = chk.integer(item, "blink_ms", path, 50, 600000, 50)
+	type.blink_tiles = chk.integer(item, "blink_tiles", path, 1, 10)
+	if item.has("blink_ms") != item.has("blink_tiles"):
+		chk.fail(path, "blink_ms and blink_tiles come together")
+	if item.has("blink_ms") and type.flying:
+		chk.fail(path, "only walkers blink")
+	type.wake_reach = chk.integer(item, "wake_reach", path, 1, 1000)
+	# A napping creature does nothing (DM, 2026-10-27), so no creature naps and also heals or digs.
+	var digs: bool = item.has("dig_ms") or item.has("dig_first_ms") or item.has("dig_every_ms")
+	if item.has("nap_ms") and (item.has("heal") or digs):
+		chk.fail(path, "a creature that naps cannot heal or dig")
 
 
 func _check_released(releaser: EnemyType, id: StringName, path: String, chk: DataCheck) -> void:

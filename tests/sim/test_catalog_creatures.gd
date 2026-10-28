@@ -107,3 +107,97 @@ func test_dig_and_its_limits() -> void:
 func test_unknown_creature_keys_are_still_refused() -> void:
 	_bad("mossbud", {"regrow_at": 20}, "a save key in the stat file")
 	_bad("sleepyhead", {"napped": false}, "napped in the stat file")
+
+
+# Regions 7 and 8 (docs/ARCHITECTURE.md 14.4)
+
+func test_the_late_creatures_load_with_their_numbers_rules_6_1_and_6_3() -> void:
+	var cat: Catalog = Cx.catalog()
+	assert_not_null(cat, "the test catalog loads")
+	if cat == null:
+		return
+	var roller: EnemyType = cat.enemy(&"snowroller")
+	assert_eq([roller.health, roller.speed, roller.bounty, roller.grow_pct, roller.grow_cap_pct], [40, 100, 8, 10, 300], "Snowroller")
+	var yawner: EnemyType = cat.enemy(&"yawner")
+	assert_eq([yawner.health, yawner.armor, yawner.yawn_ms, yawner.yawn_reach, yawner.doze_ms], [110, 2, 4000, 150, 2000], "Yawner")
+	var blinker: EnemyType = cat.enemy(&"blinker")
+	assert_eq([blinker.health, blinker.blink_ms, blinker.blink_tiles], [60, 3000, 2], "Blinker")
+	assert_eq(cat.enemy(&"hootling").wake_reach, 150, "Hootling")
+	var snore: EnemyType = cat.enemy(&"snowsnore")
+	assert_eq([snore.grow_pct, snore.grow_cap_pct, snore.yawn_ms, snore.yawn_reach, snore.doze_ms], [2, 150, 6000, 200, 3000], "Snowsnore")
+	var toad: EnemyType = cat.enemy(&"glimmertoad")
+	assert_eq([toad.blink_ms, toad.blink_tiles, toad.wake_reach], [6000, 3, 200], "Glimmertoad")
+	assert_eq(toad.release, {"at_pct": 50, "enemy": &"flitter", "count": 6, "gap_ms": 300}, "and its Flitters")
+	var scamp: EnemyType = cat.enemy(&"scamp")
+	assert_eq([scamp.grow_pct, scamp.grow_cap_pct, scamp.yawn_ms, scamp.yawn_reach, scamp.doze_ms, scamp.blink_ms, scamp.blink_tiles, scamp.wake_reach],
+		[0, 0, 0, 0, 0, 0, 0, 0], "an older creature holds none of them")
+
+
+func test_grow_and_its_limits() -> void:
+	_ok("snowroller", {"grow_pct": 1, "grow_cap_pct": 101}, "the lowest growth")
+	_ok("snowroller", {"grow_pct": 100, "grow_cap_pct": 1000}, "the highest growth")
+	_bad("snowroller", {"grow_pct": 0}, "grow_pct 0")
+	_bad("snowroller", {"grow_pct": 101}, "grow_pct 101")
+	_bad("snowroller", {"grow_cap_pct": 100}, "a cap of 100")
+	_bad("snowroller", {"grow_cap_pct": 1001}, "a cap of 1,001")
+	_bad("snowroller", {"grow_pct": 2.5}, "a grow_pct that is not whole")
+	_bad("snowroller", {"grow_cap_pct": null}, "grow_pct alone")
+	_bad("snowroller", {"grow_pct": null}, "grow_cap_pct alone")
+	_ok("snowroller", {"grow_pct": null, "grow_cap_pct": null}, "neither")
+	_bad("flitter", {"grow_pct": 10, "grow_cap_pct": 300}, "a flyer that grows")
+
+
+func test_yawn_and_its_limits() -> void:
+	_ok("yawner", {"yawn_ms": 50, "yawn_reach": 1, "doze_ms": 50}, "the lowest yawn")
+	_ok("yawner", {"yawn_ms": 600000, "yawn_reach": 1000, "doze_ms": 60000}, "the highest yawn")
+	_bad("yawner", {"yawn_ms": 0}, "yawn_ms 0")
+	_bad("yawner", {"yawn_ms": 600050}, "yawn_ms 600,050")
+	_bad("yawner", {"yawn_ms": 4010}, "yawn_ms off the tick")
+	_bad("yawner", {"yawn_reach": 0}, "yawn_reach 0")
+	_bad("yawner", {"yawn_reach": 1001}, "yawn_reach 1,001")
+	_bad("yawner", {"doze_ms": 0}, "doze_ms 0")
+	_bad("yawner", {"doze_ms": 60050}, "doze_ms 60,050")
+	_bad("yawner", {"doze_ms": 2010}, "doze_ms off the tick")
+	for key: String in ["yawn_ms", "yawn_reach", "doze_ms"]:
+		_bad("yawner", {key: null}, "a yawn without %s" % key)
+	_ok("yawner", {"yawn_ms": null, "yawn_reach": null, "doze_ms": null}, "no yawn")
+	_ok("flitter", {"yawn_ms": 4000, "yawn_reach": 150, "doze_ms": 2000}, "a flyer that yawns")
+
+
+func test_blink_and_its_limits() -> void:
+	_ok("blinker", {"blink_ms": 50, "blink_tiles": 1}, "the lowest blink")
+	_ok("blinker", {"blink_ms": 600000, "blink_tiles": 10}, "the highest blink")
+	_bad("blinker", {"blink_ms": 0}, "blink_ms 0")
+	_bad("blinker", {"blink_ms": 600050}, "blink_ms 600,050")
+	_bad("blinker", {"blink_ms": 3010}, "blink_ms off the tick")
+	_bad("blinker", {"blink_tiles": 0}, "blink_tiles 0")
+	_bad("blinker", {"blink_tiles": 11}, "blink_tiles 11")
+	_bad("blinker", {"blink_tiles": null}, "blink_ms alone")
+	_bad("blinker", {"blink_ms": null}, "blink_tiles alone")
+	_ok("blinker", {"blink_ms": null, "blink_tiles": null}, "no blink")
+	_bad("flitter", {"blink_ms": 3000, "blink_tiles": 2}, "a flyer that blinks")
+
+
+func test_wake_and_its_limits() -> void:
+	_ok("hootling", {"wake_reach": 1}, "the lowest reach")
+	_ok("hootling", {"wake_reach": 1000}, "the highest reach")
+	_bad("hootling", {"wake_reach": 0}, "reach 0")
+	_bad("hootling", {"wake_reach": 1001}, "reach 1,001")
+	_bad("hootling", {"wake_reach": "150"}, "reach as text")
+	_ok("dusk_moth", {"wake_reach": 150}, "a flyer that wakes others")
+	_bad("grumblesack", {"summon": {"enemy": "hootling", "count": 2, "every_ms": 6000, "gap_ms": 300}}, "a summoned waker")
+	_ok("glimmertoad", {"release": {"at_pct": 50, "enemy": "hootling", "count": 2, "gap_ms": 300}}, "a released waker")
+
+
+func test_a_creature_that_naps_cannot_heal_or_dig_dm_2026_10_27() -> void:
+	_bad("mender", {"nap_ms": 2000}, "a Mender that naps")
+	_bad("sleepyhead", {"heal": 8, "heal_reach": 150, "heal_ms": 2000}, "a Sleepyhead that heals")
+	_bad("burrowbelly", {"nap_ms": 3000}, "a Burrowbelly that naps")
+	_bad("old_hayrick", {"dig_first_ms": 6000, "dig_every_ms": 8000, "dig_ms": 2000}, "an Old Hayrick that digs")
+	_bad("old_hayrick", {"dig_ms": 2000}, "a nap with a stray dig field")
+	_ok("sleepyhead", {"regrow": 4, "regrow_ms": 1000}, "a napper may regrow")
+	_ok("grumblesack", {"nap_ms": 2000}, "or summon")
+	_ok("gatecrasher", {"nap_ms": 2000}, "or break gates")
+	_ok("yawner", {"nap_ms": 2000}, "or yawn")
+	_ok("blinker", {"nap_ms": 2000, "grow_pct": 10, "grow_cap_pct": 300}, "or blink and grow")
+	_ok("hootling", {"nap_ms": 2000}, "or wake others")

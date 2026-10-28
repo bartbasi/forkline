@@ -1,15 +1,16 @@
 # Forkline. Copyright 2026 Play, Inc.
 # Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.
 extends RefCounted
-## The creatures and bosses of regions 5 and 6 as test data, with the numbers of RULES
+## The creatures and bosses of regions 5 to 8 as test data, with the numbers of RULES
 ## 6.1 and 6.3, added to the real stat files and the four expansion towers. data/stats/
-## gets them in E5.1 and E6.1 (game designer); until then the rules are proven on this
+## gets them in E5.1 to E8.1 (game designer); until then the rules are proven on this
 ## test-only catalog (docs/ARCHITECTURE.md 14.4).
 
 const Fx: GDScript = preload("res://tests/sim/fixtures/sim_fixtures.gd")
 const Tx: GDScript = preload("res://tests/sim/fixtures/tower_fixtures.gd")
 
 const NEW: Array = ["mossbud", "mistwisp", "gleamer", "sleepyhead", "burrowbelly", "old_hayrick"]
+const LATE: Array = ["snowroller", "yawner", "blinker", "hootling", "snowsnore", "glimmertoad"]
 
 
 ## RULES 6.1 and 6.3, in the file's units.
@@ -28,6 +29,19 @@ static func enemies() -> Array:
 			"summon": {"enemy": "mistwisp", "count": 2, "every_ms": 8000, "gap_ms": 300}},
 		{"id": "old_hayrick", "name": "Old Hayrick", "info": "Dazzles and naps.", "health": 2600, "armor": 0, "speed": 40, "lives": 20,
 			"bounty": 300, "boss": true, "dazzle": true, "nap_ms": 3000},
+		{"id": "snowroller", "name": "Snowroller", "info": "Grows.", "health": 40, "armor": 0, "speed": 100, "lives": 1, "bounty": 8,
+			"grow_pct": 10, "grow_cap_pct": 300},
+		{"id": "yawner", "name": "Yawner", "info": "Yawns.", "health": 110, "armor": 2, "speed": 70, "lives": 2, "bounty": 15,
+			"yawn_ms": 4000, "yawn_reach": 150, "doze_ms": 2000},
+		{"id": "blinker", "name": "Blinker", "info": "Blinks.", "health": 60, "armor": 0, "speed": 90, "lives": 1, "bounty": 9,
+			"blink_ms": 3000, "blink_tiles": 2},
+		{"id": "hootling", "name": "Hootling", "info": "Keeps others awake.", "health": 80, "armor": 1, "speed": 90, "lives": 1, "bounty": 11,
+			"wake_reach": 150},
+		{"id": "snowsnore", "name": "Snowsnore", "info": "Grows and yawns.", "health": 3400, "armor": 3, "speed": 35, "lives": 20,
+			"bounty": 350, "boss": true, "grow_pct": 2, "grow_cap_pct": 150, "yawn_ms": 6000, "yawn_reach": 200, "doze_ms": 3000},
+		{"id": "glimmertoad", "name": "Glimmertoad", "info": "Hops and wakes.", "health": 3600, "armor": 4, "speed": 35, "lives": 20,
+			"bounty": 400, "boss": true, "blink_ms": 6000, "blink_tiles": 3, "wake_reach": 200,
+			"release": {"at_pct": 50, "enemy": "flitter", "count": 6, "gap_ms": 300}},
 	]
 
 

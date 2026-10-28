@@ -37,6 +37,8 @@ Expansion, 2026-10-27. Bart asked for four more regions of six levels each, and 
 - Two names change, for the DM to tell Bart. Level 8-5 is "Stone Circle": the art director offered it as a spare and left the choice to Bart or the game designer (EXPANSION.md 10). Level 2-4 is "Two Fords", on the DM's word, after the art director noted that no bridge is ever drawn on a Millbrook map, while the bridge is now region 6's feature.
 - data/stats/ follows once the contract defines the new fields. The reasons behind the new rules stay in EXPANSION.md.
 
+Clarifications, 2026-10-27, after the DM's nap ruling in docs/ARCHITECTURE.md 14.5. No number changed. A napping creature does not yawn, break a gate, summon or release either. Its break and summon timers pause until it wakes, and a release begun before the nap still finishes (6.2, 8.8). No creature in the game naps and does any of these, so play does not change. Also made precise, as the sim already plays it: after waiting at 0, a tower's next reload is one tick shorter than a full one (5.2).
+
 Names follow docs/art/NAMES.md, which Bart approved at hard stop B and which holds the names of regions 5 to 8 that he approved on 2026-10-27. The tables in 5.1, 5.3 to 5.8, 5.12 to 5.15, 6.1, 6.3 and 12.1 give each tower, tier 3 path, creature, boss and region its id from that list, so the data files have one source. In each tower's tier table, the first tier 3 row is spec 0 and the second is spec 1.
 
 This file holds every game rule and number for version 1. The sim engineer, level designer, roguelite engineer, balance analyst and UI engineer build from it. If something here is unclear or seems to conflict with docs/ARCHITECTURE.md, ask the DM. Do not guess.
@@ -374,6 +376,7 @@ A flyer that a Moth Lantern has lured low can be hit by every tower, as if it we
 - A creature is in range when the distance from the tower's center to the creature's center is no more than the range.
 - An attack hits on the tick it fires. Attacks never miss. Projectiles are only drawn. The render may hold a hit's flash or puff until the drawn projectile arrives, but the sim never waits.
 - Every attacking tower has a reload timer. Each tick the timer goes down by the tick length times the tower's rate multiplier (1, or more with a Bakery boost). When the timer is 0 or less and a target is in range, the tower fires and adds its reload time to the timer, keeping any leftover. When the timer is 0 or less and no target is in range, the timer is set to 0 and waits there, so a tower never saves up shots. This keeps every rate exact at any tick length.
+- A tower that was waiting at 0, a new tower too (4.6), still runs its timer down on the tick it fires and keeps that leftover, so its next reload is one tick shorter than a full one. Example: with a reload of 1.0 s, which is 20 ticks of 0.05 s, it fires again 19 ticks later, then every 20.
 - A tower fires at most once a tick. If a shot still leaves the timer below 0, the timer is set to 0. That can only happen when a boost takes more off the timer in one tick than the whole reload time, and no number in this file allows it: the shortest reload is 0.2 s, and the biggest boost takes 0.07 s off in one tick. So a tower never banks shots, and between ticks its timer is always from 0 up to its reload time.
 - Upgrading keeps the reload timer running, but never above the new reload time. If more is left on the timer than the new reload time, the timer drops to the new reload time. Otherwise it is unchanged. So an upgraded tower never waits longer for its next shot than its new numbers say, and an upgrade never gives a free shot.
 - Example: a tier 2 Pumpkin Catapult has 1.8 s left on its timer. Upgraded to a Jam Pot (reload 1.5 s), its timer drops to 1.5 s. Upgraded to a Prize Pumpkin (reload 2.5 s) instead, it keeps 1.8 s.
@@ -763,7 +766,10 @@ Dazzle (Gleamer, Old Hayrick):
 Nap (Sleepyhead, Old Hayrick). Napping is its own status, stricter than out of reach (8.8):
 
 - The first time its health falls to 0 or less, it is not popped. In the defeats step of that tick, its health is set to the value it will wake with, half its max health, rounded half up, and it starts napping for 2.0 s (Old Hayrick 3.0 s). Any slow or fright it held ends.
-- While napping it does not move. No tower can aim at it or hit it: splash, Bramble rings and Snow Fort lines skip it, and Bells and Scarecrows do not reach it. No heal reaches it, and it does not regrow or blink. A napping Old Hayrick cannot be aimed at, so it dazzles nothing.
+- While napping it does not move, blink, regrow, yawn, break a gate, summon or release. No tower can aim at it or hit it: splash, Bramble rings and Snow Fort lines skip it, and Bells and Scarecrows do not reach it. No heal reaches it. A napping Old Hayrick cannot be aimed at, so it dazzles nothing.
+- Its break timer and its summon timer pause during the nap and go on from where they were when it wakes. A regrow, blink or yawn that comes due during the nap is skipped, and the next one comes at its usual time. Speed ups and health releases are not checked while it naps. From the tick it wakes they are checked again, against its health at that time.
+- A release that began before the nap still finishes (Releases above).
+- No creature that naps also heals others or digs. The data check refuses a creature with both (docs/ARCHITECTURE.md 14.4).
 - When the nap ends, in the timers step, it wakes and walks on with that health.
 - The next time its health falls to 0 or less, it pops for good, pays its bounty and counts as defeated.
 - A nap is not a defeat: no bounty and no release. A napping creature keeps its wave running, and its bounty counts toward the early call bonus like any creature on the map (4.9).
@@ -1047,7 +1053,7 @@ Out of reach. Tunnels (3.6), stump steps (3.9) and Burrowbelly's digging (6.3) s
 - Creatures' own effects still work: a Mender still heals it, a Mossbud still regrows, a Mistwisp still hides the creatures on and beside its tile, and a Yawner still yawns.
 - It still costs lives at the base, and its wave is not cleared while it is on the map.
 - A flyer is never out of reach because of a map feature.
-- A nap (6.2) is not this status. It is its own, stricter status: a napping creature does not move, and heals and regrowth do not reach it either.
+- A nap (6.2) is not this status. It is its own, stricter status: a napping creature does not move, blink, regrow, yawn, break a gate, summon or release, and no heal reaches it.
 
 Every status, and how it shows. Each one reads by shape, never by color alone (9.7). The marks are the art director's (docs/art/).
 

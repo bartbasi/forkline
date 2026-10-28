@@ -9,8 +9,8 @@ extends RefCounted
 ## pulses, lines and lures since A12), Bells, Scarecrows and Bakeries; walkers, flyers
 ## and low flyers, bubbles, slows, frights, splits, heals, gate breakers, boss
 ## summons, speed ups and health releases; since A12 also regrow, mist, dazzle, naps and
-## digging (regions 5 and 6). Twist, card and risk effects (contract 2.8) come in through
-## create() and add_effects().
+## digging (regions 5 and 6), and growth, yawns and dozes, blinks and wake (regions 7 and
+## 8). Twist, card and risk effects (contract 2.8) come in through create() and add_effects().
 
 enum Phase { BUILD, WAVE, WON, LOST }
 const FORMAT: int = 1
@@ -54,6 +54,10 @@ const MAX_RELEASES: int = 1000
 ## among 4,000 creatures cost about 150 ms on the dev PC.
 const MAX_SUMMONERS: int = 8
 const MAX_HEALERS: int = 40
+## Creatures that wake others (RULES 6.2, Wake), counted the same way (docs/ARCHITECTURE.md
+## 14.7). The wake pass checks the creatures near each one, so this keeps a tampered save's
+## wake pass cheap. Play stays far below: at most 6 Hootlings a wave (RULES 12.5).
+const MAX_WAKERS: int = 40
 ## The ids one heal event lists: the first in id order. The map marks at most 6.
 const HEAL_EVENT_IDS: int = 6
 const MAX_LIVES: int = 1000000
@@ -183,6 +187,16 @@ var _nappers: int = 0                                  # creatures that nap, on 
 var _diggers: int = 0                                  # creatures that dig, on the map
 var _misty: PackedByteArray = PackedByteArray()        # per cell: 1 when misty, worked out at the start of the towers step
 var _hidden_set: bool = false                          # some creature may be marked hidden
+var _yawners: Array[EnemyState] = []                   # a yawn (RULES 6.2)
+var _wakers: Array[EnemyState] = []                    # a wake reach (RULES 6.2)
+var _blinkers: int = 0                                 # creatures that blink, on the map
+var _dozes_on: bool = false                            # some tower may be dozing
+var _awake_set: bool = false                           # some creature may be marked awake
+var _awake_list: Array[EnemyState] = []                # the creatures marked awake, to clear next time
+# The wake pass: per cell, a chain of the wakers whose reach touches it (head, then links).
+var _wake_head: PackedInt32Array = PackedInt32Array()
+var _wake_link: PackedInt32Array = PackedInt32Array()
+var _wake_who: PackedInt32Array = PackedInt32Array()   # the waker's offset in the pass's spots
 
 
 ## A Twist's effects apply first, then Relaxed (11, contract 3.1). Null when the level,
@@ -244,6 +258,7 @@ func _setup(level_data: LevelData, stats: Catalog) -> void:
 	_closed_mask.resize(map.size())
 	_tunnel.resize(map.size())
 	_misty.resize(map.size())
+	_wake_head.resize(map.size())
 	_on_map.resize(level_data.waves.size())
 	for i: int in map.size():
 		match level.feature_at(Vector2i(i % Sim.MAP_COLUMNS, i / Sim.MAP_COLUMNS)):
@@ -565,6 +580,7 @@ func tower_numbers(cell: Vector2i) -> Dictionary:
 	numbers["spent"] = tower.spent_now + tower.spent_before
 	numbers["sell"] = sell_value(cell)
 	numbers["aim"] = tower.aim
+	numbers["doze_ms"] = tower.doze_ticks * Sim.MS_PER_TICK
 	return numbers
 
 
@@ -608,7 +624,8 @@ func enemy_numbers(id: int) -> Dictionary:
 		"slow_pct": enemy.slow_pct, "slow_ms": enemy.slow_ticks * Sim.MS_PER_TICK,
 		"bubble": enemy.bubble, "bubble_ms": enemy.bubble_ticks * Sim.MS_PER_TICK,
 		"breaking_ms": enemy.breaking / 100,
-		"out_of_reach": enemy.out_of_reach, "hidden": enemy.hidden, "nap_ms": enemy.nap_ticks * Sim.MS_PER_TICK,
+		"out_of_reach": enemy.out_of_reach, "hidden": enemy.hidden, "awake": enemy.awake,
+		"nap_ms": enemy.nap_ticks * Sim.MS_PER_TICK,
 		"fright_pct": enemy.fright_pct, "fright_ms": enemy.fright_ticks * Sim.MS_PER_TICK,
 		"low_ms": enemy.low_ticks * Sim.MS_PER_TICK,
 	}
@@ -764,13 +781,17 @@ func _spawn_step() -> void:
 				enemy.step_dir = Vector2i.ZERO
 			_add_enemy(enemy)
 	# Boss summons (6.3): a batch begins at the boss's spot now. Summoners are kept in
-	# spawn order; gone ones (health 0 or less) drop out.
+	# spawn order; gone ones (health 0 or less) drop out. A napping one does nothing: its
+	# timer pauses and goes on where it was when it wakes (DM, 2026-10-27).
 	if not _summoners.is_empty():
 		var alive: Array[EnemyState] = []
 		for boss: EnemyState in _summoners:
 			if boss.health <= 0:
 				continue
 			alive.append(boss)
+			if boss.nap_ticks > 0:
+				boss.summon_at += 1
+				continue
 			if boss.summon_at > tick:
 				continue
 			var summon: Dictionary = catalog.enemy(boss.type).summon
@@ -821,10 +842,12 @@ func _begin_release(source: EnemyState, type: StringName, count: int, gap: int, 
 
 ## Step 2 (8.1, docs/ARCHITECTURE.md 14.5). (a) Per creature in id order: bubbles, slows,
 ## heals, break timers. (b) Per creature in id order: regrow, nap and dig, then the fright
-## and low timers. Bubble, slow, fright and low timers change only their own creature and
+## and low timers. (c) Per tower in spot order: doze timers. (d) Per creature in id order:
+## yawns. (e) Wake. Bubble, slow, fright and low timers change only their own creature and
 ## send nothing, and heals and breaks read none of them but a breaker's own slow, so each
 ## runs as its own pass with the same results and events. A pass over a list holds only
-## the creatures it can change, and a pass with nothing to do is skipped.
+## the creatures it can change, and a pass with nothing to do is skipped. A napping
+## breaker's timer pauses (DM, 2026-10-27).
 func _timer_step() -> void:
 	for enemy: EnemyState in _bubblers:
 		if enemy.bubble_ticks > 0:
@@ -839,7 +862,7 @@ func _timer_step() -> void:
 	for enemy: EnemyState in _actors:
 		if enemy.heal_at > 0 and enemy.heal_at <= tick:
 			_heal(enemy)
-		if enemy.breaking > 0:
+		if enemy.breaking > 0 and enemy.nap_ticks == 0:
 			_break_tick(enemy)
 	for enemy: EnemyState in _timed:
 		# Regrow, nap and dig (RULES 6.2, 6.3), in that order. A timer that moves on does
@@ -862,6 +885,107 @@ func _timer_step() -> void:
 				_dig(enemy)
 	if _frights_on or _lows_on:
 		_status_timers()
+	if _dozes_on:
+		_doze_timers()
+	for enemy: EnemyState in _yawners:
+		if enemy.yawn_at <= tick:
+			_yawn(enemy)
+	if _awake_set or not _wakers.is_empty():
+		_work_out_wake(true)
+
+
+## Doze timers run down (6.2, Yawn), before new yawns land.
+func _doze_timers() -> void:
+	var dozing: bool = false
+	for tower: TowerState in towers:
+		if tower.doze_ticks > 0:
+			tower.doze_ticks -= 1
+			dozing = dozing or tower.doze_ticks > 0
+	_dozes_on = dozing
+
+
+## RULES 6.2, Yawn: every attacking tower whose center is within the yawn's reach of the
+## yawner's center dozes, keeping the longer time. Its next yawn is yawn_ms on, whether it
+## yawned or not: a napping creature does nothing (DM, 2026-10-27).
+func _yawn(enemy: EnemyState) -> void:
+	var type: EnemyType = catalog.enemy(enemy.type)
+	enemy.yawn_at += type.yawn_ms / Sim.MS_PER_TICK
+	if enemy.nap_ticks > 0:
+		return
+	var reach: int = type.yawn_reach * 200
+	var reach_sq: int = reach * reach
+	var ticks: int = type.doze_ms / Sim.MS_PER_TICK
+	var cells: Array[Vector2i] = []
+	for tower: TowerState in towers:
+		if tower.kind != &"attack":
+			continue
+		var d: Vector2i = Sim.center(tower.cell) - enemy.pos
+		if d.x * d.x + d.y * d.y > reach_sq:
+			continue
+		tower.doze_ticks = maxi(tower.doze_ticks, ticks)
+		_dozes_on = true
+		cells.append(tower.cell)
+	_emit({"kind": &"yawned", "id": enemy.id, "enemy": enemy.type, "pos": enemy.pos, "cells": cells})
+
+
+## RULES 6.2, Wake, last in the timers step: every creature whose center is within a
+## waker's reach of that waker's center is awake for this tick, the waker itself and out
+## of reach and napping ones included. In play (`end_slows`) an awake creature's slow ends;
+## on load only the marks are worked out. Each cell lists the wakers whose reach touches
+## it, so a creature is measured only against those, and only the creatures marked awake
+## last time are cleared. Hootlings walk in clumps, so this per-creature pass costs less
+## than one per waker over the bucket, which would measure a crowd once per waker.
+func _work_out_wake(end_slows: bool) -> void:
+	for enemy: EnemyState in _awake_list:
+		enemy.awake = false
+	_awake_list.clear()
+	_awake_set = false
+	if _wakers.is_empty():
+		return
+	_wake_head.fill(-1)
+	_wake_link.resize(0)
+	_wake_who.resize(0)
+	var rows: int = map.rows
+	var last: int = Sim.MAP_COLUMNS - 1
+	var spots: PackedInt64Array = PackedInt64Array()      # x, y and reach squared of each waker
+	for waker: EnemyState in _wakers:
+		var p: Vector2i = waker.pos
+		var reach: int = catalog.enemy(waker.type).wake_reach * 200
+		var reach_sq: int = reach * reach
+		var k: int = spots.size()
+		spots.append_array([p.x, p.y, reach_sq])
+		# Positions are never below 0; a flyer may stand on the map's far edge, and counts
+		# in the last column or row.
+		var low: Vector2i = Sim.cell_of(p - Vector2i(reach, reach))
+		var high: Vector2i = Sim.cell_of(p + Vector2i(reach, reach))
+		for row: int in range(maxi(low.y, 0), mini(high.y, rows - 1) + 1):
+			for column: int in range(maxi(low.x, 0), mini(high.x, last) + 1):
+				# Only cells whose nearest point is in reach. Each cell's range is closed, so
+				# it holds every position counted in it, the map's far edge included.
+				var nx: int = clampi(p.x, column * Sim.UNIT, (column + 1) * Sim.UNIT) - p.x
+				var ny: int = clampi(p.y, row * Sim.UNIT, (row + 1) * Sim.UNIT) - p.y
+				if nx * nx + ny * ny > reach_sq:
+					continue
+				var cell: int = row * Sim.MAP_COLUMNS + column
+				_wake_link.append(_wake_head[cell])
+				_wake_who.append(k)
+				_wake_head[cell] = _wake_who.size() - 1
+	for enemy: EnemyState in enemies:
+		var p: Vector2i = enemy.pos
+		var i: int = _wake_head[mini(p.y / Sim.UNIT, rows - 1) * Sim.MAP_COLUMNS + mini(p.x / Sim.UNIT, last)]
+		while i >= 0:
+			var k: int = _wake_who[i]
+			var dx: int = p.x - spots[k]
+			var dy: int = p.y - spots[k + 1]
+			if dx * dx + dy * dy <= spots[k + 2]:
+				enemy.awake = true
+				_awake_list.append(enemy)
+				if end_slows:
+					enemy.slow_pct = 0
+					enemy.slow_ticks = 0
+				break
+			i = _wake_link[i]
+	_awake_set = not _awake_list.is_empty()
 
 
 ## RULES 6.2, Regrow: unless it naps, it gains its regrow at its wave's strength (rounded
@@ -948,8 +1072,9 @@ func _break_tick(enemy: EnemyState) -> void:
 ## Step 3, rings, towers in spot order: every creature of the right kind in a Bell's
 ## ring gets its slow with the Bell's time left (8.5), and in a Scarecrow's ring its
 ## fright (5.13). A low flyer counts as a walker (5.15). Neither is a hit, so bubbles do
-## not stop them, and neither reaches a creature out of reach or napping (8.8). In a
-## tick (`reuse`), a bucket still good from the last towers step serves.
+## not stop them, and neither reaches a creature out of reach or napping (8.8). An awake
+## creature gets no slow (6.2, Wake). In a tick (`reuse`), a bucket still good from the
+## last towers step serves.
 func _ring_step(reuse: bool = false) -> void:
 	if not _has_rings:
 		return
@@ -978,6 +1103,7 @@ func _ring_step(reuse: bool = false) -> void:
 					i = _link[i]
 		ring.append_array(_flyer_list if stats.hits_air else _low_list)
 		# The range check, _slow() and _fright() inlined: the busiest loop of the step.
+		var wake: bool = _awake_set
 		var cx: int = center.x
 		var cy: int = center.y
 		for i: int in ring:
@@ -995,6 +1121,8 @@ func _ring_step(reuse: bool = false) -> void:
 				elif pct == held and ticks > enemy.fright_ticks:
 					enemy.fright_ticks = ticks
 				continue
+			if wake and enemy.awake:
+				continue
 			var slow: int = enemy.slow_pct
 			if pct > slow:
 				enemy.slow_pct = pct
@@ -1003,14 +1131,22 @@ func _ring_step(reuse: bool = false) -> void:
 				enemy.slow_ticks = ticks
 
 
-## Step 4: movement. A creature at the base center is removed and costs its lives. A
-## napping creature stays where it is (6.2).
+## Step 4: movement, in id order. A creature at the base center is removed and costs its
+## lives. A napping creature stays where it is (6.2). A blink that is due comes first,
+## then the usual move (6.2, Blink).
 func _move_step() -> void:
 	_bucket_ok = false
 	var naps: bool = _nappers > 0
+	var blinks: bool = _blinkers > 0
 	for enemy: EnemyState in enemies:
 		var pos: Vector2i = enemy.pos
 		enemy.prev_pos = pos
+		if blinks and enemy.blinks and enemy.blink_at <= tick:
+			if _blink(enemy):
+				if _leak(enemy):
+					return
+				continue
+			pos = enemy.pos
 		if naps and enemy.nap_ticks > 0:
 			continue
 		# rate is speed * 10 * speed_pct, so this is the move of speed * 10 * speed_pct * (100 - slow) / 10000.
@@ -1030,25 +1166,48 @@ func _move_step() -> void:
 				enemy.pos = pos + enemy.step_dir * amount
 				continue
 			through = _walk(enemy, amount)
-		if not through:
-			continue
-		enemy.health = 0
-		_removed = true
-		lives -= enemy.lives
-		_emit({"kind": &"leaked", "id": enemy.id, "enemy": enemy.type, "lives": enemy.lives})
-		if lives <= 0:
-			phase = Phase.LOST
-			_compact()
-			_emit({"kind": &"lost"})
+		if through and _leak(enemy):
 			return
 	_compact()
+
+
+## A creature that reached the base is removed and costs its lives. True when that loses
+## the game (lives 0 or less), which ends the movement step at once.
+func _leak(enemy: EnemyState) -> bool:
+	enemy.health = 0
+	_removed = true
+	lives -= enemy.lives
+	_emit({"kind": &"leaked", "id": enemy.id, "enemy": enemy.type, "lives": enemy.lives})
+	if lives > 0:
+		return false
+	phase = Phase.LOST
+	_compact()
+	_emit({"kind": &"lost"})
+	return true
+
+
+## RULES 6.2, Blink: its next blink is blink_ms on. Unless it naps, it walks blink_tiles
+## tiles along its route at once, with no slow, deciding and growing at centers as it
+## walks (a twin step is one tile), and lands there: prev_pos is the landing point.
+## Returns true when the blink reaches the base.
+func _blink(enemy: EnemyState) -> bool:
+	var type: EnemyType = catalog.enemy(enemy.type)
+	enemy.blink_at += type.blink_ms / Sim.MS_PER_TICK
+	if enemy.nap_ticks > 0:
+		return false
+	var from: Vector2i = enemy.pos
+	var through: bool = _walk(enemy, type.blink_tiles * Sim.UNIT)
+	enemy.prev_pos = enemy.pos
+	_emit({"kind": &"blinked", "id": enemy.id, "enemy": enemy.type, "from": from, "pos": enemy.pos})
+	return through
 
 
 ## Moves a walker along the node graph, deciding at cell centers (7.3, docs/ARCHITECTURE.md
 ## 14.3). Returns true when it reaches the base. A breaker whose next node holds a closed
 ## gate stops at this center and starts breaking it (7.7); the rest of its movement this
 ## tick is lost. A twin step done this tick sets prev_pos to the twin's center, where it
-## landed, so nothing is drawn across the jump.
+## landed, so nothing is drawn across the jump. A grower grows at each center it reaches
+## (6.2, Grow).
 func _walk(enemy: EnemyState, amount: int) -> bool:
 	var dist: PackedInt32Array = _free_dist if enemy.breaker else _dist
 	var budget: int = amount
@@ -1079,6 +1238,10 @@ func _walk(enemy: EnemyState, amount: int) -> bool:
 			break
 		enemy.progress = Sim.UNIT
 		budget -= room
+		if enemy.grows and enemy.max_health < enemy.grow_cap:
+			var added: int = mini(enemy.grow_step, enemy.grow_cap - enemy.max_health)
+			enemy.max_health += added
+			enemy.health += added
 		if _has_stumps and _is_twin_step(enemy):
 			enemy.prev_pos = Sim.center(enemy.to_cell)
 	_place(enemy)
@@ -1100,8 +1263,8 @@ func _tower_step(reuse: bool = false) -> void:
 		_bucket(true)
 		bucketed = true
 	for tower: TowerState in towers:
-		if tower.kind != &"attack":
-			continue
+		if tower.kind != &"attack" or tower.doze_ticks > 0:
+			continue                                   # a dozing tower skips its turn (6.2, Yawn)
 		var stats: TowerStats = tower.stats
 		# 5.2, 8.6: the timer runs down by the tick times the rate multiplier.
 		tower.reload -= Sim.MS_PER_TICK * (100 + tower.got_pct)
@@ -1303,7 +1466,11 @@ func _nap(enemy: EnemyState) -> void:
 	_emit({"kind": &"napped", "id": enemy.id, "enemy": enemy.type, "pos": enemy.pos})
 
 
+## Speed ups and a health release. A napping creature does nothing: they wait until it
+## wakes (DM, 2026-10-27).
 func _health_events(enemy: EnemyState) -> void:
+	if enemy.nap_ticks > 0:
+		return
 	var type: EnemyType = catalog.enemy(enemy.type)
 	if not type.speed_up.is_empty() and enemy.health > 0:
 		var crossed: int = 0
@@ -1610,9 +1777,9 @@ func _hit(index: int, stats: TowerStats, bonus: int) -> void:
 
 
 ## One slow slot per creature: a stronger slow replaces it, an equal one keeps the
-## longer time, a weaker one changes nothing (8.5).
+## longer time, a weaker one changes nothing (8.5). An awake creature gets none (6.2).
 func _slow(enemy: EnemyState, pct: int, ticks: int) -> void:
-	if ticks <= 0:
+	if ticks <= 0 or enemy.awake:
 		return
 	if pct > enemy.slow_pct:
 		enemy.slow_pct = pct
@@ -1747,9 +1914,10 @@ func _mods_for(w: int) -> WaveMods:
 
 ## "" when wave w, with the Twist and a risk card, stays inside the ceilings of 5.6: no
 ## group above MAX_ENEMIES, speed effects at most MAX_SPEED_PCT, and no creature's max
-## health above BIG (what a saved creature may hold), judged by the catalog's largest
-## health so splits, releases and summons are covered. Play never comes near them; a
-## tampered save or bad card data does.
+## health above BIG (what a saved creature may hold), judged by every creature of the
+## catalog so splits, releases and summons are covered, and growers at their cap
+## (docs/ARCHITECTURE.md 14.7). Play never comes near them; a tampered save or bad card
+## data does.
 func _wave_effects_problem(w: int, risk: Array) -> String:
 	if w < 0 or w >= level.waves.size():
 		return ""
@@ -1762,9 +1930,16 @@ func _wave_effects_problem(w: int, risk: Array) -> String:
 			return "a group passes %d creatures" % MAX_ENEMIES
 	if Modifiers.speed_pct(effects) > MAX_SPEED_PCT:
 		return "speed passes %d percent" % MAX_SPEED_PCT
+	# Scaling keeps order, so the largest health decides for creatures that do not grow.
+	# Each grower is judged at its cap.
 	var most: int = 1
 	for id: StringName in catalog.enemy_ids():
-		most = maxi(most, catalog.enemy(id).health)
+		var type: EnemyType = catalog.enemy(id)
+		most = maxi(most, type.health)
+		if type.grow_pct > 0:
+			var start: int = maxi(1, Modifiers.scale_all(effects, "health_pct", _scaled(type.health, w)))
+			if start * type.grow_cap_pct / 100 > BIG:
+				return "max health at its growth cap passes %d" % BIG
 	if Modifiers.scale_all(effects, "health_pct", _scaled(most, w)) > BIG:
 		return "max health passes %d" % BIG
 	return ""
@@ -2026,7 +2201,22 @@ func _new_enemy(type: StringName, w: int) -> EnemyState:
 		enemy.regrow_at = tick + data.regrow_ms / Sim.MS_PER_TICK
 	if data.dig_ms > 0:
 		enemy.dig_at = tick + data.dig_first_ms / Sim.MS_PER_TICK
+	if data.yawn_ms > 0:
+		enemy.yawn_at = tick + data.yawn_ms / Sim.MS_PER_TICK
+	if data.blink_ms > 0:
+		enemy.blink_at = tick + data.blink_ms / Sim.MS_PER_TICK
+	_set_start(enemy, enemy.max_health)
 	return enemy
+
+
+## Its max health when it appeared (RULES 6.2, Grow), and for a grower its cap and its
+## growth at each center (docs/ARCHITECTURE.md 14.5). At spawn and on load.
+func _set_start(enemy: EnemyState, start: int) -> void:
+	enemy.start_health = start
+	if enemy.grows:
+		var data: EnemyType = catalog.enemy(enemy.type)
+		enemy.grow_cap = start * data.grow_cap_pct / 100
+		enemy.grow_step = Sim.pct_half_up(start, data.grow_pct)
 
 
 ## Numbers worked out from the type, the wave and the effects (6.4, 2.8): the same at
@@ -2051,6 +2241,10 @@ func _derive(enemy: EnemyState) -> void:
 	enemy.digs = data.dig_ms > 0
 	enemy.regrows = data.regrow > 0
 	enemy.timed = enemy.regrows or enemy.naps or enemy.digs
+	enemy.grows = data.grow_pct > 0
+	enemy.yawns = data.yawn_ms > 0
+	enemy.blinks = data.blink_ms > 0
+	enemy.wakes = data.wake_reach > 0
 
 
 ## A flyer flies straight from `start` to the base center (6.5).
@@ -2094,6 +2288,12 @@ func _track(enemy: EnemyState) -> void:
 		_misters.append(enemy)
 	if enemy.dazzle:
 		_dazzlers.append(enemy)
+	if enemy.yawns:
+		_yawners.append(enemy)
+	if enemy.wakes:
+		_wakers.append(enemy)
+	if enemy.blinks:
+		_blinkers += 1
 
 
 func _place(enemy: EnemyState) -> void:
@@ -2129,6 +2329,8 @@ func _compact() -> void:
 			_nappers -= 1
 		if enemy.digs:
 			_diggers -= 1
+		if enemy.blinks:
+			_blinkers -= 1
 	enemies = kept
 	if not _watched.is_empty():
 		_watched = _alive(_watched)
@@ -2142,6 +2344,10 @@ func _compact() -> void:
 		_misters = _alive(_misters)
 	if not _dazzlers.is_empty():
 		_dazzlers = _alive(_dazzlers)
+	if not _yawners.is_empty():
+		_yawners = _alive(_yawners)
+	if not _wakers.is_empty():
+		_wakers = _alive(_wakers)
 
 
 static func _alive(list: Array[EnemyState]) -> Array[EnemyState]:
@@ -2215,7 +2421,7 @@ func to_data() -> Dictionary:
 		tower_out.append({
 			"cell": DataCheck.cell_data(tower.cell), "type": String(tower.type), "tier": tower.tier,
 			"spec": tower.spec, "aim": AIM_NAMES[tower.aim], "reload": tower.reload,
-			"spent_now": tower.spent_now, "spent_before": tower.spent_before,
+			"spent_now": tower.spent_now, "spent_before": tower.spent_before, "doze_ticks": tower.doze_ticks,
 		})
 	var enemy_out: Array = []
 	for enemy: EnemyState in enemies:
@@ -2236,6 +2442,10 @@ func to_data() -> Dictionary:
 		if type.dig_ms > 0:
 			item["dig_at"] = enemy.dig_at
 			item["dig_ticks"] = enemy.dig_ticks
+		if type.yawn_ms > 0:
+			item["yawn_at"] = enemy.yawn_at
+		if type.blink_ms > 0:
+			item["blink_at"] = enemy.blink_at
 		if enemy.flying:
 			item["fly_from"] = DataCheck.cell_data(enemy.fly_from)
 			item["flown"] = enemy.flown
@@ -2380,8 +2590,10 @@ func _load(data: Variant, stats: Catalog, chk: DataCheck) -> bool:
 	if not chk.ok():
 		return false
 	_refresh_boosts()
-	# Out of reach and hidden are worked out again for the loaded battle (docs/ARCHITECTURE.md 14.5).
+	# Out of reach, hidden and awake are worked out again for the loaded battle
+	# (docs/ARCHITECTURE.md 14.5). Slows wait for the next timers step, as in play.
 	_bucket(true)
+	_work_out_wake(false)
 	return true
 
 
@@ -2474,7 +2686,9 @@ func _load_towers(data: Variant, chk: DataCheck) -> void:
 	var list: Array = chk.array_value(data, "towers", 0, level.spots.size())
 	for i: int in list.size():
 		var path: String = "towers[%d]" % i
-		if not chk.object(list[i], path, ["cell", "type", "tier", "spec", "aim", "reload", "spent_now", "spent_before"]) or not chk.ok():
+		var keys: PackedStringArray = ["cell", "type", "tier", "spec", "aim", "reload", "spent_now", "spent_before"]
+		# 14.7: doze_ticks is optional, 0 when missing, so older saves load.
+		if not chk.object(list[i], path, keys, ["doze_ticks"]) or not chk.ok():
 			return
 		var item: Dictionary = list[i]
 		var tower: TowerState = TowerState.new()
@@ -2504,6 +2718,10 @@ func _load_towers(data: Variant, chk: DataCheck) -> void:
 		tower.spent_before = chk.integer(item, "spent_before", path, 0, BIG)
 		if phase == Phase.WAVE and tower.spent_now != 0:
 			chk.fail(path + ".spent_now", "is 0 during a wave")
+		tower.doze_ticks = chk.integer(item, "doze_ticks", path, 0, 60000 / Sim.MS_PER_TICK)
+		if tower.doze_ticks > 0 and tower.kind != &"attack":
+			chk.fail(path + ".doze_ticks", "only an attacking tower dozes")
+		_dozes_on = _dozes_on or tower.doze_ticks > 0
 		towers.append(tower)
 
 
@@ -2533,6 +2751,10 @@ func _load_enemies(data: Variant, chk: DataCheck) -> void:
 			keys.append_array(["napped", "nap_ticks"])
 		if type.dig_ms > 0:
 			keys.append_array(["dig_at", "dig_ticks"])
+		if type.yawn_ms > 0:
+			keys.append("yawn_at")
+		if type.blink_ms > 0:
+			keys.append("blink_at")
 		# 14.7: keys any creature may hold are optional, 0 when missing, so older saves load.
 		var optional: PackedStringArray = ENEMY_OPTIONAL.duplicate()
 		if type.flying:
@@ -2552,7 +2774,11 @@ func _load_enemies(data: Variant, chk: DataCheck) -> void:
 		if enemy.released and type.release.is_empty():
 			chk.fail(path + ".released", "only a creature with a health release releases")
 		_derive(enemy)
-		enemy.max_health = chk.integer(item, "max_health", path, 1, BIG, 1, 1)
+		# A grower's max health is from its starting max health to its cap, as play leaves it.
+		_set_start(enemy, _max_health(enemy.type, enemy.wave, _wave_mods[enemy.wave]))
+		var least: int = enemy.start_health if enemy.grows else 1
+		var most: int = enemy.grow_cap if enemy.grows else BIG
+		enemy.max_health = chk.integer(item, "max_health", path, least, most, 1, least)
 		enemy.health = chk.integer(item, "health", path, 1, enemy.max_health, 1, 1)
 		var has_bubble: bool = type.bubble or _all_bubbles
 		enemy.bubble = chk.boolean(item, "bubble", path)
@@ -2610,7 +2836,7 @@ func _load_enemies(data: Variant, chk: DataCheck) -> void:
 		_lows_on = _lows_on or enemy.low_ticks > 0
 
 
-## 14.7: regrow, nap and dig, each between ticks as play leaves it.
+## 14.7: regrow, nap, dig, yawn and blink, each between ticks as play leaves it.
 func _load_own_timers(enemy: EnemyState, type: EnemyType, item: Dictionary, path: String, chk: DataCheck) -> void:
 	if type.regrow > 0:
 		enemy.regrow_at = chk.integer(item, "regrow_at", path, tick, tick + type.regrow_ms / Sim.MS_PER_TICK, 1, tick)
@@ -2623,6 +2849,10 @@ func _load_own_timers(enemy: EnemyState, type: EnemyType, item: Dictionary, path
 		var most: int = maxi(type.dig_first_ms, type.dig_every_ms) / Sim.MS_PER_TICK
 		enemy.dig_at = chk.integer(item, "dig_at", path, tick, tick + most, 1, tick)
 		enemy.dig_ticks = chk.integer(item, "dig_ticks", path, 0, type.dig_ms / Sim.MS_PER_TICK)
+	if type.yawn_ms > 0:
+		enemy.yawn_at = chk.integer(item, "yawn_at", path, tick, tick + type.yawn_ms / Sim.MS_PER_TICK, 1, tick)
+	if type.blink_ms > 0:
+		enemy.blink_at = chk.integer(item, "blink_at", path, tick, tick + type.blink_ms / Sim.MS_PER_TICK, 1, tick)
 
 
 var _loaded_from: Vector2i = Vector2i.ZERO
@@ -2714,9 +2944,9 @@ func _load_releases(data: Variant, chk: DataCheck) -> void:
 func _check_crowd(chk: DataCheck) -> void:
 	if not chk.ok():
 		return
-	var tallies: Array[Array] = []                     # per wave: [creatures, healers, summoners]
+	var tallies: Array[Array] = []                     # per wave: [creatures, healers, summoners, wakers]
 	for w: int in level.waves.size():
-		tallies.append([0, 0, 0] as Array[int])
+		tallies.append([0, 0, 0, 0] as Array[int])
 	for enemy: EnemyState in enemies:
 		_tally(tallies[enemy.wave], enemy.type, 1, not enemy.released)
 	for release: Release in _releases:
@@ -2737,6 +2967,8 @@ func _check_crowd(chk: DataCheck) -> void:
 		chk.fail("enemies", "more than %d creatures that heal can be on the map at once" % MAX_HEALERS)
 	if _at_once(tallies, 2) > MAX_SUMMONERS:
 		chk.fail("enemies", "more than %d creatures that summon can be on the map at once" % MAX_SUMMONERS)
+	if _at_once(tallies, 3) > MAX_WAKERS:
+		chk.fail("enemies", "more than %d creatures that wake others can be on the map at once" % MAX_WAKERS)
 
 
 ## The most of tally entry `k` that the waves on the map at once can hold: the sum of the
@@ -2752,11 +2984,11 @@ func _at_once(tallies: Array[Array], k: int) -> int:
 	return total
 
 
-## Adds `count` creatures of `type` to tally ([creatures, healers, summoners]), each with
-## what it can still let out: a split, and a health release unless it has begun
+## Adds `count` creatures of `type` to tally ([creatures, healers, summoners, wakers]),
+## each with what it can still let out: a split, and a health release unless it has begun
 ## (`release`). Released creatures let out nothing (2.6), so this goes one level deep.
 ## Summons are left out: they come for as long as the boss lives, and MAX_SUMMONERS
-## bounds the bosses. A summoned creature never heals (2.6).
+## bounds the bosses. A summoned creature never heals or wakes others (2.6, 14.4).
 func _tally(tally: Array[int], type: StringName, count: int, release: bool) -> void:
 	var data: EnemyType = catalog.enemy(type)
 	var n: int = mini(count, ID_CEILING)                # a far cap, so no sum can overflow
@@ -2765,6 +2997,8 @@ func _tally(tally: Array[int], type: StringName, count: int, release: bool) -> v
 		tally[1] += n
 	if not data.summon.is_empty():
 		tally[2] += n
+	if data.wake_reach > 0:
+		tally[3] += n
 	if data.split_into != &"":
 		_tally(tally, data.split_into, n * data.split_count, false)
 	if release and not data.release.is_empty():

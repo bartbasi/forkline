@@ -33,6 +33,9 @@ var dig_ticks: int = 0                                 # ticks left under the gr
 var fright_pct: int = 0                                # frightened: it takes this percent more from every hit (RULES 5.13)
 var fright_ticks: int = 0                              # ticks of fright left, 0 when not frightened
 var low_ticks: int = 0                                 # flyers: ticks it stays low after a lure, 0 when not low (RULES 5.15)
+var awake: bool = false                                # near a Hootling or Glimmertoad: no slow this tick (RULES 6.2); never saved
+var start_health: int = 1                              # its max health when it appeared, after strength and its wave's
+                                                       # effects (RULES 6.2, Grow); worked out at spawn and on load, never saved
 
 ## Internal to src/sim/. Worked out at spawn from the type, the wave's strength and
 ## effects, and again on load, so they are not saved.
@@ -52,10 +55,16 @@ var regrows: bool = false
 var naps: bool = false
 var digs: bool = false
 var timed: bool = false                                # it regrows, naps or digs: it has timers of its own
+var grows: bool = false
+var yawns: bool = false
+var blinks: bool = false
+var wakes: bool = false
+var grow_cap: int = 0                                  # growers: start_health * grow_cap_pct / 100, truncated
+var grow_step: int = 0                                 # growers: grow_pct of start_health, rounded half up
 ## Internal and saved: ticks until a popped bubble is back (0 when up), the tick of
 ## the next summon batch (0 for none), the tick of the next heal (0 for none), the
 ## speed ups taken so far, whether its health release has begun, and the tick of its
-## next regrow and of its next dig (0 for none).
+## next regrow, dig, yawn and blink (0 for none).
 var bubble_ticks: int = 0
 var summon_at: int = 0
 var heal_at: int = 0
@@ -63,3 +72,5 @@ var ups: int = 0
 var released: bool = false
 var regrow_at: int = 0
 var dig_at: int = 0
+var yawn_at: int = 0
+var blink_at: int = 0
