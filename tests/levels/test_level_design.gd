@@ -5,6 +5,7 @@ extends "res://tests/base_test.gd"
 ## 12.5; docs/ARCHITECTURE.md 2.4, 2.7, 10). Tests compare ids and numbers, never names.
 
 const Files: GDScript = preload("res://tests/levels/fixtures/level_files.gd")
+const Rules: GDScript = preload("res://tests/levels/fixtures/map_rules.gd")
 
 ## RULES 12.3 and 12.4, one row per level in play order:
 ## gates, sockets, waves, strength, Normal starting gold, star 3 kind and value,
@@ -36,6 +37,12 @@ const PLAN: Dictionary = {
 	"r4_l4": {"gates": 3, "sockets": 6, "waves": 12, "strength": 240, "gold": 750, "star3": ["kinds_at_most", 3], "highlight": "none"},
 	"r4_l5": {"gates": 3, "sockets": 6, "waves": 12, "strength": 250, "gold": 750, "star3": ["early_calls_at_least", 6], "highlight": "none"},
 	"r4_l6": {"gates": 3, "sockets": 6, "waves": 12, "strength": 260, "gold": 800, "star3": ["no_lives_lost", 0], "highlight": "spot"},
+	"r5_l1": {"gates": 2, "sockets": 5, "waves": 12, "strength": 230, "gold": 700, "star3": ["towers_at_most", 6], "highlight": "socket"},
+	"r5_l2": {"gates": 2, "sockets": 5, "waves": 12, "strength": 235, "gold": 750, "star3": ["tier_at_most", 2], "highlight": "spot"},
+	"r5_l3": {"gates": 2, "sockets": 5, "waves": 12, "strength": 240, "gold": 750, "star3": ["tower_ban", "lullaby_bell"], "highlight": "spot"},
+	"r5_l4": {"gates": 3, "sockets": 6, "waves": 12, "strength": 245, "gold": 800, "star3": ["towers_at_most", 7], "highlight": "spot"},
+	"r5_l5": {"gates": 3, "sockets": 6, "waves": 12, "strength": 250, "gold": 800, "star3": ["kinds_at_most", 3], "highlight": "none"},
+	"r5_l6": {"gates": 3, "sockets": 6, "waves": 12, "strength": 255, "gold": 850, "star3": ["towers_at_most", 8], "highlight": "spot"},
 }
 
 ## docs/ARCHITECTURE.md 2.8 and RULES 13: each level's Twist as effects. The level designer picks
@@ -66,6 +73,12 @@ const TWISTS: Dictionary = {
 	"r4_l4": [{"type": "no_selling"}],
 	"r4_l5": [{"type": "set_lives", "lives": 5}],
 	"r4_l6": [{"type": "count_pct", "pct": 200, "flyers": false, "last_wave": true}],
+	"r5_l1": [{"type": "set_gates", "count": 1}],
+	"r5_l2": [{"type": "ban_tower", "tower": "pumpkin_catapult"}],
+	"r5_l3": [{"type": "tier_cap", "tier": 2}],
+	"r5_l4": [{"type": "ban_tower", "tower": "sling_post"}],
+	"r5_l5": [{"type": "set_lives", "lives": 5}],
+	"r5_l6": [{"type": "count_pct", "pct": 200, "flyers": false, "last_wave": true}],
 }
 
 ## RULES 12.2: the towers each level brings.
@@ -75,6 +88,7 @@ const NEW_TOWERS: Dictionary = {
 	"r2_l3": ["longbow_loft"],
 	"r3_l1": ["firework_tower"],
 	"r4_l1": ["bakery"],
+	"r5_l2": ["bramble_cottage"],
 }
 
 ## RULES 12.2 and 12.3: the creature each level brings and its first wave, 1 based.
@@ -93,12 +107,25 @@ const NEW_CREATURES: Dictionary = {
 	"r4_l2": ["mender", 2],
 	"r4_l3": ["gatecrasher", 3],
 	"r4_l6": ["old_tusk", 12],
+	"r5_l3": ["mossbud", 2],
+	"r5_l4": ["mistwisp", 3],
+	"r5_l6": ["burrowbelly", 12],
 }
 
+## RULES 3.5 and 12.1: the map feature each region brings, as grid characters. Regions 1 to 4 have none.
+const REGION_FEATURES: Dictionary = {"lantern_hill": "", "millbrook": "", "willow_fen": "", "moonspire_keep": "", "hollow_lanes": "T"}
+## RULES 12.2: the level where each feature first appears, as that region's first level.
+const NEW_FEATURES: Dictionary = {"T": "r5_l1"}
+## RULES 12.5: at most 6 of each of these creatures in one wave, with the level's Twist, boss summons not counted.
+const CAPPED_CREATURES: Array[StringName] = [&"mistwisp", &"hootling"]
+const CAPPED_MOST: int = 6
+
 ## RULES 3.1 and 3.4: map rows and build spots per region, and entrances per region (12.3).
-const REGION_ROWS: Dictionary = {"lantern_hill": [8, 11], "millbrook": [10, 13], "willow_fen": [10, 13], "moonspire_keep": [10, 13]}
-const REGION_SPOTS: Dictionary = {"lantern_hill": [5, 7], "millbrook": [7, 9], "willow_fen": [8, 10], "moonspire_keep": [9, 11]}
-const REGION_ENTRANCES: Dictionary = {"lantern_hill": [1, 1], "millbrook": [1, 2], "willow_fen": [1, 2], "moonspire_keep": [2, 3]}
+const REGION_ROWS: Dictionary = {"lantern_hill": [8, 11], "millbrook": [10, 13], "willow_fen": [10, 13], "moonspire_keep": [10, 13], "hollow_lanes": [10, 13]}
+const REGION_SPOTS: Dictionary = {"lantern_hill": [5, 7], "millbrook": [7, 9], "willow_fen": [8, 10], "moonspire_keep": [9, 11], "hollow_lanes": [9, 11]}
+const REGION_ENTRANCES: Dictionary = {"lantern_hill": [1, 1], "millbrook": [1, 2], "willow_fen": [1, 2], "moonspire_keep": [2, 3], "hollow_lanes": [1, 2]}
+## RULES 12.3: region 5 has one entrance, then two from 5-5.
+const LEVEL_ENTRANCES: Dictionary = {"r5_l1": 1, "r5_l2": 1, "r5_l3": 1, "r5_l4": 1, "r5_l5": 2, "r5_l6": 2}
 
 ## RULES 12.5: a new creature's first wave holds 3 to 5 of it. A boss comes alone.
 const FIRST_WAVE_COUNT: Array[int] = [3, 5]
@@ -451,7 +478,8 @@ func test_a_highlighted_cell_sits_above_the_paused_strip() -> void:
 
 ## RULES 9.6: a first tower built on a highlighted spot touches the road the creatures walk
 ## with no gate placed. Every tower that attacks or slows reaches, at tier 1, some cell of an
-## entrance's open route. (Level 2-2 once glowed on a spot that saw road only with a gate on.)
+## entrance's open route outside the tunnels, where a walker can be hit (RULES 3.6). (Level 2-2
+## once glowed on a spot that saw road only with a gate on.)
 func test_a_highlighted_spot_sees_the_open_route() -> void:
 	for id: String in order:
 		var level: LevelData = _level(id)
@@ -470,6 +498,8 @@ func test_a_highlighted_spot_sees_the_open_route() -> void:
 			var reach: int = type.stats(1, -1).reach
 			var seen: bool = false
 			for cell: Vector2i in walked:
+				if level.feature_at(cell) == LevelData.Feature.TUNNEL:
+					continue
 				var dx: int = (cell.x - level.hint_cell.x) * 100
 				var dy: int = (cell.y - level.hint_cell.y) * 100
 				if dx * dx + dy * dy <= reach * reach:
@@ -680,3 +710,124 @@ func test_gates_whole_always_puts_a_gate_on_the_dashed_line() -> void:
 				assert_true(on_line, "%s: gates %s keep off the dashed line from entrance %d" % [id, closed, entrance + 1])
 		assert_true(full >= 1, "%s: all its gates can be placed" % id)
 	assert_true(checked >= 1, "some level asks to keep every gate whole, so the rule is exercised")
+
+
+## RULES 12.3: region 5 has one entrance on its first four levels, then two.
+func test_entrances_per_level() -> void:
+	for id: String in LEVEL_ENTRANCES:
+		var level: LevelData = _level(id)
+		assert_not_null(level, "%s loads" % id)
+		if level != null:
+			assert_eq(level.entrances.size(), int(LEVEL_ENTRANCES[id]), "%s entrances" % id)
+
+
+## RULES 3.5 and docs/ARCHITECTURE.md 14.13: each region's levels use its own map feature and no
+## other. Levels 5 and 6 of regions 6 to 8 may add one earlier feature; this table grows with them.
+func test_each_region_uses_its_own_feature() -> void:
+	var regions: Dictionary = Files.region_of()
+	for id: String in order:
+		var level: LevelData = _level(id)
+		var region: String = regions.get(id, "")
+		if level == null or not REGION_FEATURES.has(region):
+			fail("%s: region %s has no planned feature" % [id, region])
+			continue
+		var wanted: String = REGION_FEATURES[region]
+		var held: String = Rules.feature_chars(level.grid)
+		assert_eq(held, wanted, "%s holds the features %s, its region brings %s" % [id, held, wanted])
+
+
+## RULES 12.2: a feature first appears on its region's first level, and from region 5 on that level
+## brings only the feature: one entrance, no new tower and no new creature, so it is the one new idea.
+func test_a_feature_comes_alone_on_its_regions_first_level() -> void:
+	var met: Dictionary = {}
+	for id: String in order:
+		var level: LevelData = _level(id)
+		if level == null:
+			continue
+		var held: String = Rules.feature_chars(level.grid)
+		for i: int in held.length():
+			if not met.has(held[i]):
+				met[held[i]] = id
+	for ch: String in NEW_FEATURES:
+		var id: String = NEW_FEATURES[ch]
+		assert_eq(met.get(ch, ""), id, "%s first appears on %s" % [ch, id])
+		var level: LevelData = _level(id)
+		if level == null:
+			continue
+		assert_eq(level.entrances.size(), 1, "%s has one entrance" % id)
+		assert_false(NEW_TOWERS.has(id), "%s brings no new tower" % id)
+		assert_false(NEW_CREATURES.has(id), "%s brings no new creature" % id)
+
+
+## RULES 3.6: tunnels are straight runs of 1 to 4 tiles with no fork or bend, at most 6 tiles a map,
+## never next to a socket, and at most a quarter of any entrance's shortest route with no gates.
+func test_tunnels_follow_rules_3_6() -> void:
+	var with_tunnels: int = 0
+	for id: String in order:
+		var level: LevelData = _level(id)
+		if level == null:
+			continue
+		if not Rules.tunnel_tiles(level).is_empty():
+			with_tunnels += 1
+		var found: PackedStringArray = Rules.tunnel_problems(level)
+		assert_eq(found, PackedStringArray(), "%s: %s" % [id, "; ".join(found)])
+	assert_true(with_tunnels >= 6, "the region 5 levels have tunnels, so the rules are exercised")
+
+
+## The tunnel puzzle (RULES 12.3, 5-1: "Gate them out of it."): on every map with tunnels, some
+## placement of the level's gates that seals nothing gives every entrance a route that keeps out of
+## every tunnel, so a gate can always bring the walkers back into reach.
+func test_a_gate_placement_keeps_every_entrance_out_of_the_tunnels() -> void:
+	for id: String in order:
+		var level: LevelData = _level(id)
+		if level == null:
+			continue
+		var tiles: Array[Vector2i] = Rules.tunnel_tiles(level)
+		if tiles.is_empty():
+			continue
+		var map: RoadMap = RoadMap.new(level)
+		var sets: Array[Array] = []
+		Rules.gate_sets(level.sockets, level.gates, 0, [], sets)
+		var found: bool = false
+		for placed: Array in sets:
+			var closed: Array[Vector2i] = []
+			closed.assign(placed)
+			if map.seals(closed):
+				continue
+			var dist: PackedInt32Array = map.distances(closed)
+			var clear: bool = true
+			for entrance: Vector2i in level.entrances:
+				for cell: Vector2i in map.route(entrance, dist):
+					if tiles.has(cell):
+						clear = false
+			if clear:
+				found = true
+				break
+		assert_true(found, "%s: some placement of its %d gates keeps every entrance out of the tunnels" % [id, level.gates])
+
+
+## RULES 12.5: at most 6 Mistwisps and 6 Hootlings in a wave, counted as the 120 bound counts them,
+## with the level's Twist and without boss summons.
+func test_at_most_6_mistwisps_and_hootlings_a_wave() -> void:
+	var checked: int = 0
+	for id: String in order:
+		var level: LevelData = _level(id)
+		if level == null:
+			continue
+		for i: int in level.waves.size():
+			for capped: StringName in CAPPED_CREATURES:
+				var total: int = 0
+				for group: WaveGroup in level.waves[i].groups:
+					if group.enemy != capped:
+						continue
+					checked += 1
+					var count: int = group.count
+					for effect: Dictionary in level.twist_effects:
+						if effect["type"] != "count_pct" or bool(effect["flyers"]):
+							continue
+						if bool(effect["last_wave"]) and i != level.waves.size() - 1:
+							continue
+						count = ceili(count * int(effect["pct"]) / 100.0)
+					total += count
+				assert_true(total <= CAPPED_MOST, "%s wave %d brings %d %s with its Twist, at most %d" % [id, i + 1, total, capped, CAPPED_MOST])
+	assert_true(checked >= 1, "some level brings Mistwisps, so the cap is exercised")

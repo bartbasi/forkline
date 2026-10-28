@@ -59,11 +59,25 @@ static func towers() -> Array:
 	]
 
 
-## The real stat files with the four towers added.
+## The real stat files with the four towers added. A tower the real files already hold
+## (from E5.1 on) gives way to this file's copy, so these tests keep their own numbers.
 static func stats_files() -> Array:
 	var files: Array = Fx.stats_files()
-	(files[0]["towers"] as Array).append_array(towers())
+	files[0]["towers"] = replaced(files[0]["towers"], towers())
 	return files
+
+
+## `list` without the items whose ids `mine` holds, then `mine`.
+static func replaced(list: Array, mine: Array) -> Array:
+	var ids: Array = []
+	for item: Dictionary in mine:
+		ids.append(item["id"])
+	var out: Array = []
+	for item: Variant in list:
+		if not (item is Dictionary and ids.has((item as Dictionary).get("id", ""))):
+			out.append(item)
+	out.append_array(mine)
+	return out
 
 
 static func catalog() -> Catalog:

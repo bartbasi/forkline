@@ -2,10 +2,11 @@
 # Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.
 extends "res://tests/base_test.gd"
 ## The real run segments and wave packs in data/segments/ (docs/ARCHITECTURE.md 2.9, 2.12;
-## RULES 14.2, 14.3). Every file is listed, the files pass RunData.check, every stack of
-## segments that fit is a valid run map with a gate worth placing and a Bakery spot, every
-## bottom segment keeps its last row scenery, every choice of packs keeps the new creature rule,
-## and only boss waves set their own strength.
+## RULES 14.2, 14.3, 14.9). Every file is listed, the files pass RunData.check, every stack of
+## segments that fit, at every content tier, is a valid run map with a gate worth placing, a Bakery
+## spot and tunnels that keep RULES 3.6 across the seams, every bottom segment keeps its last row
+## scenery, features sit only in middle segments, every choice of packs at every tier keeps the new
+## creature rule and shows each tier creature as if new, and only boss waves set their own strength.
 
 const SEGMENT_DIR: String = "res://data/segments/"
 const RUN_PATH: String = "res://data/runs/run.json"
@@ -29,6 +30,18 @@ const BAKERY_NEIGHBORS: int = 3
 ## RULES 14.3 and docs/ARCHITECTURE.md 2.4, 2.9: a boss wave's own strength.
 const STRENGTH_MIN: int = 50
 const STRENGTH_MAX: int = 1000
+## RULES 12.5: at most 6 of each of these creatures in a pack wave, with any one risk card.
+const CAPPED_CREATURES: Array[String] = ["mistwisp", "hootling"]
+const CAPPED_MOST: int = 6
+## RULES 14.3: each content tier adds packs with its creatures in every band from the first band where a
+## pack can show them, plus two band 6 packs for its boss. Tier 1's creatures join bands 2 (Mossbud) and 4
+## (Mistwisp), but a band 2 pack already shows its three new creatures, one a wave, so no wave is left to
+## show a Mossbud as if new: tier 1 packs start in band 3. The level designer asked the DM about this.
+const TIER_FIRST_BAND: Dictionary = {1: 3}
+## RULES 14.2: which feature each map character belongs to.
+const FEATURE_KINDS: Dictionary = {"T": "tunnel", "X": "bridge", "^": "slide", "v": "slide", "<": "slide", ">": "slide", "P": "stump", "Q": "stump"}
+
+const Rules: GDScript = preload("res://tests/levels/fixtures/map_rules.gd")
 
 var catalog: Catalog = null
 var files: Dictionary = {}
@@ -88,15 +101,34 @@ static func _segment_files() -> Array[String]:
 	return out
 
 
-## Every stack MapAssembler can pick: [top, middle, bottom] segment ids.
-func _stacks() -> Array[Array]:
+## Every stack MapAssembler can pick at `tier`: [top, middle, bottom] segment ids. The highest tier
+## holds every stack of the tiers below it, so "every stack at every tier" is every stack at the top.
+func _stacks(tier: int = -1) -> Array[Array]:
 	var out: Array[Array] = []
 	if data == null:
 		return out
-	for top: Dictionary in data.segments_of(&"top"):
-		for middle: Dictionary in data.segments_under(top["id"]):
-			for bottom: Dictionary in data.segments_under(middle["id"]):
+	var at: int = _top_tier() if tier < 0 else tier
+	for top: Dictionary in data.segments_of(&"top", at):
+		for middle: Dictionary in data.segments_under(top["id"], at):
+			for bottom: Dictionary in data.segments_under(middle["id"], at):
 				out.append([top["id"], middle["id"], bottom["id"]])
+	return out
+
+
+## The highest content tier run.json holds (docs/ARCHITECTURE.md 14.8).
+func _top_tier() -> int:
+	return 0 if data == null else data.tiers.size()
+
+
+## The content tier of each creature and boss that a tier lists; anything else is tier 0 (RULES 14.9).
+func _creature_tiers() -> Dictionary:
+	var out: Dictionary = {}
+	if data == null:
+		return out
+	for t: int in data.tiers.size():
+		for key: String in ["creatures", "bosses"]:
+			for id: Variant in (data.tiers[t] as Dictionary)[key]:
+				out[String(id)] = t + 1
 	return out
 
 
@@ -263,18 +295,19 @@ func test_every_stack_has_a_bakery_spot() -> void:
 		assert_true(best >= BAKERY_NEIGHBORS, "%s / %s / %s: the best Bakery spot reaches %d spots, needs %d" % [stack[0], stack[1], stack[2], best, BAKERY_NEIGHBORS])
 
 
-## Every assembled run builds, as the roguelite engineer's test also checks, and its waves
-## reach only entrances the map has.
+## Every assembled run builds at every tier, as the roguelite engineer's test also checks, and its
+## waves reach only entrances the map has.
 func test_runs_from_seeds_assemble() -> void:
 	if data == null:
 		fail("the run files do not load")
 		return
-	for run_seed: int in SEEDS:
-		var level: LevelData = MapAssembler.assemble(run_seed, data, catalog)
-		assert_not_null(level, "seed %d" % run_seed)
-		if level == null:
-			continue
-		assert_eq(level.waves.size(), RunData.BANDS * 3, "seed %d: 18 waves" % run_seed)
+	for tier: int in _top_tier() + 1:
+		for run_seed: int in SEEDS:
+			var level: LevelData = MapAssembler.assemble(run_seed, data, catalog, tier)
+			assert_not_null(level, "tier %d seed %d" % [tier, run_seed])
+			if level == null:
+				continue
+			assert_eq(level.waves.size(), RunData.BANDS * 3, "tier %d seed %d: 18 waves" % [tier, run_seed])
 
 
 # Packs
@@ -283,39 +316,51 @@ func test_runs_from_seeds_assemble() -> void:
 ## every pack), reading waves 1 to 18 in order, a creature the run has not shown yet comes in
 ## the wave's first group, no group of that wave starts before it, and no wave brings two.
 ## The creatures shown so far are all that a later band depends on, so equal sets are walked once.
+## Since A12 at every content tier (14.13): a creature of tiers 1 to 4 also counts as new in the first
+## wave of each pack that has it (RULES 14.3), and no wave shows two creatures as new, counting both kinds.
 func test_every_choice_of_packs_keeps_the_new_creature_rule() -> void:
 	if data == null:
 		fail("the run files do not load")
 		return
-	var states: Dictionary = {"": []}
+	var tiered: Dictionary = _creature_tiers()
 	var walked: int = 0
-	for band: int in range(1, RunData.BANDS + 1):
-		var next: Dictionary = {}
-		var packs: Array[Dictionary] = data.packs_of(band)
-		assert_true(packs.size() >= 4, "band %d has at least 4 packs" % band)
-		for key: String in states:
-			var shown_before: Array = states[key]
-			for pack: Dictionary in packs:
-				walked += 1
-				var shown: Array = shown_before.duplicate()
-				var waves: Array = pack["waves"]
-				for w: int in waves.size():
-					var label: String = "%s wave %d after [%s]" % [pack["id"], w + 1, key]
-					_check_new_creatures((waves[w] as Dictionary)["groups"], shown, label)
-				shown.sort()
-				next[",".join(PackedStringArray(shown))] = shown
-		states = next
+	for tier: int in _top_tier() + 1:
+		var states: Dictionary = {"": []}
+		for band: int in range(1, RunData.BANDS + 1):
+			var next: Dictionary = {}
+			var packs: Array[Dictionary] = data.packs_of(band, &"", tier)
+			assert_true(packs.size() >= 4, "tier %d band %d has at least 4 packs" % [tier, band])
+			for key: String in states:
+				var shown_before: Array = states[key]
+				for pack: Dictionary in packs:
+					walked += 1
+					var shown: Array = shown_before.duplicate()
+					var in_pack: Array = []
+					var waves: Array = pack["waves"]
+					for w: int in waves.size():
+						var label: String = "tier %d: %s wave %d after [%s]" % [tier, pack["id"], w + 1, key]
+						_check_new_creatures((waves[w] as Dictionary)["groups"], shown, label, tiered, in_pack)
+					shown.sort()
+					next[",".join(PackedStringArray(shown))] = shown
+			states = next
 	assert_true(walked > 0, "some packs were walked")
 
 
-## Checks one wave against the creatures shown so far, then adds its creatures to them.
-func _check_new_creatures(groups: Array, shown: Array, label: String) -> void:
+## Checks one wave against the creatures shown so far, then adds its creatures to them. `in_pack`
+## holds the tier creatures this pack has shown already: a tier creature counts as new in the first
+## wave of its pack that has it (RULES 14.3).
+func _check_new_creatures(groups: Array, shown: Array, label: String, tiered: Dictionary, in_pack: Array) -> void:
 	var fresh: Array[String] = []
 	for raw: Variant in groups:
 		var enemy: String = String((raw as Dictionary)["enemy"])
-		if not shown.has(enemy) and not fresh.has(enemy):
+		var as_new: bool = not shown.has(enemy) or (tiered.has(enemy) and not in_pack.has(enemy))
+		if as_new and not fresh.has(enemy):
 			fresh.append(enemy)
-	assert_true(fresh.size() <= 1, "%s: brings two new creatures %s" % [label, fresh])
+	for raw: Variant in groups:
+		var enemy: String = String((raw as Dictionary)["enemy"])
+		if tiered.has(enemy) and not in_pack.has(enemy):
+			in_pack.append(enemy)
+	assert_true(fresh.size() <= 1, "%s: shows two creatures as new %s" % [label, fresh])
 	if fresh.size() == 1:
 		var first: Dictionary = groups[0]
 		assert_eq(String(first["enemy"]), fresh[0], "%s: the new %s comes in the first group" % [label, fresh[0]])
@@ -327,12 +372,14 @@ func _check_new_creatures(groups: Array, shown: Array, label: String) -> void:
 			shown.append(enemy)
 
 
-## The simple way the rule is kept (2.9): every band's pack shows every creature its band adds,
-## so any pack can follow any other.
+## The simple way the rule is kept (2.9): every band's pack shows every tier 0 creature its band adds,
+## so any pack can follow any other. A tier creature (14.9) is shown as if new in each pack that uses
+## it instead, so a pack need not use it.
 func test_every_pack_shows_every_creature_its_band_adds() -> void:
 	if data == null:
 		fail("the run files do not load")
 		return
+	var tiered: Dictionary = _creature_tiers()
 	for pack: Dictionary in data.packs:
 		var band: int = pack["band"]
 		var seen: Array[String] = []
@@ -340,6 +387,8 @@ func test_every_pack_shows_every_creature_its_band_adds() -> void:
 			for group: Variant in (wave as Dictionary)["groups"]:
 				seen.append(String((group as Dictionary)["enemy"]))
 		for creature: StringName in data.bands[band - 1]:
+			if tiered.has(String(creature)):
+				continue
 			assert_true(seen.has(String(creature)), "%s shows %s" % [pack["id"], creature])
 
 
@@ -385,40 +434,232 @@ func test_only_boss_waves_set_a_strength() -> void:
 
 
 ## Every assembled run's wave 18 takes its band 6 pack's boss wave strength, and waves 1 to 17
-## rise by run.json's step.
+## rise by run.json's step, at every tier.
 func test_runs_take_the_boss_wave_strength_from_their_pack() -> void:
 	if data == null:
 		fail("the run files do not load")
 		return
-	for run_seed: int in SEEDS:
-		var plan: Dictionary = MapAssembler.plan(run_seed, data)
-		var level: LevelData = MapAssembler.assemble(run_seed, data, catalog)
-		if level == null or plan.is_empty():
-			fail("seed %d does not assemble" % run_seed)
-			continue
-		var boss_pack: StringName = (plan["packs"] as Array)[RunData.BANDS - 1]
-		var wanted: int = -1
-		for pack: Dictionary in data.packs_of(RunData.BANDS):
-			if pack["id"] == boss_pack:
-				wanted = int(((pack["waves"] as Array)[2] as Dictionary).get("strength", -1))
-		var last: int = level.waves.size() - 1
-		assert_eq(level.waves[last].strength, wanted, "seed %d: wave 18 has %s's boss wave strength" % [run_seed, boss_pack])
-		for w: int in last:
-			assert_eq(level.waves[w].strength, data.strength_start + data.strength_step * w, "seed %d wave %d strength" % [run_seed, w + 1])
+	for tier: int in _top_tier() + 1:
+		for run_seed: int in SEEDS:
+			var plan: Dictionary = MapAssembler.plan(run_seed, data, tier)
+			var level: LevelData = MapAssembler.assemble(run_seed, data, catalog, tier)
+			if level == null or plan.is_empty():
+				fail("tier %d seed %d does not assemble" % [tier, run_seed])
+				continue
+			var boss_pack: StringName = (plan["packs"] as Array)[RunData.BANDS - 1]
+			var wanted: int = -1
+			for pack: Dictionary in data.packs_of(RunData.BANDS, &"", tier):
+				if pack["id"] == boss_pack:
+					wanted = int(((pack["waves"] as Array)[2] as Dictionary).get("strength", -1))
+			var last: int = level.waves.size() - 1
+			assert_eq(level.waves[last].strength, wanted, "tier %d seed %d: wave 18 has %s's boss wave strength" % [tier, run_seed, boss_pack])
+			for w: int in last:
+				assert_eq(level.waves[w].strength, data.strength_start + data.strength_step * w, "tier %d seed %d wave %d strength" % [tier, run_seed, w + 1])
 
 
 ## RULES 14.3: the boss comes alone at the start of the third wave of its pack, and each boss
-## has more than one pack so its runs differ.
+## has more than one pack so its runs differ. A boss of a content tier has its packs at that tier
+## (docs/ARCHITECTURE.md 14.13: 2 band 6 packs for each boss whose tier's level is in campaign.json).
 func test_each_boss_has_two_packs_and_leads_its_wave() -> void:
 	if data == null:
 		fail("the run files do not load")
 		return
+	var tiered: Dictionary = _creature_tiers()
+	var campaign: PackedStringArray = _campaign_levels()
+	for t: int in data.tiers.size():
+		var level: String = String((data.tiers[t] as Dictionary)["level"])
+		assert_true(campaign.has(level), "tier %d's level %s is in campaign.json" % [t + 1, level])
 	for boss: StringName in catalog.enemy_ids():
 		var type: EnemyType = catalog.enemy(boss)
 		if not type.boss:
 			continue
-		var packs: Array[Dictionary] = data.packs_of(RunData.BANDS, boss)
+		var packs: Array[Dictionary] = data.packs_of(RunData.BANDS, boss, int(tiered.get(String(boss), 0)))
 		assert_true(packs.size() >= 2, "%s has at least 2 band 6 packs" % boss)
 		for pack: Dictionary in packs:
 			var groups: Array = ((pack["waves"] as Array)[2] as Dictionary)["groups"]
 			assert_eq(StringName(String((groups[0] as Dictionary)["enemy"])), boss, "%s: the boss leads wave 3" % pack["id"])
+
+
+## Level ids of campaign.json, in play order.
+static func _campaign_levels() -> PackedStringArray:
+	var out: PackedStringArray = PackedStringArray()
+	var raw: Variant = _read("res://data/levels/campaign.json", 16 * 1024)
+	if typeof(raw) != TYPE_DICTIONARY or typeof((raw as Dictionary).get("regions", null)) != TYPE_ARRAY:
+		return out
+	for region: Variant in (raw as Dictionary)["regions"]:
+		if typeof(region) == TYPE_DICTIONARY and typeof((region as Dictionary).get("levels", null)) == TYPE_ARRAY:
+			for id: Variant in (region as Dictionary)["levels"]:
+				out.append(str(id))
+	return out
+
+
+# Map features (RULES 3.5, 3.6, 14.2)
+
+## RULES 14.2 and docs/ARCHITECTURE.md 14.13: features only in middle segments, never in their top or
+## bottom row, and at most one feature a segment: one tunnel run, one bridge, one slide run or one pair
+## of stumps.
+func test_features_only_in_the_middle_rows_of_middle_segments() -> void:
+	if data == null:
+		fail("the run files do not load")
+		return
+	var with_features: int = 0
+	for id: String in _listed():
+		var segment: Dictionary = data.segment(StringName(id))
+		var grid: PackedStringArray = segment["grid"]
+		var cells: Array[Vector2i] = []
+		var kinds: Dictionary = {}
+		var chars: Dictionary = {}
+		for r: int in grid.size():
+			for c: int in grid[r].length():
+				var ch: String = grid[r][c]
+				if FEATURE_KINDS.has(ch):
+					cells.append(Vector2i(c, r))
+					kinds[FEATURE_KINDS[ch]] = true
+					chars[ch] = true
+					assert_true(r > 0 and r < grid.size() - 1, "%s: the feature at %s is in a middle row" % [id, Vector2i(c, r)])
+		if cells.is_empty():
+			continue
+		with_features += 1
+		assert_eq(segment["kind"], &"middle", "%s: only middle segments hold features" % id)
+		assert_eq(kinds.size(), 1, "%s holds one kind of feature, got %s" % [id, kinds.keys()])
+		if kinds.has("tunnel") or kinds.has("slide"):
+			assert_true(_connected(cells), "%s: its tunnel or slide is one run" % id)
+		if kinds.has("bridge"):
+			assert_eq(cells.size(), 1, "%s holds one bridge" % id)
+		if kinds.has("stump"):
+			assert_eq(chars.size(), 1, "%s holds one pair of stumps" % id)
+	assert_true(with_features >= 2, "some middle segments hold features, so the rule is exercised")
+
+
+## True when the cells are joined north, south, east or west into one group.
+static func _connected(cells: Array[Vector2i]) -> bool:
+	var reached: Array[Vector2i] = [cells[0]]
+	var todo: Array[Vector2i] = [cells[0]]
+	while not todo.is_empty():
+		var cell: Vector2i = todo.pop_back()
+		for side: Vector2i in Rules.SIDES:
+			var next: Vector2i = cell + side
+			if cells.has(next) and not reached.has(next):
+				reached.append(next)
+				todo.append(next)
+	return reached.size() == cells.size()
+
+
+## RULES 3.6 and 14.2 on every stack at every tier: tunnels are straight runs of 1 to 4 tiles with no fork
+## or bend, at most 6 tiles a map, never next to a socket (across the seams between segments too), and at
+## most a quarter of any entrance's shortest route with no gates.
+func test_every_stack_keeps_the_tunnel_rules() -> void:
+	var tunnelled: int = 0
+	for stack: Array in _stacks():
+		var level: LevelData = _build(stack)
+		if level == null:
+			fail("%s / %s / %s does not build" % stack)
+			continue
+		if not Rules.tunnel_tiles(level).is_empty():
+			tunnelled += 1
+		var found: PackedStringArray = Rules.tunnel_problems(level)
+		assert_eq(found, PackedStringArray(), "%s / %s / %s: %s" % [stack[0], stack[1], stack[2], "; ".join(found)])
+	assert_true(tunnelled >= 1, "some stack has a tunnel, so the rules are exercised")
+
+
+## RULES 14.9: a tier 0 run never meets a feature, so the run maps of regions 1 to 4 stay as they were.
+func test_tier_zero_stacks_hold_no_features() -> void:
+	for stack: Array in _stacks(0):
+		var level: LevelData = _build(stack)
+		if level == null:
+			continue
+		assert_eq(Rules.feature_chars(level.grid), "", "%s / %s / %s is a tier 0 stack" % stack)
+
+
+# Packs by tier (RULES 14.3, 14.9)
+
+## RULES 14.3: every pack shows each tier 1 to 4 creature it uses as if it were new: in the first group
+## of the first wave of the pack that has it, with no group of that wave starting before it, and at most
+## one such creature a wave. Bosses count, since a tier lists them too.
+func test_every_pack_shows_its_tier_creatures_as_if_new() -> void:
+	if data == null:
+		fail("the run files do not load")
+		return
+	var tiered: Dictionary = _creature_tiers()
+	var checked: int = 0
+	for pack: Dictionary in data.packs:
+		var met: Array[String] = []
+		var waves: Array = pack["waves"]
+		for w: int in waves.size():
+			var groups: Array = (waves[w] as Dictionary)["groups"]
+			var first_here: Array[String] = []
+			for raw: Variant in groups:
+				var enemy: String = String((raw as Dictionary)["enemy"])
+				if tiered.has(enemy) and not met.has(enemy) and not first_here.has(enemy):
+					first_here.append(enemy)
+			assert_true(first_here.size() <= 1, "%s wave %d shows two tier creatures as new %s" % [pack["id"], w + 1, first_here])
+			if first_here.is_empty():
+				continue
+			checked += 1
+			var first: Dictionary = groups[0]
+			assert_eq(String(first["enemy"]), first_here[0], "%s wave %d: %s comes in the first group" % [pack["id"], w + 1, first_here[0]])
+			for raw: Variant in groups:
+				assert_true(int((raw as Dictionary)["at_ms"]) >= int(first["at_ms"]), "%s wave %d: no group starts before %s" % [pack["id"], w + 1, first_here[0]])
+			met.append_array(first_here)
+	assert_true(checked >= 1, "some pack uses a tier creature, so the rule is exercised")
+
+
+## RULES 14.3: each content tier adds packs that use its creatures in every band from the first band
+## where a pack can show them (TIER_FIRST_BAND) to band 5, and each of its creatures is in some pack.
+func test_each_tier_adds_packs_in_its_bands() -> void:
+	if data == null:
+		fail("the run files do not load")
+		return
+	for t: int in data.tiers.size():
+		var tier: int = t + 1
+		assert_true(TIER_FIRST_BAND.has(tier), "tier %d has a planned first band" % tier)
+		var used: Dictionary = {}
+		for band: int in range(1, RunData.BANDS + 1):
+			var count: int = 0
+			for pack: Dictionary in data.packs_of(band, &"", tier):
+				if int(pack["tier"]) != tier:
+					continue
+				count += 1
+				for wave: Variant in pack["waves"]:
+					for group: Variant in (wave as Dictionary)["groups"]:
+						used[String((group as Dictionary)["enemy"])] = true
+			if band >= int(TIER_FIRST_BAND.get(tier, 1)) and band < RunData.BANDS:
+				assert_true(count >= 1, "tier %d has a pack in band %d" % [tier, band])
+		for creature: Variant in (data.tiers[t] as Dictionary)["creatures"]:
+			assert_true(used.has(String(creature)), "tier %d's %s is in some pack" % [tier, creature])
+
+
+## RULES 12.5: at most 6 Mistwisps and 6 Hootlings in a pack wave, counted as the 120 bound counts them:
+## with no risk card and with each risk card in turn (the boss wave never gets one), boss summons not counted.
+func test_at_most_6_mistwisps_and_hootlings_a_pack_wave() -> void:
+	if data == null:
+		fail("the run files do not load")
+		return
+	var risks: Array[Array] = [[]]
+	for id: StringName in data.card_ids(_top_tier()):
+		var card: Dictionary = data.card(id)
+		if card["kind"] == &"risk":
+			risks.append(card["effects"])
+	var checked: int = 0
+	for pack: Dictionary in data.packs:
+		var waves: Array = pack["waves"]
+		for w: int in waves.size():
+			var boss_wave: bool = int(pack["band"]) == RunData.BANDS and w == waves.size() - 1
+			var groups: Array = (waves[w] as Dictionary)["groups"]
+			for effects_raw: Array in risks:
+				if boss_wave and not effects_raw.is_empty():
+					continue
+				var effects: Array[Dictionary] = []
+				effects.assign(effects_raw)
+				for capped: String in CAPPED_CREATURES:
+					var total: int = 0
+					for raw: Variant in groups:
+						var group: Dictionary = raw
+						if String(group["enemy"]) == capped:
+							checked += 1
+							total += Modifiers.group_count(effects, int(group["count"]), false, false)
+					for effect: Dictionary in effects:
+						if effect["type"] == "add_group" and String(effect["enemy"]) == capped:
+							total += int(effect["count"])
+					assert_true(total <= CAPPED_MOST, "%s wave %d brings %d %s with %s, at most %d" % [pack["id"], w + 1, total, capped, effects, CAPPED_MOST])
+	assert_true(checked >= 1, "some pack brings Mistwisps, so the cap is exercised")

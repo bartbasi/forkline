@@ -29,6 +29,10 @@ static func catalog(mutate: Callable = Callable()) -> Catalog:
 	var towers: Dictionary = Fx.read(Fx.STATS_DIR + "towers.json")
 	var enemies: Dictionary = Fx.read(Fx.STATS_DIR + "enemies.json")
 	var rules: Dictionary = Fx.read(Fx.STATS_DIR + "rules.json")
+	# The stand-ins take the place of real entries with the same ids (the real data has them from E5.1 on).
+	var stand_ins: Array = [TIER_1_TOWER, TIER_2_TOWER, "mossbud", "mistwisp", "gleamer", "burrowbelly", "old_hayrick"]
+	towers["towers"] = (towers["towers"] as Array).filter(func(item: Dictionary) -> bool: return not stand_ins.has(item["id"]))
+	enemies["enemies"] = (enemies["enemies"] as Array).filter(func(item: Dictionary) -> bool: return not stand_ins.has(item["id"]))
 	var sling: Dictionary = {}
 	for item: Dictionary in towers["towers"]:
 		if item["id"] == "sling_post":

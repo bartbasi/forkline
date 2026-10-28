@@ -78,5 +78,19 @@
       "cost": 240, "reach": 150, "boost_pct": 40, "boost_damage": 0},
      {"id": "spice_kitchen", "name": "Spice Kitchen", "info": "Faster towers that also hit 2 harder.",
       "cost": 240, "reach": 150, "boost_pct": 25, "boost_damage": 2}
+   ]},
+  {"id": "bramble_cottage", "name": "Bramble Cottage", "plural": "Bramble Cottages",
+   "info": "Thorns scratch every walker in its ring each second. Armor blunts them.",
+   "kind": "attack",
+   "tiers": [
+     {"cost": 120, "reach": 150, "hits": "ground", "damage": 4, "reload_ms": 1000, "pulse": true},
+     {"cost": 130, "reach": 150, "hits": "ground", "damage": 7, "reload_ms": 1000, "pulse": true}
+   ],
+   "specs": [
+     {"id": "wild_bramble", "name": "Wild Bramble", "info": "A wider ring of thorns.",
+      "cost": 230, "reach": 200, "hits": "ground", "damage": 10, "reload_ms": 1000, "pulse": true},
+     {"id": "holly_crown", "name": "Holly Crown", "info": "Sharp holly that ignores armor.",
+      "cost": 230, "reach": 150, "hits": "ground", "damage": 12, "reload_ms": 1000, "pulse": true,
+      "pierce": true}
    ]}
 ]}

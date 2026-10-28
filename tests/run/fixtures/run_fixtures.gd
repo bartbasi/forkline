@@ -33,8 +33,19 @@ static func read(path: String) -> Variant:
 	return got["data"]
 
 
+## The real stats of regions 1 to 4, which these hand-made cards and packs cover. The real files
+## hold regions 5 to 8 too from E5.1 on, and a run with no tiers has none of them.
 static func catalog() -> Catalog:
-	return Catalog.from_data(read(STATS_DIR + "towers.json"), read(STATS_DIR + "enemies.json"), read(STATS_DIR + "rules.json"))
+	var regions_1_to_4: Array = [
+		"sling_post", "pumpkin_catapult", "lullaby_bell", "longbow_loft", "firework_tower", "bakery",
+		"scamp", "pip", "skitter", "flitter", "shellback", "bubbler", "puffball", "puff", "mender",
+		"gatecrasher", "dusk_moth", "grumblesack", "ironshell", "moon_moth", "old_tusk",
+	]
+	var towers: Dictionary = read(STATS_DIR + "towers.json")
+	var enemies: Dictionary = read(STATS_DIR + "enemies.json")
+	towers["towers"] = (towers["towers"] as Array).filter(func(item: Dictionary) -> bool: return regions_1_to_4.has(item["id"]))
+	enemies["enemies"] = (enemies["enemies"] as Array).filter(func(item: Dictionary) -> bool: return regions_1_to_4.has(item["id"]))
+	return Catalog.from_data(towers, enemies, read(STATS_DIR + "rules.json"))
 
 
 ## The same shape as data/runs/run.json (2.10), written out so a tuning change to the

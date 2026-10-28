@@ -7,6 +7,7 @@ extends "res://tests/base_test.gd"
 
 const Fx: GDScript = preload("res://tests/run/fixtures/run_fixtures.gd")
 const Player: GDScript = preload("res://tests/run/fixtures/run_player.gd")
+const Golden: GDScript = preload("res://tests/run/fixtures/run_golden.gd")
 
 const DAY: String = "2026-10-23"
 const DAY_SEED: int = 20261023
@@ -371,6 +372,7 @@ func test_real_data_saves_load_and_play_on_the_same() -> void:
 		var got: Dictionary = JsonFile.read("res://data/" + rel, 16384)
 		assert_eq(got["status"], JsonFile.OK_STATUS, rel)
 		files[rel] = got["data"]
+	catalog = Golden.catalog()  # the real stats, which the real run.json (tier 1 and all) names
 	_data = RunData.from_data(files, catalog)
 	assert_not_null(_data)
 	if _data == null:
@@ -397,6 +399,7 @@ func test_a_saved_run_with_a_changed_unlockable_perk_loads_and_a_changed_number_
 	for id: Variant in files["segments/index.json"]["segments"]:
 		var rel: String = "segments/%s.json" % id
 		files[rel] = JsonFile.read("res://data/" + rel, 16384)["data"]
+	catalog = Golden.catalog()  # the real stats, which the real run.json (tier 1 and all) names
 	_data = RunData.from_data(files, catalog)
 	assert_not_null(_data)
 	if _data == null:

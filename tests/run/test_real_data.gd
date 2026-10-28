@@ -1,11 +1,14 @@
 # Forkline. Copyright 2026 Play, Inc.
 # Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.
 extends "res://tests/base_test.gd"
-## The real data/runs/run.json and data/cards/cards.json (docs/ARCHITECTURE.md 2.10, 2.11).
-## The real segments and packs come from the level designer. Most tests here use the fixture
-## segments and packs; the last ones use the real files.
+## The real data/runs/run.json and data/cards/cards.json (docs/ARCHITECTURE.md 2.10, 2.11, 14.8),
+## against the real stats. The real segments and packs come from the level designer. Most tests
+## here pair the real plan and cards with fixture segments and packs: the regions 1 to 4 fixtures
+## plus the tier 1 stand-ins of tier_fixtures.gd. The last ones use the real files.
 
 const Fx: GDScript = preload("res://tests/run/fixtures/run_fixtures.gd")
+const Tx: GDScript = preload("res://tests/run/fixtures/tier_fixtures.gd")
+const Golden: GDScript = preload("res://tests/run/fixtures/run_golden.gd")
 const RUN_PATH: String = "res://data/runs/run.json"
 const CARDS_PATH: String = "res://data/cards/cards.json"
 const SEGMENT_DIR: String = "res://data/segments/"
@@ -49,11 +52,14 @@ const CARDS: Array = [
 	["pip_parade", "risk", "", false, "stars", 72],
 ]
 
+## The tier 1 cards of E5.1 (the tower card and the base perk of Bramble Cottage).
+const TIER_1_CARDS: Array = ["tower_bramble_cottage", "thorn_tips"]
+
 var catalog: Catalog = null
 
 
 func before_each() -> void:
-	catalog = Fx.catalog()
+	catalog = Golden.catalog()
 
 
 func _read(path: String, cap: int) -> Variant:
@@ -62,11 +68,27 @@ func _read(path: String, cap: int) -> Variant:
 	return got["data"]
 
 
-## The real run plan and cards, with the fixture segments and packs.
+## The real run plan and cards, with fixture segments and packs: the regions 1 to 4 fixtures
+## and the tier 1 stand-ins (a tunnel segment, a Mossbud pack, a Burrowbelly pack). The tier 2
+## stand-ins are left out, because the real run.json lists tier 1 only.
 func _files() -> Dictionary:
-	var files: Dictionary = Fx.files_from_json()
+	var files: Dictionary = Tx.files()
+	files.erase("segments/mid_bridge.json")
+	(files["segments/index.json"]["segments"] as Array).erase("mid_bridge")
+	var packs: Array = files["segments/packs.json"]["packs"]
+	for pack: Variant in packs.duplicate():
+		if ["band3_gleamer", "band6_hayrick"].has((pack as Dictionary)["id"]):
+			packs.erase(pack)
 	files["runs/run.json"] = _read(RUN_PATH, 16384)
 	files["cards/cards.json"] = _read(CARDS_PATH, 262144)
+	return files
+
+
+## _files() with the fixture build spot range, because the fixture segments have fewer than the
+## 11 or 12 build spots the real run.json asks of a map. For tests that assemble maps.
+func _playable_files() -> Dictionary:
+	var files: Dictionary = _files()
+	files["runs/run.json"]["spots"] = [8, 12]
 	return files
 
 
@@ -86,9 +108,9 @@ func test_the_real_run_plan_is_the_one_in_the_contract() -> void:
 	assert_eq(data.rows, {"top": 4, "middle": 5, "bottom": 4})
 	assert_eq([data.spots_min, data.spots_max, data.sockets_min, data.sockets_max], [11, 12, 2, 5])
 	assert_eq(data.bands[0], [&"scamp", &"pip"])
-	assert_eq(data.bands[1], [&"skitter", &"flitter", &"shellback"])
+	assert_eq(data.bands[1], [&"skitter", &"flitter", &"shellback", &"mossbud"])
 	assert_eq(data.bands[2], [&"bubbler", &"puffball"])
-	assert_eq(data.bands[3], [&"mender", &"dusk_moth"])
+	assert_eq(data.bands[3], [&"mender", &"dusk_moth", &"mistwisp"])
 	assert_eq(data.bands[4], [&"gatecrasher"])
 	assert_eq(data.bands[5].size(), 0)
 	assert_eq([data.weights[&"tower"], data.weights[&"perk"], data.weights[&"gate"], data.weights[&"economy"], data.weights[&"risk"]], [30, 25, 10, 20, 15])
@@ -101,7 +123,7 @@ func test_wave_17_has_strength_260() -> void:
 
 func test_the_real_cards_are_the_34_of_the_contract_in_order() -> void:
 	var data: RunData = RunData.from_data(_files(), catalog)
-	assert_eq(data.cards.size(), CARDS.size())
+	assert_eq(data.cards.size(), CARDS.size() + TIER_1_CARDS.size(), "the 34 of tier 0 and the 2 of tier 1")
 	var ids: Array[StringName] = data.card_ids()
 	for i: int in CARDS.size():
 		var want: Array = CARDS[i]
@@ -128,6 +150,57 @@ func test_the_base_pool_is_the_22_base_cards() -> void:
 		&"risky_wins": 1, &"stars": 72, &"twists_cleared": 1,
 	}
 	assert_eq(data.pool(every), data.card_ids())
+
+
+func test_tier_1_adds_the_bramble_cottage_card_and_perk() -> void:
+	var data: RunData = RunData.from_data(_files(), catalog)
+	assert_eq(data.card_ids(1).size(), 36)
+	assert_eq(data.card_ids(0).size(), 34, "tier 0 keeps its 34")
+	assert_eq(data.pool({}, 1).size(), 24)
+	assert_eq(data.pool({}, 0).size(), 22, "tier 0 keeps its 22")
+	for id: StringName in TIER_1_CARDS:
+		assert_eq(data.card(id)["tier"], 1, "%s is tier 1" % id)
+		assert_false(data.card_ids(0).has(id), "%s is not in the tier 0 daily" % id)
+		assert_false(data.pool({}, 0).has(id), "%s is not in the tier 0 pool" % id)
+		assert_true(data.pool({}, 1).has(id), "%s is in the tier 1 base pool" % id)
+	var tower_card: Dictionary = data.card(&"tower_bramble_cottage")
+	assert_eq(tower_card["kind"], &"tower")
+	assert_eq(tower_card["tower"], &"bramble_cottage")
+	assert_eq(tower_card["name"], "Bramble Cottage")
+	assert_eq(tower_card["text"], "You can build Bramble Cottages for the rest of the run.")
+	assert_true(tower_card["once"])
+	assert_eq(tower_card["unlock"], {})
+	assert_eq(tower_card["effects"].size(), 1)
+	assert_eq(tower_card["effects"][0]["type"], "add_tower")
+	var perk: Dictionary = data.card(&"thorn_tips")
+	assert_eq(perk["kind"], &"perk")
+	assert_eq(perk["tower"], &"bramble_cottage")
+	assert_eq(perk["name"], "Thorn Tips")
+	assert_eq(perk["text"], "Bramble Cottages deal 2 more damage per hit.")
+	assert_true(perk["once"])
+	assert_eq(perk["unlock"], {}, "a base perk")
+	assert_eq(perk["effects"].size(), 1)
+	assert_eq([perk["effects"][0]["type"], perk["effects"][0]["stat"], perk["effects"][0]["amount"]], ["tower_add", "damage", 2])
+	var ids: Array[StringName] = data.card_ids(1)
+	assert_eq(ids.find(&"tower_bramble_cottage"), 5, "after the five tower cards")
+	assert_eq(ids.find(&"thorn_tips"), 12, "after the six base perks")
+
+
+func test_the_real_tier_1_in_run_json() -> void:
+	var data: RunData = RunData.from_data(_files(), catalog)
+	assert_eq(data.tiers.size(), 1)
+	assert_eq(data.tiers[0]["level"], &"r5_l6")
+	assert_eq(data.tiers[0]["towers"], [&"bramble_cottage"])
+	assert_eq(data.tiers[0]["creatures"], [&"mossbud", &"mistwisp"])
+	assert_eq(data.tiers[0]["bosses"], [&"burrowbelly"])
+	assert_eq(data.tiers[0]["grid"], "T")
+	assert_true(data.bands[1].has(&"mossbud"), "band 2 gains Mossbud (RULES 14.3)")
+	assert_true(data.bands[3].has(&"mistwisp"), "band 4 gains Mistwisp")
+	for b: int in [0, 2, 4, 5]:
+		assert_false(data.bands[b].has(&"mossbud") or data.bands[b].has(&"mistwisp"), "band %d adds no tier 1 creature" % (b + 1))
+	assert_eq(data.boss_ids(0).size(), 4)
+	assert_eq(data.boss_ids(1).size(), 5)
+	assert_true(data.boss_ids(1).has(&"burrowbelly"))
 
 
 func test_each_unlock_opens_at_its_number_and_not_before() -> void:
@@ -203,9 +276,10 @@ func test_the_run_tuning_cards_are_as_set_in_g3() -> void:
 
 
 func test_every_real_card_is_accepted_by_a_battle() -> void:
-	var data: RunData = RunData.from_data(_files(), catalog)
-	var level: LevelData = MapAssembler.assemble(1, Fx.run_data(), catalog)
-	for id: StringName in data.card_ids():
+	var data: RunData = RunData.from_data(_playable_files(), catalog)
+	var level: LevelData = MapAssembler.assemble(1, data, catalog)
+	assert_not_null(level)
+	for id: StringName in data.card_ids(1):
 		var card: Dictionary = data.card(id)
 		var battle: Battle = Battle.create(level, catalog, false, [])
 		var effects: Array[Dictionary] = card["effects"]
@@ -288,7 +362,10 @@ func test_the_real_boss_waves_set_the_strengths_of_g3() -> void:
 	for pack: Dictionary in data.packs:
 		for k: int in 3:
 			var wave: Dictionary = pack["waves"][k]
-			if pack["band"] == 6 and k == 2:
+			if pack["band"] == 6 and k == 2 and pack["tier"] > 0:
+				# The level designer tunes the bosses of regions 5 to 8 (RULES 14.3).
+				assert_true(wave.has("strength"), "boss wave of %s sets a strength" % pack["id"])
+			elif pack["band"] == 6 and k == 2:
 				assert_eq(wave["strength"], want.get(pack["id"], -1), "boss wave of %s" % pack["id"])
 				seen += 1
 			else:
@@ -311,3 +388,24 @@ func test_a_real_runs_wave_18_takes_its_packs_strength() -> void:
 				pack = item
 		assert_eq(level.waves[17].strength, pack["waves"][2]["strength"], "seed %d" % run_seed)
 		assert_eq(level.waves[16].strength, 260, "wave 17 keeps the step")
+
+
+## A tier 1 run with the real plan and cards (and tier 1 stand-in segments and packs) starts from
+## the tier 1 pool, and its tier is saved.
+func test_a_tier_1_run_starts_from_the_tier_1_pool() -> void:
+	var data: RunData = RunData.from_data(_playable_files(), catalog)
+	assert_not_null(data)
+	if data == null:
+		return
+	var pool: Array[StringName] = data.pool({}, 1)
+	assert_true(pool.has(&"tower_bramble_cottage") and pool.has(&"thorn_tips"))
+	for run_seed: int in range(1, 41):
+		var s: RunSession = RunSession.start(run_seed, "", false, pool, data, catalog, 1)
+		assert_not_null(s, "seed %d at tier 1" % run_seed)
+		if s == null:
+			return
+		assert_eq(s.tier, 1)
+		assert_eq(s.to_data()["tier"], 1)
+	assert_not_null(RunSession.start(1, "", false, data.pool({}, 0), data, catalog), "a tier 0 pool at tier 0")
+	assert_null(RunSession.start(1, "", false, pool, data, catalog, 0), "a tier 1 pool is refused at tier 0")
+	assert_false(MapAssembler.plan(7, data, 1).is_empty())

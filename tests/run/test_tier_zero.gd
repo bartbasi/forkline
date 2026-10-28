@@ -72,3 +72,96 @@ func test_a_tier_0_start_gives_the_golden_level_too() -> void:
 		assert_not_null(s, "seed %d" % run_seed)
 		if s != null:
 			assert_eq(JSON.stringify(s.battle.level.to_data()).sha256_text(), _golden["runs"][str(run_seed)]["hash"])
+
+
+func test_tier_1_things_added_to_the_real_files_leave_tier_0_unchanged() -> void:
+	# The real packs and segments plus a tunnel segment and packs that use tier 1 creatures,
+	# put first in their files. The same plans and levels come out (RULES 14.9).
+	var files: Dictionary = Golden.with_tier_1(Golden.real_files())
+	var cat: Catalog = Golden.catalog()
+	var data: RunData = RunData.from_data(files, cat)
+	assert_not_null(data, "\n".join(RunData.check(files, cat)))
+	if data == null:
+		return
+	assert_eq(data.tiers.size(), 1)
+	assert_eq(data.packs_of(2, &"", 1).size(), data.packs_of(2).size() + 1, "the Mossbud pack joins at tier 1")
+	assert_true(data.boss_ids(1).has(&"burrowbelly"))
+	var with_tier: Dictionary = Golden.compute(files)
+	assert_eq(with_tier["pool_none"], _golden["pool_none"])
+	assert_eq(with_tier["card_ids"], _golden["card_ids"])
+	var runs: Dictionary = _golden["runs"]
+	for key: String in runs.keys():
+		var got: Dictionary = with_tier["runs"].get(key, {})
+		assert_eq(got.get("plan", {}), runs[key]["plan"], "plan of seed %s" % key)
+		assert_eq(got.get("hash", ""), runs[key]["hash"], "level of seed %s" % key)
+	var dailies: Dictionary = _golden["dailies"]
+	for day: String in dailies.keys():
+		var got: Dictionary = with_tier["dailies"].get(day, {})
+		assert_eq(got.get("seed", -1), dailies[day]["seed"], "seed of %s" % day)
+		assert_eq(got.get("plan", {}), dailies[day]["plan"], "plan of %s" % day)
+		assert_eq(got.get("hash", ""), dailies[day]["hash"], "level of %s" % day)
+
+
+## No creature, pack, segment or card of regions 1 to 4 is above tier 0, and nothing a tier 0
+## run can draw holds a tier 1 thing.
+func test_nothing_real_of_tier_0_is_above_tier_0() -> void:
+	var files: Dictionary = Golden.with_tier_1(Golden.real_files())
+	var cat: Catalog = Golden.catalog()
+	var data: RunData = RunData.from_data(files, cat)
+	assert_not_null(data, "\n".join(RunData.check(files, cat)))
+	if data == null:
+		return
+	var listed: Array[StringName] = []
+	for tier: Dictionary in data.tiers:
+		for key: String in ["towers", "creatures", "bosses"]:
+			listed.append_array(tier[key])
+	var old_creatures: Array[StringName] = [
+		&"scamp", &"pip", &"skitter", &"flitter", &"shellback", &"bubbler", &"puffball", &"puff",
+		&"mender", &"gatecrasher", &"dusk_moth", &"grumblesack", &"ironshell", &"moon_moth", &"old_tusk",
+	]
+	var old_towers: Array[StringName] = [&"sling_post", &"pumpkin_catapult", &"lullaby_bell", &"longbow_loft", &"firework_tower", &"bakery"]
+	for id: StringName in old_creatures + old_towers:
+		assert_false(listed.has(id), "%s is in a tier list" % id)
+	# Cards: a card is tier 0 unless its tower is listed.
+	for id: StringName in data.card_ids(4):
+		var card: Dictionary = data.card(id)
+		assert_eq(card["tier"], 1 if listed.has(card["tower"]) else 0, "tier of card %s" % id)
+	# Segments: tier 0 unless a map feature of a tier is in the grid.
+	var features: String = ""
+	for tier: Dictionary in data.tiers:
+		features += String(tier["grid"])
+	for id: StringName in data.segment_ids:
+		var has_feature: bool = false
+		for row: String in data.segment(id)["grid"]:
+			for ch: String in features:
+				if row.contains(ch):
+					has_feature = true
+		assert_eq(data.segment(id)["tier"] > 0, has_feature, "tier of segment %s" % id)
+	# Packs: tier 0 unless a creature, a boss or something they bring is listed.
+	for pack: Dictionary in data.packs:
+		var uses_listed: bool = listed.has(pack["boss"])
+		for wave: Dictionary in pack["waves"]:
+			for group: Dictionary in wave["groups"]:
+				var enemy: StringName = StringName(String(group["enemy"]))
+				uses_listed = uses_listed or listed.has(enemy)
+				var type: EnemyType = cat.enemy(enemy)
+				var children: Array[StringName] = [type.split_into]
+				for brought: Dictionary in [type.summon, type.release]:
+					children.append(StringName(String(brought.get("enemy", ""))))
+				for child: StringName in children:
+					uses_listed = uses_listed or listed.has(child)
+		assert_eq(pack["tier"] > 0, uses_listed, "tier of pack %s" % pack["id"])
+	# The golden plans only ever name tier 0 things, and every pack the file held at tier 0 stays.
+	var runs: Dictionary = _golden["runs"]
+	for key: String in runs.keys():
+		var plan: Dictionary = runs[key]["plan"]
+		assert_eq(data.segment(StringName(plan["top"]))["tier"], 0)
+		assert_eq(data.segment(StringName(plan["middle"]))["tier"], 0)
+		assert_eq(data.segment(StringName(plan["bottom"]))["tier"], 0)
+		for pack_id: String in plan["packs"]:
+			var found: bool = false
+			for pack: Dictionary in data.packs:
+				if pack["id"] == pack_id:
+					found = true
+					assert_eq(pack["tier"], 0, pack_id)
+			assert_true(found, "%s is still in the packs" % pack_id)

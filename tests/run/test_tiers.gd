@@ -9,6 +9,7 @@ extends "res://tests/base_test.gd"
 const Fx: GDScript = preload("res://tests/run/fixtures/run_fixtures.gd")
 const Tx: GDScript = preload("res://tests/run/fixtures/tier_fixtures.gd")
 const Player: GDScript = preload("res://tests/run/fixtures/run_player.gd")
+const Golden: GDScript = preload("res://tests/run/fixtures/run_golden.gd")
 
 var catalog: Catalog = null
 var data: RunData = null
@@ -121,13 +122,17 @@ func _bring_mossbud(all: Dictionary) -> void:
 
 # run.json tiers
 
-func test_the_fixtures_pass_and_the_real_run_json_has_an_empty_list() -> void:
+func test_the_fixtures_pass_and_the_real_run_json_lists_tier_1() -> void:
 	assert_eq(RunData.check(Tx.files(), catalog), PackedStringArray())
 	assert_not_null(data)
 	assert_eq(Fx.run_data().tiers.size(), 0, "the plain fixtures have no tiers")
 	var real: Dictionary = JsonFile.read("res://data/runs/run.json", 16384)
 	assert_eq(real["status"], JsonFile.OK_STATUS)
-	assert_eq(real["data"]["tiers"], [], "an empty list until the data of regions 5 to 8 lands")
+	assert_eq(real["data"]["tiers"], [
+		{"level": "r5_l6", "towers": ["bramble_cottage"], "creatures": ["mossbud", "mistwisp"], "bosses": ["burrowbelly"], "grid": "T"},
+	], "tier 1 of E5.1; tiers 2 to 4 come with their regions")
+	assert_eq(real["data"]["bands"][1], ["skitter", "flitter", "shellback", "mossbud"], "band 2 gains Mossbud")
+	assert_eq(real["data"]["bands"][3], ["mender", "dusk_moth", "mistwisp"], "band 4 gains Mistwisp")
 
 
 func test_the_tiers_are_read_in_order() -> void:
@@ -308,14 +313,12 @@ func test_a_feature_counts_in_the_road_rules_of_a_segment() -> void:
 	# A tunnel in a 2 x 2 block of road is refused like any road.
 	var files: Dictionary = Tx.files()
 	files["segments/mid_tunnel.json"]["grid"][2] = ".GTo.G."
-	var found: String = "
-".join(RunData.check(files, catalog))
+	var found: String = "\n".join(RunData.check(files, catalog))
 	assert_true(found.contains("roads must be one tile wide"), found)
 	# Two feature cells side by side in a port row are two road cells side by side.
 	var files2: Dictionary = Tx.files()
 	files2["segments/mid_bridge.json"]["grid"][0] = "..XT..."
-	assert_true("
-".join(RunData.check(files2, catalog)).contains("two road cells side by side"))
+	assert_true("\n".join(RunData.check(files2, catalog)).contains("two road cells side by side"))
 	# A feature character no tier lists is allowed and is tier 0.
 	var files3: Dictionary = Tx.files()
 	_tiers(files3)[1]["grid"] = ""
@@ -571,6 +574,84 @@ func test_splash_and_targets_are_for_attacking_towers_without_pulse_or_line() ->
 		assert_eq(RunCards.has_stat(tower, "reload_ms"), attacks, "reload_ms of %s" % id)
 		assert_true(RunCards.has_stat(tower, "reach"), "reach of %s" % id)
 	assert_false(RunCards.has_stat(catalog.tower(&"lullaby_bell"), "splash"))
+
+
+## Towers cloned from the Sling Post with one way of attacking on every stat block.
+func _way_catalog() -> Catalog:
+	return Tx.catalog(func(all: Dictionary) -> void:
+		var sling: Dictionary = {}
+		for item: Dictionary in all["towers"]["towers"]:
+			if item["id"] == "sling_post":
+				sling = item
+		for way: Array in [["pulse_post", "pulse", true, "ground"], ["line_post", "line", 100, "ground"], ["lure_post", "lure_ms", 500, "air"]]:
+			var copy: Dictionary = sling.duplicate(true)
+			copy["id"] = way[0]
+			copy["name"] = way[0]
+			copy["plural"] = way[0] + "s"
+			var blocks: Array = copy["tiers"].duplicate()
+			for i: int in 2:
+				copy["specs"][i]["id"] = "%s_path_%d" % [way[0], i]
+				blocks.append(copy["specs"][i])
+			for block: Dictionary in blocks:
+				block[way[1]] = way[2]
+				block["hits"] = way[3]
+			all["towers"]["towers"].append(copy)
+	)
+
+
+func test_area_and_lure_towers_have_no_splash_and_area_towers_no_targets() -> void:
+	var made: Catalog = _way_catalog()
+	assert_not_null(made, "the clones pass the stat checks")
+	if made == null:
+		return
+	for id: StringName in [&"pulse_post", &"line_post", &"lure_post"]:
+		var tower: TowerType = made.tower(id)
+		assert_not_null(tower, String(id))
+		assert_false(RunCards.has_stat(tower, "splash"), "splash of %s" % id)
+		assert_true(RunCards.has_stat(tower, "damage"), "damage of %s" % id)
+		assert_true(RunCards.has_stat(tower, "reload_ms"), "reload_ms of %s" % id)
+		assert_true(RunCards.has_stat(tower, "reach"), "reach of %s" % id)
+	assert_false(RunCards.has_stat(made.tower(&"pulse_post"), "targets"))
+	assert_false(RunCards.has_stat(made.tower(&"line_post"), "targets"))
+	assert_true(RunCards.has_stat(made.tower(&"lure_post"), "targets"), "a lure tower may hit more targets")
+	assert_true(RunCards.has_stat(made.tower(&"sling_post"), "splash"), "a plain attacker is unchanged")
+	assert_true(RunCards.has_stat(made.tower(&"sling_post"), "targets"))
+
+
+func test_a_perk_for_splash_or_targets_on_those_towers_is_refused() -> void:
+	var made: Catalog = _way_catalog()
+	var lure_splash: Callable = func(f: Dictionary) -> void:
+		var card: Dictionary = JSON.parse_string(JSON.stringify(_card_in(f, "sharp_pebbles")))
+		card["id"] = "lure_perk"
+		card["tower"] = "lure_post"
+		card["effects"] = [{"type": "tower_add", "tower": "lure_post", "stat": "splash", "amount": 25}]
+		f["cards/cards.json"]["cards"].append(card)
+	var files: Dictionary = Tx.files()
+	lure_splash.call(files)
+	var found: PackedStringArray = RunData.check(files, made)
+	assert_true("\n".join(found).contains("lure_post has no splash"), "\n".join(found))
+	var pulse_targets: Callable = func(f: Dictionary) -> void:
+		var card: Dictionary = JSON.parse_string(JSON.stringify(_card_in(f, "sharp_pebbles")))
+		card["id"] = "pulse_perk"
+		card["tower"] = "pulse_post"
+		card["effects"] = [{"type": "tower_add", "tower": "pulse_post", "stat": "targets", "amount": 1}]
+		f["cards/cards.json"]["cards"].append(card)
+	files = Tx.files()
+	pulse_targets.call(files)
+	found = RunData.check(files, made)
+	assert_true("\n".join(found).contains("pulse_post has no targets"), "\n".join(found))
+
+
+func test_the_real_bramble_cottage_takes_damage_perks_only() -> void:
+	var real: Catalog = Golden.catalog()
+	var bramble: TowerType = real.tower(&"bramble_cottage")
+	assert_not_null(bramble)
+	if bramble == null:
+		return
+	assert_false(RunCards.has_stat(bramble, "splash"))
+	assert_false(RunCards.has_stat(bramble, "targets"))
+	for stat: String in ["damage", "reload_ms", "reach"]:
+		assert_true(RunCards.has_stat(bramble, stat), stat)
 
 
 func test_a_stat_block_with_pulse_or_line_is_an_area_block() -> void:

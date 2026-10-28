@@ -39,11 +39,13 @@ Expansion, 2026-10-27. Bart asked for four more regions of six levels each, and 
 
 Clarifications, 2026-10-27, after the DM's nap ruling in docs/ARCHITECTURE.md 14.5. No number changed. A napping creature does not yawn, break a gate, summon or release either. Its break and summon timers pause until it wakes, and a release begun before the nap still finishes (6.2, 8.8). No creature in the game naps and does any of these, so play does not change. Also made precise, as the sim already plays it: after waiting at 0, a tower's next reload is one tick shorter than a full one (5.2).
 
+Region 5 data, 2026-10-28 (task E5.1). No number changed. data/stats/ now holds region 5's tower, creatures and boss, and rules.json the star counts of all eight regions (16). Made precise, as the sim already plays it: every doze ends when a build phase begins (6.2). Two card lines are clearer, for the DM to tell Bart (6.6): the Mistwisp's no longer reads as if it hides itself, and Burrowbelly's says it is out of reach while dug under.
+
 Names follow docs/art/NAMES.md, which Bart approved at hard stop B and which holds the names of regions 5 to 8 that he approved on 2026-10-27. The tables in 5.1, 5.3 to 5.8, 5.12 to 5.15, 6.1, 6.3 and 12.1 give each tower, tier 3 path, creature, boss and region its id from that list, so the data files have one source. In each tower's tier table, the first tier 3 row is spec 0 and the second is spec 1.
 
 This file holds every game rule and number for version 1. The sim engineer, level designer, roguelite engineer, balance analyst and UI engineer build from it. If something here is unclear or seems to conflict with docs/ARCHITECTURE.md, ask the DM. Do not guess.
 
-The numbers are starting values. The balance bots tune them, and every change comes back into this file through the game designer. data/stats/ holds this file's tower, creature and core rule numbers, with the names, plurals and card lines, as data in the contract's units (milliseconds, and hundredths of a tile). This file and those files change together, in the same step. The one exception is the expansion of 2026-10-27: its numbers join data/stats/ once the contract defines their fields. Section 17 answers the assumptions in the first draft of docs/ARCHITECTURE.md. Section 19 is written for Bart. It holds no rules, and nobody builds from it.
+The numbers are starting values. The balance bots tune them, and every change comes back into this file through the game designer. data/stats/ holds this file's tower, creature and core rule numbers, with the names, plurals and card lines, as data in the contract's units (milliseconds, and hundredths of a tile). This file and those files change together, in the same step. The one exception is the expansion of 2026-10-27: its numbers join data/stats/ one region at a time, in each region's loop (contract section 13). Region 5's joined on 2026-10-28. Regions 6 to 8 follow in their own loops. Section 17 answers the assumptions in the first draft of docs/ARCHITECTURE.md. Section 19 is written for Bart. It holds no rules, and nobody builds from it.
 
 ## Contents
 
@@ -786,6 +788,7 @@ Yawn (Yawner, Snowsnore):
 - 4.0 s after a Yawner appears, and every 4.0 s after that, it yawns: every attacking tower whose center is within 1.5 tiles of the Yawner's center dozes for 2.0 s.
 - A dozing tower does not fire, and its reload timer does not run down. A new doze keeps the longer time.
 - In the timers step, doze timers run down first and new yawns land after. So a new doze already stops that tick's towers step and lasts its full time.
+- Every doze ends when a build phase begins. A wave cleared while another wave still runs starts no build phase (4.1), so dozes keep running down as usual.
 - Bells, Scarecrows and Bakeries never doze.
 - It yawns out of reach too: under a mound, it still makes the towers beside the mound doze.
 
@@ -872,14 +875,14 @@ Example: a Shellback at strength 150 has 135 health, armor 4, speed 0.7, and pay
 | Moon Moth | A flying boss with armor 3. Every 6 seconds, 3 Flitters fly out. |
 | Old Tusk | Armor 4. Breaks gates in 2 seconds. At half health, 4 Dusk Moths fly out. |
 | Mossbud | Regrows a little health every second. Big hits beat it. Slows give it time. |
-| Mistwisp | Creatures on its tile or beside it can't be aimed at. Splash still hits them. |
+| Mistwisp | Others on its tile or beside it can't be aimed at. Splash still hits them. |
 | Gleamer | Every tower that can reach it aims at it. Others slip past. |
 | Sleepyhead | Popped once, it naps for 2 seconds, then gets up with half its health. |
 | Snowroller | Grows with every tile it walks, up to 3 times its health. Pop it early. |
 | Yawner | Every 4 seconds it yawns, and towers right beside it doze for 2 seconds. |
 | Blinker | Every 3 seconds it blinks 2 tiles ahead along the road. |
 | Hootling | Its hoots keep everything near it awake. Nothing near it can be slowed. |
-| Burrowbelly | Digs under for 2 seconds every 8. Comes up with 2 Mistwisps. |
+| Burrowbelly | Digs under, out of reach, for 2 seconds every 8. Comes up with 2 Mistwisps. |
 | Old Hayrick | Every tower aims at it. Popped once, it naps 3 seconds and gets up again. |
 | Snowsnore | Grows as it walks. Every 6 seconds it yawns and towers near it doze. |
 | Glimmertoad | Hops ahead every 6 seconds. Can't be slowed. At half health, Flitters fly out. |

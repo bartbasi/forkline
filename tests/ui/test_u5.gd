@@ -328,6 +328,14 @@ func _tier_game() -> GameData:
 	return game
 
 
+## The real data with no tiers at all: what run.json held before region 5. Tests of the "no tiers"
+## case use this, so they hold whatever tiers the real file gains.
+func _no_tier_game() -> GameData:
+	var game: GameData = GameData.load_from("res://data")
+	game.run.tiers = [] as Array[Dictionary]
+	return game
+
+
 func _app(day: Dictionary = DAY_1, cleared: Array[StringName] = []) -> App:
 	var made: App = FlowFx.run_app(TAG, true, day)
 	apps.append(made)
@@ -428,9 +436,29 @@ func test_the_regions_line_follows_the_contract() -> void:
 	assert_eq(RunCard.regions_last(game, 2), 4)
 	assert_eq(RunCard.regions_last(game, 9), 4, "never above the tiers there are")
 	assert_eq(RunCard.regions_text(6), "Regions 1 to 6")
-	var real: GameData = UiFx.game()
+	var real: GameData = _no_tier_game()
 	assert_eq(RunCard.regions_last(real, 0), real.campaign.size(), "no tiers: every region there is")
 	assert_eq(RunCard.regions_text(0), "Regions 1 to 1", "never below one region")
+
+
+## The line with the tier 1 that the real run.json holds (region 5's level 6): one region less at
+## tier 0, the whole region at tier 1.
+func test_the_regions_line_with_the_real_tier_1() -> void:
+	var real: GameData = GameData.load_from("res://data")
+	if real.run.tiers.is_empty():
+		return
+	var level: StringName = real.run.tiers[0]["level"]
+	var region: int = 0
+	for r: int in real.campaign.size():
+		if (real.campaign[r]["levels"] as Array).has(level):
+			region = r + 1
+	assert_true(region > 1, "tier 1's level is in the campaign, past region 1")
+	assert_eq(RunCard.regions_last(real, 0), region - 1)
+	assert_eq(RunCard.regions_last(real, 1), region)
+	assert_eq(RunCard.regions_last(real, 9), RunCard.regions_last(real, real.run.tiers.size()), "never above the tiers there are")
+	if level == &"r5_l6":
+		assert_eq(RunCard.regions_text(RunCard.regions_last(real, 0)), "Regions 1 to 4")
+		assert_eq(RunCard.regions_text(RunCard.regions_last(real, 1)), "Regions 1 to 5")
 
 
 func test_the_daily_button_says_which_regions_it_covers() -> void:
@@ -454,6 +482,7 @@ func test_the_daily_button_says_which_regions_it_covers() -> void:
 func test_the_daily_button_with_no_tiers_in_the_data_names_every_region() -> void:
 	var made: App = FlowFx.run_app(TAG, true, DAY_1)
 	apps.append(made)
+	made.game = _no_tier_game()
 	made.open_mode()
 	var line: String = _text_of((made.current_screen() as ModeScreen).daily_button)
 	assert_true(line.contains("Regions 1 to %d." % made.game.campaign.size()), line)

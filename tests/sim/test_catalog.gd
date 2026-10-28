@@ -42,8 +42,8 @@ func test_the_real_stat_files_load() -> void:
 	assert_eq(problems.size(), 0, "problems: %s" % "; ".join(problems))
 	var catalog: Catalog = Catalog.from_data(files[0], files[1], files[2])
 	assert_not_null(catalog)
-	assert_eq(catalog.tower_ids(), [&"sling_post", &"pumpkin_catapult", &"lullaby_bell", &"longbow_loft", &"firework_tower", &"bakery"])
-	assert_eq(catalog.enemy_ids().size(), 15)
+	assert_eq(catalog.tower_ids(), [&"sling_post", &"pumpkin_catapult", &"lullaby_bell", &"longbow_loft", &"firework_tower", &"bakery", &"bramble_cottage"])
+	assert_eq(catalog.enemy_ids().size(), 18)
 	assert_null(catalog.tower(&"nope"))
 	assert_null(catalog.enemy(&"nope"))
 
@@ -149,7 +149,7 @@ func test_every_rule_key_is_read() -> void:
 	assert_eq([rules.start_lives, rules.relaxed_lives_pct, rules.relaxed_gold_pct, rules.refund_pct], [20, 200, 150, 70])
 	assert_eq([rules.early_bonus_pct, rules.clear_bonus, rules.clear_bonus_per_wave, rules.star2_lives], [50, 20, 5, 15])
 	assert_eq([rules.max_waves_running, rules.max_gates, rules.bubble_ms, rules.run_stars], [2, 3, 2000, 12])
-	assert_eq(rules.region_stars, [0, 6, 12, 18])
+	assert_eq(rules.region_stars, [0, 6, 12, 18, 24, 30, 36, 42])
 
 
 func test_ints_and_whole_numbers_both_pass() -> void:

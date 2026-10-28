@@ -45,10 +45,11 @@ static func enemies() -> Array:
 	]
 
 
-## The real stat files with the four towers and these creatures added.
+## The real stat files with the four towers and these creatures added. A creature the real
+## files already hold (from E5.1 on) gives way to this file's copy.
 static func stats_files() -> Array:
 	var files: Array = Tx.stats_files()
-	(files[1]["enemies"] as Array).append_array(enemies())
+	files[1]["enemies"] = Tx.replaced(files[1]["enemies"], enemies())
 	return files
 
 

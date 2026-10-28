@@ -115,7 +115,7 @@ func test_a_level_offers_up_to_ten_towers_contract_14_2() -> void:
 	var files: Array = Fx.stats_files()
 	var ids: Array = []
 	var base_tower: Dictionary = files[0]["towers"][0]
-	for i: int in 5:
+	for i: int in 11 - (files[0]["towers"] as Array).size():
 		var extra: Dictionary = base_tower.duplicate(true)
 		extra["id"] = "extra_tower_%d" % i
 		extra["specs"][0]["id"] = "extra_path_a_%d" % i

@@ -16,8 +16,10 @@ const TICK_CAP: int = 20 * 60 * Sim.TICKS_PER_SECOND
 const BUILD_SECONDS: int = 15
 ## RULES 12.5: a level lasts 5 to 10 minutes at 1x.
 const LENGTH_MINUTES: Array[float] = [5.0, 10.0]
-## RULES 12.6 step 4: the attacking towers in turn.
-const TURN: Array[StringName] = [&"sling_post", &"pumpkin_catapult", &"longbow_loft", &"firework_tower"]
+## RULES 12.6 step 4: the attacking towers in turn. The Firework Tower and the Moth Lantern join the turn
+## only on a level whose waves bring flyers.
+const TURN: Array[StringName] = [&"sling_post", &"pumpkin_catapult", &"longbow_loft", &"bramble_cottage", &"snow_fort", &"firework_tower", &"moth_lantern"]
+const FLYER_TOWERS: Array[StringName] = [&"firework_tower", &"moth_lantern"]
 ## RULES 12.6 step 1: road seen within 2.5 tiles.
 const SEEN_REACH: int = 250
 
@@ -45,7 +47,7 @@ func _recipe(level: LevelData, first_region: bool) -> Array[Dictionary]:
 				bakery_cell = spot
 	var attackers: Array[StringName] = []
 	for type: StringName in TURN:
-		if level.towers.has(type) and (type != &"firework_tower" or _brings_flyers(level)):
+		if level.towers.has(type) and (not FLYER_TOWERS.has(type) or _brings_flyers(level)):
 			attackers.append(type)
 	var out: Array[Dictionary] = []
 	var bell_done: bool = not level.towers.has(&"lullaby_bell")
@@ -66,7 +68,8 @@ func _recipe(level: LevelData, first_region: bool) -> Array[Dictionary]:
 	return out
 
 
-## Spots by road seen, most first; ties keep cell order (RULES 3.4, 12.6 step 1).
+## Spots by road seen, most first; ties keep cell order (RULES 3.4, 12.6 step 1). Tunnel tiles are not
+## counted: a walker inside one is out of reach (RULES 3.6).
 func _spot_order(level: LevelData) -> Array[Vector2i]:
 	var keyed: Array = []
 	for i: int in level.spots.size():
@@ -76,7 +79,8 @@ func _spot_order(level: LevelData) -> Array[Vector2i]:
 			for c: int in Sim.MAP_COLUMNS:
 				var dx: int = (c - spot.x) * 100
 				var dy: int = (r - spot.y) * 100
-				if level.is_road(Vector2i(c, r)) and dx * dx + dy * dy <= SEEN_REACH * SEEN_REACH:
+				var cell: Vector2i = Vector2i(c, r)
+				if level.is_road(cell) and level.feature_at(cell) != LevelData.Feature.TUNNEL and dx * dx + dy * dy <= SEEN_REACH * SEEN_REACH:
 					seen += 1
 		keyed.append([-seen, i])
 	keyed.sort()

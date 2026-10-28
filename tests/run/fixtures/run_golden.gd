@@ -85,10 +85,41 @@ static func entry(run_seed: int, data: RunData, catalog_value: Catalog) -> Dicti
 	}
 
 
+## The real files plus the stand-ins tier 1 needs while the level designer's region 5 packs and
+## segments are missing: a tunnel segment cut from the real mid_split, a band 2 pack that uses a
+## Mossbud and a band 6 pack for Burrowbelly, both cut from real packs and put first in the
+## file. Ids are the stand-ins' own, so real tier 1 content can join them without a clash.
+## Adding tier 1 things never changes a tier 0 run (RULES 14.9).
+static func with_tier_1(files: Dictionary) -> Dictionary:
+	var out: Dictionary = files.duplicate(true)
+	var index: Dictionary = out["segments/index.json"]
+	var split: Dictionary = out["segments/mid_split.json"]
+	var grid: Array = (split["grid"] as Array).duplicate()
+	var row: String = grid[1]
+	grid[1] = row.substr(0, 3) + "T" + row.substr(4)
+	out["segments/mid_tunnel_stand_in.json"] = {"format": 1, "id": "mid_tunnel_stand_in", "kind": "middle", "grid": grid}
+	(index["segments"] as Array).insert((index["segments"] as Array).find("mid_split") + 1, "mid_tunnel_stand_in")
+	var packs: Dictionary = out["segments/packs.json"]
+	var by_id: Dictionary = {}
+	for item: Dictionary in packs["packs"]:
+		by_id[item["id"]] = item
+	var mossbud: Dictionary = (by_id["b2_quick_feet"] as Dictionary).duplicate(true)
+	mossbud["id"] = "b2_mossbud_stand_in"
+	mossbud["waves"][0]["groups"][0]["enemy"] = "mossbud"
+	var burrow: Dictionary = (by_id["b6_grumble_hill"] as Dictionary).duplicate(true)
+	burrow["id"] = "b6_burrowbelly_stand_in"
+	burrow["boss"] = "burrowbelly"
+	burrow["waves"][2]["groups"][0]["enemy"] = "burrowbelly"
+	(packs["packs"] as Array).insert(0, burrow)
+	(packs["packs"] as Array).insert(0, mossbud)
+	return out
+
+
 ## Everything the golden file pins, as plain values that survive a trip through JSON.
-static func compute() -> Dictionary:
+## files: the run files to build from, the real ones when empty.
+static func compute(files: Dictionary = {}) -> Dictionary:
 	var cat: Catalog = catalog()
-	var data: RunData = RunData.from_data(real_files(), cat)
+	var data: RunData = RunData.from_data(real_files() if files.is_empty() else files, cat)
 	if data == null:
 		return {}
 	var runs: Dictionary = {}

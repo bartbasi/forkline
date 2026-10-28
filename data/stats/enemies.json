@@ -50,5 +50,17 @@
    "info": "Armor 4. Breaks gates in 2 seconds. At half health, 4 Dusk Moths fly out.",
    "health": 3000, "armor": 4, "speed": 35, "lives": 20, "bounty": 250, "boss": true,
    "break_ms": 2000,
-   "release": {"at_pct": 50, "enemy": "dusk_moth", "count": 4, "gap_ms": 300}}
+   "release": {"at_pct": 50, "enemy": "dusk_moth", "count": 4, "gap_ms": 300}},
+  {"id": "mossbud", "name": "Mossbud",
+   "info": "Regrows a little health every second. Big hits beat it. Slows give it time.",
+   "health": 80, "armor": 0, "speed": 80, "lives": 1, "bounty": 10,
+   "regrow": 4, "regrow_ms": 1000},
+  {"id": "mistwisp", "name": "Mistwisp",
+   "info": "Others on its tile or beside it can't be aimed at. Splash still hits them.",
+   "health": 50, "armor": 0, "speed": 100, "lives": 1, "bounty": 10, "mist": true},
+  {"id": "burrowbelly", "name": "Burrowbelly",
+   "info": "Digs under, out of reach, for 2 seconds every 8. Comes up with 2 Mistwisps.",
+   "health": 3200, "armor": 2, "speed": 40, "lives": 20, "bounty": 300, "boss": true,
+   "dig_first_ms": 6000, "dig_every_ms": 8000, "dig_ms": 2000,
+   "summon": {"enemy": "mistwisp", "count": 2, "every_ms": 8000, "gap_ms": 300}}
 ]}

@@ -15,6 +15,10 @@
    "text": "You can build Bakeries for the rest of the run.",
    "once": true, "unlock": {}, "effects": [{"type": "add_tower", "tower": "bakery"}]},
 
+  {"id": "tower_bramble_cottage", "kind": "tower", "tower": "bramble_cottage", "name": "Bramble Cottage",
+   "text": "You can build Bramble Cottages for the rest of the run.",
+   "once": true, "unlock": {}, "effects": [{"type": "add_tower", "tower": "bramble_cottage"}]},
+
   {"id": "sharp_pebbles", "kind": "perk", "tower": "sling_post", "name": "Sharp Pebbles",
    "text": "Sling Posts deal 1 more damage per hit.",
    "once": true, "unlock": {}, "effects": [{"type": "tower_add", "tower": "sling_post", "stat": "damage", "amount": 1}]},
@@ -33,6 +37,9 @@
   {"id": "warm_ovens", "kind": "perk", "tower": "bakery", "name": "Warm Ovens",
    "text": "Bakeries reach 1 tile further.",
    "once": true, "unlock": {}, "effects": [{"type": "tower_add", "tower": "bakery", "stat": "reach", "amount": 100}]},
+  {"id": "thorn_tips", "kind": "perk", "tower": "bramble_cottage", "name": "Thorn Tips",
+   "text": "Bramble Cottages deal 2 more damage per hit.",
+   "once": true, "unlock": {}, "effects": [{"type": "tower_add", "tower": "bramble_cottage", "stat": "damage", "amount": 2}]},
 
   {"id": "spare_gate", "kind": "gate", "name": "Spare Gate", "text": "Gain 1 gate, up to 3.",
    "once": false, "unlock": {}, "effects": [{"type": "add_gates", "count": 1}]},

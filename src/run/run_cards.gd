@@ -176,8 +176,8 @@ static func _check_perk_effect(effect: Dictionary, tower: StringName, path: Stri
 
 
 ## True when the tower's kind has the stat (2.11): reach for any tower; damage and reload_ms
-## for an attacking tower; splash and targets for an attacking tower without pulse or line
-## (14.8); slow_pct for a Bell or an attacking tower with a slow on some tier or path;
+## for an attacking tower; splash for an attacking tower without pulse, line or lure_ms and
+## targets for one without pulse or line (14.8); slow_pct for a Bell or an attacking tower with a slow on some tier or path;
 ## boost_pct and boost_damage for a Bakery.
 static func has_stat(tower: TowerType, stat: String) -> bool:
 	match stat:
@@ -185,8 +185,10 @@ static func has_stat(tower: TowerType, stat: String) -> bool:
 			return true
 		"damage", "reload_ms":
 			return tower.kind == &"attack"
-		"splash", "targets":
-			return tower.kind == &"attack" and not _area_attack(tower)
+		"splash":
+			return tower.kind == &"attack" and not _has_block(tower, false)
+		"targets":
+			return tower.kind == &"attack" and not _has_block(tower, true)
 		"slow_pct":
 			if tower.kind == &"slow":
 				return true
@@ -204,16 +206,23 @@ static func has_stat(tower: TowerType, stat: String) -> bool:
 	return false
 
 
-## True when some stat block of the tower has `pulse` or `line` (14.4).
-static func _area_attack(tower: TowerType) -> bool:
+## True when some stat block of the tower has `pulse` or `line` (14.4), or, with
+## `area_only` false, also `lure_ms` (a lure tower has no splash).
+static func _has_block(tower: TowerType, area_only: bool) -> bool:
 	var blocks: Array[TowerStats] = []
 	for tier: int in [1, 2]:
 		blocks.append(tower.stats(tier, -1))
 	for spec: int in [0, 1]:
 		blocks.append(tower.stats(3, spec))
 	for block: TowerStats in blocks:
-		if block != null and is_area_block(block):
+		if block == null:
+			continue
+		if is_area_block(block):
 			return true
+		if not area_only:
+			var lure: Variant = block.get(&"lure_ms")
+			if typeof(lure) == TYPE_INT and lure > 0:
+				return true
 	return false
 
 
