@@ -37,8 +37,12 @@ signal progress_changed()
 ## The level was won, lost or abandoned. `result` is Battle.result() plus
 ## "abandoned", "relaxed" and "twist".
 signal ended(result: Dictionary)
+## Restart in Pause, after its question. The App ends this game and starts it again.
+signal restart_confirmed()
 ## "Back to menu" in Pause. The game stays saved.
 signal left()
+## The player used the music button in the HUD. `on` is what music should be now.
+signal music_changed(on: bool)
 ## Pause asked for the Info screen. The App opens it.
 signal info_requested()
 ## Pause asked for Settings. The App opens it.
@@ -245,6 +249,7 @@ func _wrap(inner: Control, top: float, bottom: float) -> MarginContainer:
 func _connect_panels() -> void:
 	hud.speed_selected.connect(func(speed: int) -> void: clock.speed = speed)
 	hud.pause_requested.connect(freeze)
+	hud.music_selected.connect(func(on: bool) -> void: music_changed.emit(on))
 	hud.resume_requested.connect(resume)
 	hud.wave_started.connect(func() -> void: save_requested.emit())
 	pause_strip.menu_requested.connect(_on_strip_menu)
@@ -375,6 +380,8 @@ func _open_pause_menu() -> void:
 	_pause_panel.settings_requested.connect(_open_settings)
 	_pause_panel.leave_requested.connect(_on_leave)
 	_pause_panel.abandon_confirmed.connect(_on_abandon)
+	_pause_panel.restart_confirmed.connect(_on_restart)
+	_pause_panel.set_restart_text(restart_text())
 	_pause_panel.closed.connect(_on_pause_closed)
 	_open_modal(_pause_panel)
 
@@ -404,6 +411,33 @@ func _on_abandon() -> void:
 	result["relaxed"] = battle.relaxed
 	result["twist"] = not battle.twist_effects.is_empty()
 	ended.emit(result)
+
+
+## Restart was confirmed. This game is over for the screen: nothing more ends from it. The
+## App records what the rules say and starts the same game again.
+func _on_restart() -> void:
+	if _finished:
+		return
+	_finished = true
+	restart_confirmed.emit()
+
+
+## What the Restart question says happens (RULES 4.10, 14.7): a level or Twist records
+## nothing, a run or daily counts as lost on its current wave.
+func restart_text() -> String:
+	if run == null:
+		if battle.twist_effects.is_empty():
+			return PausePanel.RESTART_LEVEL
+		return "This Twist starts over from the beginning, on the same difficulty. Nothing from this game is recorded."
+	if run.daily:
+		return "This daily counts as lost on its current wave. Then the same day's daily starts again."
+	return "This run counts as lost on its current wave. Then a new run starts, on the same difficulty."
+
+
+## Shows what the music is doing on the HUD's music button. `sound_on` is the sound effects
+## switch, which music needs too.
+func set_music_state(music_on: bool, sound_on: bool) -> void:
+	hud.set_music(music_on, sound_on)
 
 
 ## True while the Pause menu is open.

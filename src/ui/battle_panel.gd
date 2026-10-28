@@ -34,7 +34,9 @@ var _trash: Array[Node] = []
 
 
 func _init() -> void:
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	# Pass: the panel still takes the touch (nothing under it gets it), and a drag that starts
+	# on its background reaches the scroll container above it.
+	mouse_filter = Control.MOUSE_FILTER_PASS
 	column = VBoxContainer.new()
 	column.add_theme_constant_override(&"separation", 10)
 	add_child(column)

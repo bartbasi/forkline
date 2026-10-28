@@ -633,7 +633,8 @@ func _check_rows(panel: TowerPanel, b: Battle, cell: Vector2i, where: String) ->
 	else:
 		assert_eq(_stat_value(panel, "Damage"), str(int(numbers["damage"])), where)
 		assert_eq(_stat_value(panel, "Rate"), "%s/s" % BattleText.rate(int(numbers["reload_ms"])), where)
-		assert_eq(_stat_value(panel, "Range"), reach, where)
+		# A pulse tower (the Bramble Cottage) names its reach "Ring"; every other attack says "Range".
+		assert_eq(_stat_value(panel, BattleText.range_label(bool(numbers.get("pulse", false)))), reach, where)
 		assert_eq(_stat_value(panel, "Hits"), BattleText.hits_text(numbers), where)
 		if int(numbers.get("splash", 0)) > 0:
 			assert_eq(_stat_value(panel, "Splash"), BattleText.tiles_text(int(numbers["splash"])), where)

@@ -284,9 +284,9 @@ func test_settings_toggles_sound_and_has_an_about_row() -> void:
 	var panel: SettingsPanel = _keep(SettingsPanel.new(true)) as SettingsPanel
 	var seen: Array[bool] = []
 	panel.sound_changed.connect(func(on: bool) -> void: seen.append(on))
-	assert_eq(panel.sound_button.text, "Sound: On")
+	assert_eq(panel.sound_button.text, "Sound effects: On")
 	panel.sound_button.tapped.emit()
-	assert_eq(panel.sound_button.text, "Sound: Off")
+	assert_eq(panel.sound_button.text, "Sound effects: Off")
 	panel.sound_button.tapped.emit()
 	assert_eq(seen, [false, true] as Array[bool])
 	var rows: Array[String] = []
@@ -298,7 +298,7 @@ func test_settings_toggles_sound_and_has_an_about_row() -> void:
 
 func test_settings_starts_with_the_given_sound_state() -> void:
 	var panel: SettingsPanel = _keep(SettingsPanel.new(false)) as SettingsPanel
-	assert_eq(panel.sound_button.text, "Sound: Off")
+	assert_eq(panel.sound_button.text, "Sound effects: Off")
 
 
 func test_pause_has_its_rows_and_a_quiet_coffee_row_last() -> void:
@@ -310,7 +310,9 @@ func test_pause_has_its_rows_and_a_quiet_coffee_row_last() -> void:
 		var button: Button = child as Button
 		if button != null:
 			texts.append(button.text)
-	assert_eq(texts, ["Resume", "Info", "Settings", "Back to menu", "Abandon", "Buy me a coffee"] as Array[String])
+		for inner: Node in child.get_children() if child is HBoxContainer else []:
+			texts.append((inner as Button).text)
+	assert_eq(texts, ["Resume", "Info", "Settings", "Back to menu", "Restart", "Abandon", "Buy me a coffee"] as Array[String])
 	assert_true(last is CoffeeButton)
 
 
@@ -463,7 +465,7 @@ func test_app_settings_sound_reaches_the_app() -> void:
 	assert_false(a.sound_on)
 	a.handle_back()
 	a.open_settings()
-	assert_eq((a.top_modal() as SettingsPanel).sound_button.text, "Sound: Off", "Settings shows the current state")
+	assert_eq((a.top_modal() as SettingsPanel).sound_button.text, "Sound effects: Off", "Settings shows the current state")
 
 
 func test_app_settings_about_row_opens_about_and_back_returns() -> void:

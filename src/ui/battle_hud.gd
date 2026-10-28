@@ -9,6 +9,12 @@ extends BattlePanel
 ## level whose highlight is this button (2-1) a pulsing ring wears it while it offers an
 ## early call, until the first early call. Calling works while paused.
 ##
+## A small round button turns the music on and off (sound effects stay as they are). Its icon
+## is a note, crossed out when the music is off. While sound effects are off the music is
+## silent whatever its setting says, so the note is crossed out and the button is dimmed and
+## cannot be tapped: a tap would change nothing the player could hear. Settings holds both
+## switches.
+##
 ## The speed and the paused look are only shown here: the screen owns the clock.
 
 ## The player picked a speed.
@@ -19,11 +25,14 @@ signal pause_requested()
 signal resume_requested()
 ## A wave was started or called early. The battle has already started it.
 signal wave_started()
+## The player tapped the music button. `on` is what the music should be now.
+signal music_selected(on: bool)
 
 var lives_label: Label
 var gold_label: Label
 var wave_label: Label
 var pause_button: TapButton
+var music_button: TapButton
 var speed_buttons: Array[TapButton] = []
 var call_button: TapButton
 ## The pulsing ring on the call button (RULES 9.6). Visible only on a level whose highlight
@@ -32,6 +41,9 @@ var call_ring: CallRing
 
 var speed: int = 1
 var paused: bool = false
+## The music setting, and whether sound effects (the master switch) are on.
+var music_on: bool = true
+var sound_on: bool = true
 ## The run around the battle, or null in a campaign level. A run's calls go through it, because
 ## a draft that is owed blocks the next wave (docs/ARCHITECTURE.md 3.4).
 var run: RunSession = null
@@ -84,6 +96,9 @@ func _init() -> void:
 	wave_label = _stat(&"moon")
 	pause_button = UiKit.icon_button(&"pause")
 	pause_button.tapped.connect(_on_pause)
+	music_button = UiKit.icon_button(&"note")
+	music_button.tapped.connect(_on_music)
+	_round(music_button)
 	for value: int in [1, 2, 3]:
 		var b: TapButton = UiKit.button("%dx" % value)
 		b.custom_minimum_size = Vector2(Layout.MIN_TOUCH, Layout.MIN_TOUCH)
@@ -119,6 +134,16 @@ func set_speed(value: int) -> void:
 	if value >= 1 and value <= 3:
 		speed = value
 		_show_speed()
+
+
+## Shows what the music is doing: the note, crossed out when the music is silent. `sound` is
+## the sound effects switch. With it off the button is dimmed and cannot be tapped.
+func set_music(music: bool, sound: bool = true) -> void:
+	music_on = music
+	sound_on = sound
+	var heard: bool = music and sound
+	music_button.icon = IconTex.make(&"note" if heard else &"note_off", 72)
+	music_button.disabled = not sound
 
 
 ## Shows whether the clock is frozen: the pause button turns into a play button.
@@ -200,7 +225,7 @@ func _stat(glyph: StringName) -> Label:
 
 func _arrange(is_wide: bool) -> void:
 	_wide = is_wide
-	var movers: Array[Control] = [_stats, pause_button, call_button]
+	var movers: Array[Control] = [_stats, music_button, pause_button, call_button]
 	if _gate_slot != null:
 		movers.append(_gate_slot)
 	movers.append_array(speed_buttons)
@@ -215,12 +240,14 @@ func _arrange(is_wide: bool) -> void:
 		for b: TapButton in speed_buttons:
 			_row_mid.add_child(b)
 		_row_mid.add_child(call_button)
+		_row_mid.add_child(music_button)
 		_row_call.visible = false
 	else:
 		for b: TapButton in speed_buttons:
 			_row_mid.add_child(b)
 		_row_mid.add_child(pause_button)
 		_row_call.add_child(call_button)
+		_row_call.add_child(music_button)
 		_row_call.visible = true
 
 
@@ -293,6 +320,29 @@ func _refresh_call() -> void:
 func _on_speed(value: int) -> void:
 	set_speed(value)
 	speed_selected.emit(value)
+
+
+## A round button: a ring-edged disc, so the shape tells it from the square speed buttons.
+func _round(b: TapButton) -> void:
+	var disc: StyleBoxFlat = UiKit.box(Palette.PANEL_RAISED, Palette.PANEL_EDGE, 4, 100, 8)
+	var lit: StyleBoxFlat = UiKit.box(Palette.PANEL_HOVER, Palette.HONEY, 4, 100, 8)
+	b.add_theme_stylebox_override(&"normal", disc)
+	b.add_theme_stylebox_override(&"hover", disc)
+	b.add_theme_stylebox_override(&"disabled", disc)
+	b.add_theme_stylebox_override(&"pressed", lit)
+	b.add_theme_stylebox_override(&"hover_pressed", lit)
+	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	for state: StringName in [&"icon_normal_color", &"icon_hover_color", &"icon_pressed_color", &"icon_hover_pressed_color"]:
+		b.add_theme_color_override(state, Palette.TEXT_LIGHT)
+	b.add_theme_color_override(&"icon_disabled_color", Palette.TEXT_SOFT)
+
+
+func _on_music() -> void:
+	if not sound_on:
+		return
+	var now: bool = not music_on
+	set_music(now, sound_on)
+	music_selected.emit(now)
 
 
 func _on_pause() -> void:

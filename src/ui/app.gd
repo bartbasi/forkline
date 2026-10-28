@@ -21,8 +21,10 @@ extends Control
 ## nothing. A run or daily records its counters when it ends, and an abandoned one
 ## counts as lost at its current wave (RULES 14.7).
 
-## The player turned sound on or off in Settings.
+## The player turned sound effects on or off in Settings.
 signal sound_changed(on: bool)
+## The player turned music on or off, in Settings or with the button in a level.
+signal music_changed(on: bool)
 ## Taps on the mode screen. The App answers all four itself.
 signal continue_requested()
 signal campaign_requested()
@@ -62,6 +64,7 @@ var probe: PerfProbe = null
 var damaged: bool = false
 
 var sound_on: bool = true
+var music_on: bool = true
 ## rules.json keys, once the data is loaded. Only the Info guide uses them.
 var rules: Dictionary = {}
 ## Creature and tower names by id, once the data is loaded. Only Info uses them.
@@ -145,11 +148,13 @@ func _boot() -> void:
 	daily_record = store.load_daily()
 	saved_games = store.load_games(game)
 	sound_on = settings.sound_on
+	music_on = settings.music_on
 	if audio == null:
 		# The App owns the service it makes. A test that passes its own keeps it.
 		audio = AudioService.new()
 		add_child(audio)
 	audio.set_enabled(sound_on)
+	audio.set_music_on(music_on)
 	audio.set_music(&"menu")
 	_fill_info()
 	_refresh_progress()
@@ -408,8 +413,9 @@ func open_license(kind: StringName) -> void:
 # Modals.
 
 func open_settings() -> void:
-	var panel: SettingsPanel = SettingsPanel.new(sound_on)
+	var panel: SettingsPanel = SettingsPanel.new(sound_on, music_on)
 	panel.sound_changed.connect(_on_sound_changed)
+	panel.music_changed.connect(_on_music_changed)
 	panel.about_requested.connect(open_about)
 	open_modal(panel)
 
@@ -438,7 +444,8 @@ func close_all_modals() -> void:
 	_modal_layer.visible = true
 
 
-## The sound toggle: kept in Settings, saved, and applied to the AudioService.
+## The sound effects toggle (the master switch): kept in Settings, saved, and applied to the
+## AudioService. A level on screen shows it on its music button.
 func _on_sound_changed(on: bool) -> void:
 	sound_on = on
 	if settings != null:
@@ -447,7 +454,28 @@ func _on_sound_changed(on: bool) -> void:
 			_log_save_failure()
 	if audio != null:
 		audio.set_enabled(on)
+	_show_music_state()
 	sound_changed.emit(on)
+
+
+## The music toggle, from Settings or the level's music button: kept in Settings, saved,
+## applied to the AudioService, and shown on the level's button.
+func _on_music_changed(on: bool) -> void:
+	music_on = on
+	if settings != null:
+		settings.music_on = on
+		if store != null and not store.save_settings(settings):
+			_log_save_failure()
+	if audio != null:
+		audio.set_music_on(on)
+	_show_music_state()
+	music_changed.emit(on)
+
+
+## Tells the level on screen what the music is doing.
+func _show_music_state() -> void:
+	if _battle_screen != null:
+		_battle_screen.set_music_state(music_on, sound_on)
 
 
 # Back button.
@@ -690,10 +718,13 @@ func _begin(saved: SavedGame, resumed: bool) -> void:
 	screen.save_requested.connect(save_active)
 	screen.progress_changed.connect(save_progress)
 	screen.ended.connect(_on_battle_ended)
+	screen.restart_confirmed.connect(_on_battle_restart)
 	screen.left.connect(_on_battle_left)
+	screen.music_changed.connect(_on_music_changed)
 	_battle_screen = screen
 	push_screen(screen)
 	screen.setup(saved.battle, audio, progress, region_of(saved))
+	screen.set_music_state(music_on, sound_on)
 	if saved.run != null:
 		screen.set_run(saved.run)
 	audio.set_music(&"battle")
@@ -712,6 +743,32 @@ func region_of(saved: SavedGame) -> StringName:
 		if (region["levels"] as Array).has(saved.level_id):
 			return region["id"]
 	return &""
+
+
+## "Restart" in Pause, after its question (RULES 4.10, 14.7). The game on screen ends and the
+## same one starts again, on the same difficulty, at 1x. A campaign level or Twist records
+## nothing, as when it is abandoned. A run or daily counts as lost at its current wave and
+## records what an ended run records, then a new run starts (the daily starts again for the
+## day it belongs to, at its tier).
+func _on_battle_restart() -> void:
+	var saved: SavedGame = _active
+	if saved == null:
+		return
+	_active = null
+	_end = {}
+	close_all_modals()
+	if saved.run != null:
+		_record_run(saved.run)
+	_end_saved(saved.mode)
+	if _battle_screen != null and current_screen() == _battle_screen:
+		pop_screen()
+	if saved.run == null:
+		start_level(saved.level_id, saved.battle.relaxed, saved.twist)
+	elif saved.run.daily:
+		if not damaged and _battle_screen == null and RUNS_BUILT and runs_open:
+			_begin_daily(saved.run.day, saved.run.tier)
+	else:
+		start_run(saved.battle.relaxed)
 
 
 ## "Back to menu" in Pause: the game stays saved.
@@ -888,7 +945,11 @@ func start_daily() -> void:
 	var day: String = today()
 	if day.is_empty():
 		return
-	var tier: int = daily_tier()
+	_begin_daily(day, daily_tier())
+
+
+## Starts the daily of `day` at `tier`: always Normal, every card of the tier in the pool.
+func _begin_daily(day: String, tier: int) -> void:
 	_begin_run(RunSession.start(RunSeeds.daily_seed(day), day, false, game.run.card_ids(tier), game.run, game.catalog, tier), SavedGame.DAILY)
 
 

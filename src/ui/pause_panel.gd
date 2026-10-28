@@ -3,8 +3,9 @@
 class_name PausePanel
 extends Modal
 ## The Pause menu (playbook 6.4): Resume, Info, Settings, back to the menu (the
-## game stays saved), abandon (after a confirm), and a quiet Buy me a coffee
-## row at the bottom. The back button resumes, or cancels an open confirm.
+## game stays saved), Restart and Abandon side by side (each after a confirm), and a
+## quiet Buy me a coffee row at the bottom. The back button resumes, or cancels an open
+## confirm.
 
 signal resume_requested()
 signal info_requested()
@@ -13,6 +14,12 @@ signal settings_requested()
 signal leave_requested()
 ## The player confirmed that this game ends now.
 signal abandon_confirmed()
+## The player confirmed that this game starts over.
+signal restart_confirmed()
+
+## What Restart does, in plain words, for the question it asks. The battle screen sets the
+## one that fits the game (set_restart_text); this one fits a campaign level.
+const RESTART_LEVEL: String = "This level starts over from the beginning, on the same difficulty. Nothing from this game is recorded."
 
 ## The three star lines, when this game has stars (RULES 10.6). Empty otherwise.
 var star_lines: Array[StarLine] = []
@@ -21,6 +28,10 @@ var star_lines: Array[StarLine] = []
 var twist_name_label: Label = null
 var twist_text_label: Label = null
 
+var restart_button: TapButton
+var abandon_button: TapButton
+
+var _restart_text: String = RESTART_LEVEL
 var _confirm: ConfirmDialog = null
 var _stars_box: VBoxContainer = null
 var _twist_box: VBoxContainer = null
@@ -42,9 +53,15 @@ func _init() -> void:
 	var leave: TapButton = UiKit.button("Back to menu")
 	leave.tapped.connect(func() -> void: leave_requested.emit())
 	body.add_child(leave)
-	var abandon: TapButton = UiKit.button("Abandon")
-	abandon.tapped.connect(_ask_abandon)
-	body.add_child(abandon)
+	var ends: HBoxContainer = HBoxContainer.new()
+	ends.add_theme_constant_override(&"separation", 20)
+	restart_button = UiKit.button("Restart")
+	restart_button.tapped.connect(_ask_restart)
+	ends.add_child(restart_button)
+	abandon_button = UiKit.button("Abandon")
+	abandon_button.tapped.connect(_ask_abandon)
+	ends.add_child(abandon_button)
+	body.add_child(ends)
 	body.add_child(CoffeeButton.new())
 
 
@@ -93,6 +110,11 @@ func set_twist(twist_name: String, twist_text: String) -> void:
 	body.move_child(_twist_box, 1)
 
 
+## Sets the sentence of the Restart question. It says plainly what happens to this game.
+func set_restart_text(text: String) -> void:
+	_restart_text = text
+
+
 func apply_layout(window_size: Vector2, safe: Rect2) -> void:
 	super(window_size, safe)
 	_window_size = window_size
@@ -119,10 +141,18 @@ func _resume() -> void:
 
 
 func _ask_abandon() -> void:
+	_ask("Abandon?", "This game ends now and cannot be resumed.", "Abandon", abandon_confirmed)
+
+
+func _ask_restart() -> void:
+	_ask("Restart?", _restart_text, "Restart", restart_confirmed)
+
+
+func _ask(title: String, message: String, confirm_text: String, answer: Signal) -> void:
 	if _confirm != null:
 		return
-	_confirm = ConfirmDialog.new("Abandon?", "This game ends now and cannot be resumed.", "Abandon", "Keep playing")
-	_confirm.confirmed.connect(func() -> void: abandon_confirmed.emit())
+	_confirm = ConfirmDialog.new(title, message, confirm_text, "Keep playing")
+	_confirm.confirmed.connect(func() -> void: answer.emit())
 	_confirm.closed.connect(_confirm_closed)
 	add_child(_confirm)
 	if _window_size.x > 0.0:

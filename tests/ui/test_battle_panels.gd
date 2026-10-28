@@ -355,9 +355,9 @@ func test_build_with_all_six_towers_and_in_a_wave() -> void:
 	b.gold = 1000
 	var panel: BuildPanel = _build(b)
 	panel.show_spot(_spot(b))
-	assert_eq(panel.card_buttons.size(), 6)
+	assert_eq(panel.card_buttons.size(), b.catalog.tower_ids().size())
 	panel.set_wide(false)
-	assert_eq(panel.card_buttons.size(), 6)
+	assert_eq(panel.card_buttons.size(), b.catalog.tower_ids().size())
 	b.start_next_wave()
 	panel.select_tower(&"bakery")
 	panel.build_button.tapped.emit()

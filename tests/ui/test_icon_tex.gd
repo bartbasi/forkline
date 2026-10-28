@@ -7,7 +7,7 @@ extends "res://tests/base_test.gd"
 ## icon takes about 8 ms in this run. The old pixel by pixel drawing took 26 to 95 ms,
 ## so the limit catches a return to it and leaves room for a busy machine.
 
-const KINDS: Array[StringName] = [&"cup", &"gear", &"back", &"lock", &"check", &"arrow", &"close", &"pause", &"play"]
+const KINDS: Array[StringName] = [&"cup", &"gear", &"back", &"lock", &"check", &"arrow", &"close", &"pause", &"play", &"note", &"note_off"]
 const LIMIT_MS: float = 20.0
 
 
@@ -98,3 +98,28 @@ func test_the_shapes_are_where_they_should_be() -> void:
 				if c.a > 0.5:
 					solid += 1
 		assert_true(solid > 200 and solid < 3000, "%s covers a sensible area (%d)" % [kind, solid])
+
+
+## The music note has a head, a stem and a flag. Crossed out, it gains a slash and loses a
+## gap around it, so the two read apart by shape and not by color.
+func test_the_music_note_and_its_crossed_out_twin() -> void:
+	var note: Image = IconTex.make(&"note", 64).get_image()
+	var off: Image = IconTex.make(&"note_off", 64).get_image()
+	assert_true(note.get_pixel(24, 47).a > 0.99, "note head")
+	assert_true(note.get_pixel(32, 20).a > 0.99, "note stem")
+	assert_true(note.get_pixel(44, 22).a > 0.99, "note flag")
+	assert_true(note.get_pixel(4, 4).a < 0.01, "note corner")
+	assert_true(note.get_pixel(13, 13).a < 0.01, "no slash on the plain note")
+	assert_true(off.get_pixel(13, 13).a > 0.99, "the slash starts top left")
+	assert_true(off.get_pixel(51, 51).a > 0.99, "and ends bottom right")
+	assert_true(note.get_pixel(32, 27).a > 0.99, "the stem is solid where the gap will be")
+	assert_true(off.get_pixel(32, 27).a < 0.01, "the slash keeps a clear gap beside it")
+	var count_note: int = 0
+	var count_off: int = 0
+	for y: int in 64:
+		for x: int in 64:
+			if note.get_pixel(x, y).a > 0.5:
+				count_note += 1
+			if off.get_pixel(x, y).a > 0.5:
+				count_off += 1
+	assert_ne(count_note, count_off, "the two icons differ in shape")
