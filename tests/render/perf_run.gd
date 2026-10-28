@@ -7,7 +7,7 @@ extends SceneTree
 ##
 ##     godot --path . --script res://tests/render/perf_run.gd
 ##
-## Optional: --only=synthetic (only the crowd), --only=cover (only the cover screen).
+## Optional: --only=synthetic (only the crowd), --only=cover (only the cover screen), --only=storm, --only=build (the build phase only).
 ## Prints one block per run. The numbers are for this PC, not the phone (docs/ARCHITECTURE.md 9.4).
 
 const Fx: GDScript = preload("res://tests/render/render_fixtures.gd")
@@ -28,6 +28,10 @@ func _run() -> void:
 			only = arg.trim_prefix("--only=")
 	if only == "storm":
 		await _storm()
+		quit(0)
+		return
+	if only == "build":
+		await _build_phase()
 		quit(0)
 		return
 	var screens: Array[Array] = [["cover", Vector2i(904, 2316), Fx.COVER], ["inner", Vector2i(1812, 2176), Fx.INNER]]

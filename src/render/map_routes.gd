@@ -13,6 +13,13 @@ extends Node2D
 ## that crosses a deck east to west, so it runs on top of the deck, and the flyers' dotted
 ## line, because flyers fly over every feature. A route that crosses a bridge north to south
 ## is not drawn again, so the deck cuts it.
+##
+## Draw calls (docs/ARCHITECTURE.md 9.3). The lines are polylines, a casing and a core for each
+## walker part. What moves along them is not: the arrow chevrons, the dashes of a breaker's line
+## and the dots of a flyer's line are turned quads of the MapAtlas sheet (RoutePieces), drawn by
+## two child layers, one behind the polylines and one over them. So a layer of any length costs
+## two draw calls for its marks. The look and the order are those of MapArt.draw_route. A layer
+## with no sheet (`use_atlas()` not called) draws no marks.
 
 const CELL: float = 128.0
 ## How the deck layer draws only a piece of a line and still puts its arrows and dashes where
@@ -32,6 +39,7 @@ class Deck:
 	var points: PackedVector2Array = PackedVector2Array()
 	## Distance along the whole part to where `points` starts, in px.
 	var start: float = 0.0
+	var lengths: PackedFloat32Array = PackedFloat32Array()
 
 ## One entrance's lines, ready to draw. Walker and breaker lines come in parts, one for each
 ## stretch between twin steps.
@@ -43,6 +51,10 @@ class Line:
 	var cracks: PackedVector2Array = PackedVector2Array()
 	var walk_decks: Array[Deck] = []
 	var break_decks: Array[Deck] = []
+	## The distance along each part to each of its points, for the marks.
+	var walk_lengths: Array[PackedFloat32Array] = []
+	var break_lengths: Array[PackedFloat32Array] = []
+	var fly_lengths: PackedFloat32Array = PackedFloat32Array()
 
 var lines: Array[Line] = []
 var phase: float = 0.0
@@ -50,6 +62,54 @@ var phase: float = 0.0
 var deck_layer: bool = false
 ## True for the base layer when the deck layer draws the flyers' line.
 var fly_above: bool = false
+## The sheet the marks are drawn from.
+var atlas: MapAtlas
+
+var _under: MarkLayer
+var _over: MarkLayer
+var _chevron: MapAtlas.Entry
+var _dot: MapAtlas.Entry
+var _dash: MapAtlas.Entry
+var _texture: Texture2D
+
+
+## One of the two layers of marks: `above` is false for the one behind the polylines.
+class MarkLayer:
+	extends Node2D
+	var routes: MapRoutes
+	var above: bool = false
+
+	func _draw() -> void:
+		routes.draw_marks(self, above)
+
+
+## Gives the layer its sheet, which must hold the route pieces (MapAtlas.add_route_pieces), and
+## the material the marks are drawn with: the sheet's premultiplied blend.
+func use_atlas(sheet: MapAtlas, marks_material: Material) -> void:
+	atlas = sheet
+	_texture = sheet.get_texture()
+	_chevron = sheet.entry_for(RoutePieces.key(RoutePieces.Piece.CHEVRON))
+	_dot = sheet.entry_for(RoutePieces.key(RoutePieces.Piece.DOT))
+	_dash = sheet.entry_for(RoutePieces.key(RoutePieces.Piece.DASH))
+	if _under != null:
+		return
+	_under = MarkLayer.new()
+	_under.routes = self
+	_under.show_behind_parent = true
+	_under.material = marks_material
+	add_child(_under)
+	_over = MarkLayer.new()
+	_over.routes = self
+	_over.above = true
+	_over.material = marks_material
+	add_child(_over)
+
+
+func _redraw() -> void:
+	queue_redraw()
+	if _under != null:
+		_under.queue_redraw()
+		_over.queue_redraw()
 
 
 ## `routes` are Battle.routes() entries. An empty list hides the lines.
@@ -59,6 +119,10 @@ func set_routes(routes: Array[Dictionary], level: LevelData) -> void:
 		var line: Line = Line.new()
 		line.walk = _parts(_cells(r.get("walk", [])), level, line.walk_decks)
 		line.breaker = _parts(_cells(r.get("break", [])), level, line.break_decks)
+		for part: PackedVector2Array in line.walk:
+			line.walk_lengths.append(_lengths(part))
+		for part: PackedVector2Array in line.breaker:
+			line.break_lengths.append(_lengths(part))
 		for c: Vector2i in _cells(r.get("cracks", [])):
 			line.cracks.append((Vector2(c) + Vector2(0.5, 0.5)) * CELL)
 		var index: int = int(r.get("entrance", 1)) - 1
@@ -66,8 +130,9 @@ func set_routes(routes: Array[Dictionary], level: LevelData) -> void:
 			line.fly = PackedVector2Array([
 				(Vector2(level.entrances[index]) + Vector2(0.5, 0.5)) * CELL,
 				(Vector2(level.base) + Vector2(0.5, 0.5)) * CELL])
+			line.fly_lengths = _lengths(line.fly)
 		lines.append(line)
-	queue_redraw()
+	_redraw()
 
 
 func is_showing() -> bool:
@@ -86,21 +151,18 @@ func advance(seconds: float) -> void:
 	if lines.is_empty():
 		return
 	phase = fposmod(phase + seconds * 0.35, 1.0)
-	queue_redraw()
+	_redraw()
 
 
+## The polylines: the breakers' cracks and the walkers' lines, or on the deck layer the pieces of
+## walker lines over decks. What moves along them is in the two MarkLayers (draw_marks).
 func _draw() -> void:
 	if deck_layer:
-		_draw_decks()
-		return
-	if not fly_above:
 		for line: Line in lines:
-			if line.fly.size() >= 2:
-				MapArt.draw_route(self, line.fly, CELL, MapArt.Route.FLY, phase)
+			for deck: Deck in line.walk_decks:
+				_solid(deck.points)
+		return
 	for line: Line in lines:
-		for part: PackedVector2Array in line.breaker:
-			if part.size() >= 2:
-				MapArt.draw_route(self, part, CELL, MapArt.Route.BREAK, phase)
 		for c: Vector2 in line.cracks:
 			var zig: PackedVector2Array = PackedVector2Array([
 				c + Vector2(-2, -44) * CELL / 100.0, c + Vector2(6, -32) * CELL / 100.0,
@@ -110,20 +172,124 @@ func _draw() -> void:
 			draw_polyline(zig, Palette.FLOUR, CELL * 0.05, true)
 	for line: Line in lines:
 		for part: PackedVector2Array in line.walk:
-			if part.size() >= 2:
-				MapArt.draw_route(self, part, CELL, MapArt.Route.WALK, phase)
+			_solid(part)
 
 
-func _draw_decks() -> void:
+## A solid line with a dark casing, as MapArt.draw_route draws a walker's.
+func _solid(points: PackedVector2Array) -> void:
+	if points.size() < 2:
+		return
+	draw_polyline(points, Palette.INK_LINE, CELL * 0.11, true)
+	draw_polyline(points, Palette.ROUTE, CELL * 0.055, true)
+
+
+## The marks, in the order MapArt.draw_route puts them: behind the polylines the flyers' dots,
+## then the breakers' dashes with their arrows; over them the walkers' arrows. On the deck layer
+## the flyers' line is whole and the breaker and walker marks are those of the deck pieces.
+func draw_marks(canvas: Node2D, above: bool) -> void:
+	if lines.is_empty() or atlas == null or _chevron == null:
+		return
 	for line: Line in lines:
-		if line.fly.size() >= 2:
-			MapArt.draw_route(self, line.fly, CELL, MapArt.Route.FLY, phase)
-	for line: Line in lines:
-		for deck: Deck in line.break_decks:
-			MapArt.draw_route(self, deck.points, CELL, MapArt.Route.BREAK, fposmod(phase - deck.start / (DASH_PERIOD * CELL), 1.0))
-	for line: Line in lines:
-		for deck: Deck in line.walk_decks:
-			MapArt.draw_route(self, deck.points, CELL, MapArt.Route.WALK, fposmod(phase - deck.start / (ARROW_STEP * CELL), 1.0))
+		if above:
+			if deck_layer:
+				for deck: Deck in line.walk_decks:
+					_arrows(canvas, deck.points, deck.lengths, fposmod(phase - deck.start / (ARROW_STEP * CELL), 1.0))
+			else:
+				for i: int in line.walk.size():
+					_arrows(canvas, line.walk[i], line.walk_lengths[i], phase)
+			continue
+		if line.fly.size() >= 2 and (deck_layer or not fly_above):
+			_dots(canvas, line.fly, line.fly_lengths)
+		if deck_layer:
+			for deck: Deck in line.break_decks:
+				var ph: float = fposmod(phase - deck.start / (DASH_PERIOD * CELL), 1.0)
+				_dashes(canvas, deck.points, deck.lengths, ph)
+				_arrows(canvas, deck.points, deck.lengths, ph)
+		else:
+			for i: int in line.breaker.size():
+				_dashes(canvas, line.breaker[i], line.break_lengths[i], phase)
+				_arrows(canvas, line.breaker[i], line.break_lengths[i], phase)
+	_end_marks(canvas)
+
+
+## Puts the canvas's transform back after the quads. Tests replace _quad and this to record the marks.
+func _end_marks(canvas: Node2D) -> void:
+	canvas.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## Arrow chevrons along a line, as MapArt.draw_route places them.
+func _arrows(canvas: Node2D, points: PackedVector2Array, lengths: PackedFloat32Array, ph: float) -> void:
+	if points.size() < 2 or lengths.size() != points.size():
+		return
+	var total: float = lengths[lengths.size() - 1]
+	var step: float = ARROW_STEP * CELL
+	var a: float = ARROW_START * CELL + fposmod(ph, 1.0) * step
+	var seg: int = 1
+	while a < total - ARROW_END * CELL:
+		seg = _seg_for(lengths, a, seg)
+		var p: Vector2 = _lerp_at(points, lengths, a, seg)
+		var q: Vector2 = _lerp_at(points, lengths, a + 1.0, _seg_for(lengths, a + 1.0, seg))
+		_quad(canvas, _chevron, p, (q - p).normalized().angle(), 1.0)
+		a += step
+
+
+## Dashes along a breaker's line: DASH_PERIOD cells apart, each 0.55 of that long. A dash is a
+## straight piece turned along its chord, which on a bend of the road is off by under a pixel.
+func _dashes(canvas: Node2D, points: PackedVector2Array, lengths: PackedFloat32Array, ph: float) -> void:
+	if points.size() < 2 or lengths.size() != points.size():
+		return
+	var total: float = lengths[lengths.size() - 1]
+	var period: float = DASH_PERIOD * CELL
+	var full: float = RoutePieces.DASH_LENGTH * CELL
+	var d: float = fposmod(ph, 1.0) * period
+	var seg: int = 1
+	while d < total:
+		var end: float = minf(d + period * 0.55, total)
+		if end - d >= 1.0:
+			seg = _seg_for(lengths, d, seg)
+			var mid: float = (d + end) * 0.5
+			var mid_seg: int = _seg_for(lengths, mid, seg)
+			var p0: Vector2 = _lerp_at(points, lengths, d, seg)
+			var p1: Vector2 = _lerp_at(points, lengths, end, _seg_for(lengths, end, mid_seg))
+			_quad(canvas, _dash, _lerp_at(points, lengths, mid, mid_seg), (p1 - p0).normalized().angle(), (end - d) / full)
+		d += period
+
+
+## Dots along a flyer's line, 0.24 of a cell apart.
+func _dots(canvas: Node2D, points: PackedVector2Array, lengths: PackedFloat32Array) -> void:
+	if points.size() < 2 or lengths.size() != points.size():
+		return
+	var total: float = lengths[lengths.size() - 1]
+	var gap: float = CELL * 0.24
+	var d: float = fposmod(phase, 1.0) * gap
+	var seg: int = 1
+	while d < total:
+		seg = _seg_for(lengths, d, seg)
+		_quad(canvas, _dot, _lerp_at(points, lengths, d, seg), 0.0, 1.0)
+		d += gap
+
+
+## One piece of the sheet, anchored at `at`, turned by `angle` and stretched along its length.
+func _quad(canvas: Node2D, e: MapAtlas.Entry, at: Vector2, angle: float, stretch: float) -> void:
+	canvas.draw_set_transform(at, angle, Vector2(stretch, 1.0))
+	canvas.draw_texture_rect_region(_texture, Rect2(-e.anchor, e.tile), e.rect)
+
+
+## The segment of `lengths` that holds distance `d`, looking on from segment `from`.
+static func _seg_for(lengths: PackedFloat32Array, d: float, from: int) -> int:
+	var i: int = maxi(from, 1)
+	var last: int = lengths.size() - 1
+	while i < last and d > lengths[i]:
+		i += 1
+	return i
+
+
+## The point at distance `d` along `points`, which lies on segment `i` (see _seg_for).
+static func _lerp_at(points: PackedVector2Array, lengths: PackedFloat32Array, d: float, i: int) -> Vector2:
+	var span: float = lengths[i] - lengths[i - 1]
+	if span <= 0.0:
+		return points[i]
+	return points[i - 1].lerp(points[i], clampf((d - lengths[i - 1]) / span, 0.0, 1.0))
 
 
 ## The drawn points of every stretch of `cells` between twin steps, and the pieces over decks.
@@ -176,6 +342,7 @@ func _find_decks(cells: Array[Vector2i], points: PackedVector2Array, level: Leve
 		deck.start = maxf(from, 0.0)
 		deck.points = _slice(points, lengths, deck.start, minf(to, total))
 		if deck.points.size() >= 2:
+			deck.lengths = _lengths(deck.points)
 			decks.append(deck)
 
 

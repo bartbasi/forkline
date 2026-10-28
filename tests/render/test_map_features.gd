@@ -327,6 +327,11 @@ func _walk_stumps(grid: Array, label: String) -> Dictionary:
 	var prev_shown: bool = false
 	var was_hidden: bool = false
 	var entered_bursts: int = 0
+	var twin_tick: int = -1
+	var landed_tick: int = -100
+	var alpha_before: float = 1.0
+	out["fading"] = 0
+	out["fading_in"] = 0
 	while b.phase == Battle.Phase.WAVE and b.tick < 3000:
 		Fx.tick(b)
 		# Sweep the interpolation, as frames between two ticks would.
@@ -337,17 +342,38 @@ func _walk_stumps(grid: Array, label: String) -> Dictionary:
 				break
 			var step_is_twin: bool = e.progress < Sim.UNIT and e.to_cell == b.map.twin_of(e.from_cell)
 			var layer: StringName = v.layer_of(0)
-			assert_eq(layer == &"hidden", step_is_twin, "%s tick %d: hidden exactly on a twin step" % [label, b.tick])
+			var shown: float = v.creature_alpha(0)
 			if step_is_twin:
-				out["hidden"] += 1
+				if twin_tick < 0:
+					twin_tick = b.tick
+					alpha_before = 1.0
+				assert_true(shown <= alpha_before + 0.0001, "%s tick %d: it only fades out on the way in" % [label, b.tick])
+				alpha_before = shown
+				if b.tick - twin_tick >= 4:
+					assert_eq(layer, &"hidden", "%s tick %d: hidden once the fade is done" % [label, b.tick])
+				if shown > 0.0:
+					out["fading"] += 1
+					var at_stump: Vector2 = (Vector2(e.from_cell) + Vector2(0.5, 0.5)) * MapView.CELL
+					assert_true(v.creature_center(0).distance_to(at_stump) < MapView.CELL * 0.3, "%s tick %d: it fades out where it went in, no streak" % [label, b.tick])
+				else:
+					out["hidden"] += 1
 				out["stump"] = v.creature_center(0)
-				if v.enemy_at(v.get_global_transform() * v.creature_center(0)) == 0:
+				if shown < 0.5 and v.enemy_at(v.get_global_transform() * v.creature_center(0)) == 0:
 					out["found"] += 1
 				if not was_hidden:
 					entered_bursts = v.sparkles().bursts
 				was_hidden = true
 				prev_shown = false
+				landed_tick = b.tick
 				continue
+			twin_tick = -1
+			if b.tick - landed_tick >= 4:
+				assert_true(layer != &"hidden", "%s tick %d: shown again once the fade is done" % [label, b.tick])
+			elif b.tick - landed_tick <= 3 and was_hidden == false and shown < 1.0:
+				out["fading_in"] += 1
+				var here: Vector2i = e.to_cell if e.progress >= Sim.UNIT else e.from_cell
+				var at_twin: Vector2 = (Vector2(here) + Vector2(0.5, 0.5)) * MapView.CELL
+				assert_true(v.creature_center(0).distance_to(at_twin) < MapView.CELL * 0.5, "%s tick %d: it fades in at the twin, no streak" % [label, b.tick])
 			if was_hidden:
 				was_hidden = false
 				out["bursts"] = entered_bursts
@@ -366,8 +392,10 @@ func _walk_stumps(grid: Array, label: String) -> Dictionary:
 
 func test_a_walker_on_a_twin_step_is_hidden_and_reappears_at_the_twin() -> void:
 	var r: Dictionary = _walk_stumps(Sx.STUMP_GRID, "stump map")
-	assert_true(r["hidden"] > 4, "it is hidden for the whole step")
-	assert_eq(r["found"], 0, "a finger finds nothing where nothing is drawn")
+	assert_true(r["hidden"] > 4, "it is hidden for most of the step")
+	assert_true(r["fading"] > 0, "it fades out at the stump instead of vanishing at once")
+	assert_true(r["fading_in"] > 0, "it fades in at the twin")
+	assert_eq(r["found"], 0, "a finger finds nothing where it is faint or not drawn")
 	assert_true(r["max_step"] < MapView.CELL * 0.5, "no streak: drawn positions never jump while it shows (largest %.1f px)" % r["max_step"])
 	var landed: Vector2 = r["landed"]
 	var twin_center: Vector2 = (Vector2(5, 5) + Vector2(0.5, 0.5)) * MapView.CELL
@@ -417,14 +445,28 @@ func test_a_release_that_begins_on_a_twin_step_is_hidden_too() -> void:
 	var v: MapView = _view(b)
 	b.start_next_wave()
 	var guard: int = 0
+	var twin_since: Dictionary = {}
+	var landed: Dictionary = {}
+	var saw_twin: bool = false
 	while b.phase == Battle.Phase.WAVE and guard < 6000:
 		Fx.tick(b)
 		v.sync(1.0)
 		for e: EnemyState in b.enemies:
 			var twin: bool = e.progress < Sim.UNIT and e.to_cell == b.map.twin_of(e.from_cell)
-			assert_eq(v.layer_of(e.id) == &"hidden", twin, "tick %d: creature %d" % [b.tick, e.id])
+			if twin:
+				twin_since[e.id] = int(twin_since.get(e.id, b.tick))
+				if b.tick - int(twin_since[e.id]) >= 4:
+					assert_eq(v.layer_of(e.id), &"hidden", "tick %d: creature %d is gone from the stump" % [b.tick, e.id])
+				saw_twin = true
+			else:
+				if twin_since.has(e.id):
+					landed[e.id] = b.tick
+					twin_since.erase(e.id)
+				if b.tick - int(landed.get(e.id, -100)) >= 4:
+					assert_true(v.layer_of(e.id) != &"hidden", "tick %d: creature %d shows" % [b.tick, e.id])
 		guard += 1
 	assert_true(guard > 100)
+	assert_true(saw_twin, "a creature took the twin step")
 
 
 # Route lines.

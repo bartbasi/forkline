@@ -51,6 +51,8 @@ const Z_SPARKLES: int = 4
 const Z_LEAKS: int = 5
 ## A walker inside a tunnel is fully shown at a mouth and gone this far (in cells) inside.
 const TUNNEL_FADE: float = 0.3
+## How long a walker takes to fade out at the stump it enters and in at its twin, in game seconds.
+const TWIN_FADE: float = 0.15
 ## Farther than this (in cells) in one frame is a jump (a twin step), not a walk.
 const JUMP_CELLS: float = 0.9
 
@@ -94,6 +96,11 @@ class CreatureView:
 	## How much of it shows: 1 whole, 0 gone (in a tunnel or on a twin step).
 	var alpha: float = 1.0
 	var twin: bool = false
+	## Game time it went into a stump, and the time it came out at the twin.
+	var twin_t: float = -10.0
+	var landed_t: float = -10.0
+	## False until _place_walker has seen it once.
+	var placed: bool = false
 
 
 ## A straight run of tunnel tiles: the box of the run in local pixels, and its direction.
@@ -236,6 +243,10 @@ func setup(new_battle: Battle, region: StringName = &"lantern_hill") -> void:
 	_atlas.add_marks()
 	_atlas.add_shot_pieces()
 	_atlas.add_gates()
+	_atlas.add_route_pieces()
+	_routes.use_atlas(_atlas, _premult)
+	if _overpass != null:
+		_overpass.use_atlas(_atlas, _premult)
 	_gates.atlas = _atlas
 	_build_turns()
 	_bake_scale = 1.0
@@ -825,8 +836,16 @@ func _place_walker(v: CreatureView, e: EnemyState, px: Vector2) -> void:
 	var shown: float = 1.0
 	# The step that ends this tick has progress UNIT and the walker already stands at the twin.
 	var twin: bool = _has_twins and e.progress < Sim.UNIT and e.to_cell == battle.map.twin_of(e.from_cell)
+	if twin and not v.twin:
+		# A creature first seen on a twin step (a loaded game, a release) is not drawn at all.
+		v.twin_t = _fx_time if v.placed else _fx_time - TWIN_FADE
+		_sparkles.burst(_center_px(e.from_cell), MapSparkles.Kind.BUBBLE, 0.6)
+	elif v.twin and not twin:
+		v.landed_t = _fx_time
+	v.twin = twin
+	v.placed = true
 	if twin:
-		shown = 0.0
+		shown = clampf(1.0 - (_fx_time - v.twin_t) / TWIN_FADE, 0.0, 1.0)
 	elif _layered:
 		var cell: Vector2i = Vector2i(floori(px.x / CELL), floori(px.y / CELL))
 		var feature: LevelData.Feature = level.feature_at(cell)
@@ -835,9 +854,8 @@ func _place_walker(v: CreatureView, e: EnemyState, px: Vector2) -> void:
 			shown = _tunnel_shown(cell, px)
 		elif feature == LevelData.Feature.BRIDGE and battle.map.under_bridge(e.from_cell, e.to_cell):
 			under = true
-	if twin and not v.twin:
-		_sparkles.burst(_center_px(e.from_cell), MapSparkles.Kind.BUBBLE, 0.6)
-	v.twin = twin
+	if not twin and _fx_time - v.landed_t < TWIN_FADE:
+		shown = minf(shown, clampf((_fx_time - v.landed_t) / TWIN_FADE, 0.0, 1.0))
 	if under != v.under:
 		v.under = under
 		v.sprite.reparent(_under if under else _entities, false)

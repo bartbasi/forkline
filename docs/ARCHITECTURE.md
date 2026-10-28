@@ -1,6 +1,6 @@
 # Forkline: Architecture
 
-Owner: architect. Status: revised for phase 7, and brought up to the built sim (S1), the run code (R1, R2), the saves (S2), the run segments (L4), the Twist and run screens (U2), the rules alignment (G1), the run tuning (G3), the security fixes (S4, R4, S5) and the ceilings on stacked effects (S6, S7), 2026-10-25; then to the perk rule (G5, R5), the QA round 3 fixes (docs/reviews/qa-2026-10-26.md), the Fold5 frame times (V2) and the shot rework (commit a68c16c), 2026-10-26; then section 13 marked up to B5, with what is in progress or next, and brought up to the wave start save (QA 2026-10-27 m1), the shot polish and the release build (P2), 2026-10-27. Then change block A12 (section 14), 2026-10-27: the expansion to 8 regions, with its build plan at the end of section 13.
+Owner: architect. Status: revised for phase 7, and brought up to the built sim (S1), the run code (R1, R2), the saves (S2), the run segments (L4), the Twist and run screens (U2), the rules alignment (G1), the run tuning (G3), the security fixes (S4, R4, S5) and the ceilings on stacked effects (S6, S7), 2026-10-25; then to the perk rule (G5, R5), the QA round 3 fixes (docs/reviews/qa-2026-10-26.md), the Fold5 frame times (V2) and the shot rework (commit a68c16c), 2026-10-26; then section 13 marked up to B5, with what is in progress or next, and brought up to the wave start save (QA 2026-10-27 m1), the shot polish and the release build (P2), 2026-10-27. Then change block A12 (section 14), 2026-10-27: the expansion to 8 regions, with its build plan at the end of section 13. Then A12 brought up to S8, A2, R6, S9, A3, V3, U4 and S10a, the V3 follow-up, and the Fold5 rerun (docs/render/perf-fold5-2026-10-27.md), with those steps and G6 marked done in section 13, 2026-10-27.
 
 This is the contract every agent builds against: folders and owners, ids and data files, every public class with its methods and data shapes, routing, saves, resume, orientation, outbound links, the performance budget, the tests, the build plans for phase 5 (section 11), phase 7 and the expansion (section 13), and the expansion's changes (section 14). Do not invent a public method that another area must call. If you need a change here, put it in your report for the DM.
 
@@ -263,7 +263,7 @@ A12 adds `fright_pct`, `fright_ms`, `pulse`, `line` and `lure_ms`, with their ch
 | speed_up | `at_pct` 1 to 10 values, each 1 to 99 and lower than the one before; `add` 1 to 1,000 | `{"at_pct": [75, 50, 25], "add": 10}`: the first time health falls to each percent, speed rises by `add` from the next tick | 6.3 |
 | release | `at_pct` 1 to 99, `count` 1 to 20, `gap_ms` 50 to 60,000 | `{"at_pct": 50, "enemy", "count", "gap_ms"}`: once, starting on the next tick, even if the same hit defeats it | 6.3 |
 
-Release checks: the creature named by `split_into`, `summon.enemy` or `release.enemy` exists, is not the releaser itself and is not a boss. It has no `split_into`, `summon` or `release` of its own, so releases never chain. A flyer releases only flyers, because a released walker starts on its releaser's road step (RULES 6.2). A summoned creature has no `heal`: summons come for as long as the boss lives, so a save could not bound the healers they bring. A12 adds the creature fields of 14.4, and a summoned creature has no `wake_reach` either.
+Release checks: the creature named by `split_into`, `summon.enemy` or `release.enemy` exists, is not the releaser itself and is not a boss. It has no `split_into`, `summon` or `release` of its own, so releases never chain. A flyer releases only flyers, because a released walker starts on its releaser's road step (RULES 6.2). Since A12 a gate breaker releases only flyers too, by split, summon and release alike (S9): it walks the route with no gates (4.5), where a released walker could find no open way on. A summoned creature has no `heal`: summons come for as long as the boss lives, so a save could not bound the healers they bring. A12 adds the creature fields of 14.4, and a summoned creature has no `wake_reach` either.
 
 `rules.json`, every key required:
 
@@ -357,7 +357,7 @@ Which creatures an effect reaches: a Twist's creature effects reach every creatu
 | `add_lives` | amount | card, instant | Gain lives, never above the battle's starting lives (`start_lives`). A gain never lowers lives. | 4.4, 14.5 |
 
 - Order: a Twist's start effects come before Relaxed (RULES 11). Tower stats: the data, then every `tower_add`, then every `tower_pct`, then Bakery boosts on top (RULES 8.7). Creatures: the data, then strength, then effects, each step rounded by its own rule.
-- Floors after card effects: price at least 10, reach at least 1, reload at least 50 ms, damage at least 1 on a tower that deals damage, splash at least 0, targets at least 1, a slow from 1 to 90 percent on a stat block that has a slow (a card never adds a slow to one that has none), boosts at least 0. There are no rule ceilings beyond the slow's 90 percent, so Volley gives a Triple Bow 4 targets. The far ceilings of 5.6 refuse a card rather than clamp it: `add_effects` returns `&"bad_effect"` for a card that would take a tower stat, a gold gain or the next wave past one (3.1).
+- Floors after card effects: price at least 10, reach at least 1, reload at least 50 ms, damage at least 1 on a tower that deals damage, splash at least 0, targets at least 1, a slow from 1 to 90 percent on a stat block that has a slow (a card never adds a slow to one that has none), boosts at least 0. There are no rule ceilings beyond the slow's 90 percent, so Volley gives a Triple Bow 4 targets. A12 keeps splash at 0 and targets at 1 where 14.4 allows no other value. The far ceilings of 5.6 refuse a card rather than clamp it: `add_effects` returns `&"bad_effect"` for a card that would take a tower stat, a gold gain or the next wave past one (3.1).
 - Instant effects change the state once and are not kept, so a restore never applies them twice. Every other effect is kept by the battle and saved with it.
 - Checks (`Modifiers.check`): the type is known and allowed for its use; the fields are exact; every id exists; pct is 1 to 1,000, except `refund_pct`, which is 1 to 100; counts are 1 to 200, except `set_gates` count, which is 0 to `max_gates` (the No Gates Twist gives 0); `set_lives` is 1 to 1,000; entrances are 1 to 4; times are multiples of 50 up to 600,000; `add_gold` `amount` and `per_wave`, `add_lives` `amount`, `reward_gold` `amount` and `interest` `max` are whole numbers from 0 to 1,000: a negative value is refused when it is loaded or picked, not counted as 0 (2026-10-24); every other number is -1,000 to 1,000; a `break_ms` creature already breaks gates (phase 7). `LevelData.check` also checks that `fixed_gates` cells are sockets of that level, that there are no more of them than the level gives, and that they do not seal. `RunData.check` adds the card rules of 2.11.
 
@@ -1363,7 +1363,8 @@ static func draw_bubble(canvas: CanvasItem, center: Vector2, size: float) -> voi
 static func draw_drowsy(canvas: CanvasItem, center: Vector2, size: float, frame: int) -> void
 static func draw_boost(canvas: CanvasItem, center: Vector2, size: float) -> void
 static func draw_glyph(canvas: CanvasItem, glyph: StringName, center: Vector2, size: float, flat: Color = NO_FLAT) -> void   # &"heart", &"coin", &"moon", &"star", &"gate"
-# A12 adds the new ids to TOWERS, SPECS, CREATURES and BOSSES, and MARKS and draw_mark() (14.9)
+# A12 adds the new ids to SPECS, and to TOWERS, CREATURES and BOSSES after U5 and V4; until then they are in the
+# EXPANSION lists. Also MARKS and draw_mark() (14.9)
 
 class_name MapArt extends RefCounted                   # src/theme/map_art.gd: the map, in map local pixels
 enum Gate { SOCKET, CLOSED, FIXED, BROKEN, REFUSED, OPEN }   # OPEN (phase 7): a placed gate standing open under gates_open;
@@ -1752,14 +1753,14 @@ Target: 60 fps on the Fold5 (Snapdragon 8 Gen 2), on both screens, through the l
 | Drawn projectiles in flight | 96 | `MapShots.MAX_SHOTS`: a new shot past it drops the oldest. The sim has no shots: hits land at once. |
 | Particles alive | 400 | Pooled emitters, at most 24, at most 16 particles per puff |
 | Sound voices | 12 | At most 3 of the same sound at once |
-| Draw calls per frame | up to about 420, as measured | V2 on the Fold5, before the shot rework (docs/render/perf-fold5-2026-10-26.md): 129 to 421 a frame, about 130 to 160 in the middle of a big wave, and up to about 420 around the start of a wave and in a build phase with the full info panel. Every wave measured held 120 fps. The shot rework (commit a68c16c) draws shots and marks from the atlas in one batch, which roughly halved draw calls in real waves on the PC. The Fold5 has not been measured since. |
+| Draw calls per frame | up to about 270, as measured | The Fold5 rerun after the shot rework (2026-10-27, docs/render/perf-fold5-2026-10-27.md): 120 to 133 a frame in the middle of a big wave and up to 266 at a wave's start. Every run held 120 fps. Since then route marks are batched too (9.3), so a build phase is about 80: the bridge fixture's build phase reads 67, down from 431. V2, before the shot rework (docs/render/perf-fold5-2026-10-26.md), read 129 to 421. |
 
 ### 9.2 Time per frame on the Fold5 (16.7 ms)
 
-- Sim: at most 2 ms per tick at the 99th percentile, at 3x with 200 live creatures. At 3x and 60 fps that is about one tick per frame.
+- Sim: at most 2 ms per tick at the 99th percentile, at 3x with 200 live creatures. 3x is 60 ticks a second: one tick per frame at 60 Hz, half a tick at 120 Hz. On the Fold5 on 2026-10-27, before S10a made the tick cheaper, its 99th percentile was 1.96 to 2.16 ms over the whole wave at 114 live: at the line or just over it. 2 ms stays the target and a warning, while the frame budget is the trigger (the steps below), and V5 measures again on the phone (14.12).
 - Render and UI scripts (`sync`, events, HUD): at most 3 ms.
 - GPU: at most 8 ms.
-- The 99th percentile frame over the whole wave: at most 20 ms.
+- The 99th percentile frame over the whole wave: at most 20 ms. The slow frame near the start of the first wave on the Fold5 (2026-10-27) was the HUD making its first lock icon (`IconTex` in src/ui/, 33 ms), not render work. The ui-engineer is fixing it.
 
 These Fold5 numbers are the budget. The dev PC number is only an early warning.
 
@@ -1776,6 +1777,7 @@ These Fold5 numbers are the budget. The dev PC number is only an early warning.
 - Every tower look, creature frame, status mark, gate look and shot piece is drawn once with `Silhouettes`, `MapArt` or `ShotPieces` into one sheet, `MapAtlas` (src/render/map_atlas.gd). The sheet is drawn again only when a new look joins it or the map's scale on screen calls for a different sharpness. A tower or a creature is one pooled `Sprite2D`, a region of that sheet. Each frame it only moves. Its region changes with its look or animation frame, and a tower grows in when it is built and kicks back for a moment when it fires.
 - Health bars for hurt creatures, with the drowsy, bubble and boost marks, are one overlay node (`MapStatus`). Shots and their short marks are another (`MapShots`). Each is redrawn every frame while it has something to show.
 - Shots (the shot rework, commit a68c16c, 2026-10-26). `MapShots` draws every shot and mark as tinted, scaled and turned quads of the sheet, so a frame of shots batches into very few draw calls. The pieces are `ShotPieces` (src/render/shot_pieces.gd), added to the sheet as `MapAtlas.Kind.PIECE` entries by `MapAtlas.add_shot_pieces()`, which loops over `ShotPieces.Piece.size()`. Each shot has a launch mark at the tower (`MapShots.Fx.MUZZLE`), a body with a short trail, and a landing mark. A catapult's lobbed shot (`MapShots.Look.PUMPKIN`, `JAM`, or `PRIZE` for the `prize_pumpkin` path) shows a dashed ring of its tower's real splash radius on the ground while it flies, and lands in a splash of that size (`Fx.SPLASH`). Since the shot polish (2026-10-27, QA 2026-10-27 p1 and p2), the shots that land on a spot (`MapShots.lands_on_spot()`: the catapult's three looks and the Firework Tower's `ROCKET` and `BLOOM`) slide toward their creature, which walks on while they fly, but stay at most `MapShots.AIM_REACH` (0.35) of the splash radius from the `at` of their `fired` event, the spot the sim hit (`aim_at()`). The splash or burst they land in, with its ring, is centered on that spot at the real radius, and its splat, chunks or flash come down where the shot did. A burst is made when its rocket lands. Other shots follow their creature while it is on the map (3.2). A single-target hit mark (`Fx.HIT`, which rockets and blooms also leave on their creature) lasts 0.18 s. Apart from an arrow that shows stuck there, it reaches at most 0.15 of a cell from where it lands, 0.19 for the Giant Bow and the Skyrocket (`hit_reach()`), so it is narrower than the smallest creature (0.4 of a cell). Flights: lobbed shots 0.11 to 0.17 s, rockets and blooms at most 0.13 s. A tower kicks back when it fires, by an amount set per shot look, and most looks also lean the tower away from its first target. At most 96 shots and 90 marks; a new one drops the oldest. Render only: the sim and its `fired` events did not change, and hits still land on the tick a tower fires.
+- Route lines (the V3 follow-up, 2026-10-27). The lines stay polylines, a casing and a core for each walker line part. Their arrows, a breaker line's dashes and a flyer line's dots are `RoutePieces` (src/render/route_pieces.gd), added to the sheet as `MapAtlas.Kind.ROUTE` entries and drawn as turned quads in two mark layers per route layer, one under the polylines and one over. So route lines cost about 2 to 4 draw calls, plus 2 per walker line part, whatever their length. Render only.
 - Sparkle puffs use pooled one-shot `CPUParticles2D` emitters (simulated in C++, predictable in the Compatibility renderer).
 - No `Light2D`, no screen-reading shaders (`SCREEN_TEXTURE`, `BackBufferCopy`), no full-screen transparent layers beyond one sky gradient. Keep shared materials, so the Compatibility renderer can batch.
 - Inside the sim: each tower keeps the list of road cells in its reach, rebuilt only when towers change. Walkers are bucketed by cell each tick, so targeting checks nearby creatures, not all of them. Flyers, being few, are checked directly. A12 adds rules for the new work (14.12).
@@ -1959,7 +1961,7 @@ In progress or next (2026-10-27):
 | Step | Agent | Builds | Depends on | Done when |
 |---|---|---|---|---|
 | **QA4** | qa-reviewer | Runs and the daily on the Fold5, including the checks for a run and a daily in the list below. Round 3 left them out to keep Bart's records unchanged. | QA3 | a QA report in docs/reviews/ |
-| **The Fold5 rerun** | render-engineer | V2 again at the most crowded moment B5 found: 2-2, wave 10 called early over wave 9, 116 live, from B5's saved game. Both screens at 3x and a fold mid-wave (9.4), with the draw calls since the shot rework (9.1). If the sim's 99th percentile tick is over 2 ms, the sim engineer speeds up the sim first (9.2). | B5, the shot rework | the numbers within 9.2, in its report |
+| **The Fold5 rerun** | render-engineer (done 2026-10-27, commit 69ef020, docs/render/perf-fold5-2026-10-27.md: every frame budget held on both screens, the tick at or just over 2 ms (9.2); a fold mid-wave not measured, it needs Bart) | V2 again at the most crowded moment B5 found: 2-2, wave 10 called early over wave 9, 116 live, from B5's saved game. Both screens at 3x and a fold mid-wave (9.4), with the draw calls since the shot rework (9.1). If the sim's 99th percentile tick is over 2 ms, the sim engineer speeds up the sim first (9.2). | B5, the shot rework | the numbers within 9.2, in its report |
 
 Phase 7 is done when:
 
@@ -1988,17 +1990,17 @@ Engine steps:
 
 | Step | Agent | Size | Builds | Depends on | Done when |
 |---|---|---|---|---|---|
-| **G6** | game-designer (in progress, 2026-10-27) | M | RULES.md with the expansion folded in, Yawner throughout | EXPANSION.md | The DM checks RULES.md against section 14. Any difference comes back as a contract change request |
-| **S8** | sim-engineer | L | First, with today's build: a mid-wave game_level.json as a test fixture (14.7). Then 14.2 and 14.3: the new characters, `Feature`, `feature_at`, `slide_dir`, `ROAD_CHARS`, the stump checks, `towers` up to 10; the node graph and the new RoadMap; walkers on nodes and twin steps, `prev_pos` at landings, out of reach in tunnels and on twin steps; `_load_step` | this contract | tests/sim/: the graph rows of 14.13 on fixture maps with each feature; the old save loads and plays on the same; every older test passes |
-| **A2** | art-director | L | 14.9, the cast: the 4 towers in all 4 looks, the 8 creatures and the 4 bosses, `MARKS` and `draw_mark`, and their Palette fills | this contract | tests/theme/: boxes, distinct shapes, contrast; one sheet of every new look and mark |
-| **R6** | roguelite-engineer | M | First, with today's code and data: the tier 0 golden fixture (14.13). Then 14.8 in src/run/: run.json `tiers` (empty until E5.1), the tiers of cards, packs and segments, every filter and `tier` parameter, the new RunData checks, `RunSession.tier` and its save, `RunSegments.ROAD_CHARS`, and `RunCards.has_stat` for pulse and line towers | this contract | tests/run/: tier fixtures for every check and filter, saves with and without `tier`, the golden test |
-| **S9** | sim-engineer | L | 14.4 and 14.5 for towers: the `fright` kind, pulses, lines with their integer method, lures and low flyers; Catalog's tower fields and checks; `fired` for pulses and lines; tower numbers; `no_aim`; the save keys these rules add (14.7) | S8 | tests/sim/: each rule at its edges; saves round trip |
-| **A3** | art-director | L | 14.9, the map: all 8 grounds with their scenery, Lantern Hill's two new values, `GROUNDS`, `ROAD_CHARS`, `ground_of`, the features in `draw_ground` and `draw_features`, and Palette's region and feature tokens. IconArt draws with `ROAD_EDGE`: say whether icons/ should be drawn again | A2 | tests/theme/: contrast on all 8 grounds and the feature pairs; one picture of all 8 grounds and the four features at true size |
-| **S10** | sim-engineer | L | 14.4 and 14.5 for creatures: mist and hiding, dazzle, nap, grow, yawn and doze, blink, wake, dig and regrow; Catalog's creature fields and the summoned waker check; the tick order; the new events; the enemy numbers; the save keys these rules add (14.7). The DM may split it after nap and grow | S9 | tests/sim/: each rule at its edges, the tick order, the events, statuses after load; saves round trip |
+| **G6** | game-designer (done 2026-10-27, commit f370ee9, with A12) | M | RULES.md with the expansion folded in, Yawner throughout | EXPANSION.md | The DM checks RULES.md against section 14. Any difference comes back as a contract change request |
+| **S8** | sim-engineer (done 2026-10-27, commit b44f221) | L | First, with today's build: a mid-wave game_level.json as a test fixture (14.7). Then 14.2 and 14.3: the new characters, `Feature`, `feature_at`, `slide_dir`, `ROAD_CHARS`, the stump checks, `towers` up to 10; the node graph and the new RoadMap; walkers on nodes and twin steps, `prev_pos` at landings, out of reach in tunnels and on twin steps; `_load_step` | this contract | tests/sim/: the graph rows of 14.13 on fixture maps with each feature; the old save loads and plays on the same; every older test passes |
+| **A2** | art-director (done 2026-10-27, commit d3b088f) | L | 14.9, the cast: the 4 towers in all 4 looks, the 8 creatures and the 4 bosses, `MARKS` and `draw_mark`, and their Palette fills | this contract | tests/theme/: boxes, distinct shapes, contrast; one sheet of every new look and mark |
+| **R6** | roguelite-engineer (done 2026-10-27, commit c453b4a) | M | First, with today's code and data: the tier 0 golden fixture (14.13). Then 14.8 in src/run/: run.json `tiers` (empty until E5.1), the tiers of cards, packs and segments, every filter and `tier` parameter, the new RunData checks, `RunSession.tier` and its save, `RunSegments.ROAD_CHARS`, and `RunCards.has_stat` for pulse and line towers | this contract | tests/run/: tier fixtures for every check and filter, saves with and without `tier`, the golden test |
+| **S9** | sim-engineer (done 2026-10-27, commit 8a8353b) | L | 14.4 and 14.5 for towers: the `fright` kind, pulses, lines with their integer method, lures and low flyers; Catalog's tower fields and checks; `fired` for pulses and lines; tower numbers; `no_aim`; the save keys these rules add (14.7) | S8 | tests/sim/: each rule at its edges; saves round trip |
+| **A3** | art-director (done 2026-10-27, commit 8af8e61) | L | 14.9, the map: all 8 grounds with their scenery, Lantern Hill's two new values, `GROUNDS`, `ROAD_CHARS`, `ground_of`, the features in `draw_ground` and `draw_features`, and Palette's region and feature tokens. IconArt draws with `ROAD_EDGE`: say whether icons/ should be drawn again | A2 | tests/theme/: contrast on all 8 grounds and the feature pairs; one picture of all 8 grounds and the four features at true size |
+| **S10** | sim-engineer (S10a done 2026-10-27, commit d9ff4c4: the faster tick and the rules of regions 5 and 6; S10b, the rules of regions 7 and 8, in progress) | L | 14.4 and 14.5 for creatures: mist and hiding, dazzle, nap, grow, yawn and doze, blink, wake, dig and regrow; Catalog's creature fields and the summoned waker check; the tick order; the new events; the enemy numbers; the save keys these rules add (14.7). The DM may split it after nap and grow | S9 | tests/sim/: each rule at its edges, the tick order, the events, statuses after load; saves round trip |
 | **S11** | sim-engineer | M | The rest of 14.7 and 14.8: `MAX_WAKERS`, growth in the wave ceiling, hostile saves for every new key; `Progress.tier()`, `DailyRecord.tier`, GameData's checks of the tiers' levels; tests/sim/test_road_chars.gd; the crowded perf case (14.12) | S10, A3, R6 | the tests/sim/ and tests/save/ rows of 14.13 |
-| **V3** | render-engineer | L | 14.10, the map: `setup(battle, region)` and the grounds, the feature layer and the draw order at bridges, walkers in tunnels and on twin steps, jumps, route lines split at twin steps and over and under decks | S8, A3 | tests/render/ for these; screenshots of fixture maps with each feature at both Fold5 sizes |
+| **V3** | render-engineer (done 2026-10-27, commit 2891749; its follow-up of 9.3 and 14.10 is being verified) | L | 14.10, the map: `setup(battle, region)` and the grounds, the feature layer and the draw order at bridges, walkers in tunnels and on twin steps, jumps, route lines split at twin steps and over and under decks | S8, A3 | tests/render/ for these; screenshots of fixture maps with each feature at both Fold5 sizes |
 | **V4** | render-engineer | L | 14.10, the cast: the new towers, creatures and bosses, the three new shots, a mark for every status, the nap pose, the dig mound, low flyers, growth, and the atlas budget | V3, S10, A2 | the other tests/render/ rows of 14.13; screenshots mid-wave at both Fold5 sizes |
-| **U4** | ui-engineer | M | 14.11, part 1: the region through BattleScreen, the build panel with up to 10 towers, and tower panels for pulses, lines, lures, frights and dozing | S9, V3 | tests/ui/: a 10 tower build panel at both Fold5 sizes with every button at least `MIN_TOUCH`; screenshots |
+| **U4** | ui-engineer (done 2026-10-27, commit b236021) | M | 14.11, part 1: the region through BattleScreen, the build panel with up to 10 towers, and tower panels for pulses, lines, lures, frights and dozing | S9, V3 | tests/ui/: a 10 tower build panel at both Fold5 sizes with every button at least `MIN_TOUCH`; screenshots |
 | **U5** | ui-engineer | M | 14.11, part 2: creature panels with the statuses; InfoScreen with the new towers, creatures and bosses and the four map features; tiers in run and daily starts, the Daily button's regions line, and `record_finish` with the tier | U4, S10, S11 | the other tests/ui/ rows of 14.13; screenshots |
 | **AU1** | audio-engineer | S | 14.11: `fired` sounds for the three new attacking towers and their paths, and a sound or a deliberate silence for each new event | S10 | tests/audio/ |
 | **B6** | balance-analyst | M | The bots for the expansion: distances by node, the plain mixed recipe of RULES 12.6 for regions 5 to 8, lone searches for the Bramble Cottage and the Snow Fort, the Scarecrow counted as support, the Moth Lantern left out where walkers cost 6 lives or more, road seen counted outside tunnels, run and daily reports by tier, and the most crowded wave written as a saved game (9.4) | S10 | the bots play fixture levels with each feature, tower and creature; a trial report |
@@ -2070,7 +2072,7 @@ Load checks, only what the sim needs (`LevelData.check`, so every saved level an
 - `P` and `Q` each appear exactly twice or not at all, and the two of a letter are not neighbors (north, south, east or west). So a step between neighbors is always a walk, and a step between cells that are not neighbors is always a twin step.
 - `towers` holds 1 to 10 tower ids.
 
-Every other map rule of RULES 3.5 to 3.9 and 14.2 is a level design rule, checked by tests/levels/ on every level and every run stack (14.13), like the 13 row rule (2.4). The sim works on any map that passes the load checks: a feature placed badly gives a dead end or an odd route, never a crash, because a walker only steps to a node with a smaller distance.
+Every other map rule of RULES 3.5 to 3.9 and 14.2 is a level design rule, checked by tests/levels/ on every level and every run stack (14.13), like the 13 row rule (2.4). Among them: a tunnel is a straight run of 1 to 4 tiles with no fork or bend, and a map has at most 6 tunnel tiles. `MapArt` and `MapView` draw each run as one straight mound. The sim works on any map that passes the load checks: a feature placed badly gives a dead end or an odd route, never a crash, because a walker only steps to a node with a smaller distance.
 
 One list of road characters: `LevelData.ROAD_CHARS`, `MapArt.ROAD_CHARS` and `RunSegments.ROAD_CHARS` hold the same characters. tests/sim/test_road_chars.gd checks that, and that `kind_at()` gives a road kind exactly for them.
 
@@ -2086,7 +2088,7 @@ Steps, each one step long:
 - A neighbor step from a road cell c to its road neighbor d in direction s (south, west, east or north). It leaves c's node on the axis of s (on a bridge: the north-south node for south and north, the east-west node for west and east) and arrives at d's node on that axis. There is no such step when c is a slide and s is not its arrow, or when d is a slide whose arrow points at c.
 - A twin step from a stump to its twin, both ways.
 
-Distances: one breadth first search from the base over the steps taken backwards, skipping closed nodes. A closed socket closes its one node (a socket is never a feature). The base has distance 0, and a node with no route -1. A node with a distance d above 0 always has a step to a node with distance d - 1, so a walker always moves on.
+Distances: one breadth first search from the base over the steps taken backwards, skipping closed nodes. A closed socket closes its one node (a socket is never a feature). A bridge cell passed in `closed` closes both its nodes; play never passes one (S8). The base has distance 0, and a node with no route -1. A node with a distance d above 0 always has a step to a node with distance d - 1, so a walker always moves on.
 
 Next node, at a center: the first step, in the order south, west, east, north, then the twin step, that leads to a node whose distance is one less. A walker turns back only along a step that exists: never up a slide, never off its bridge's axis (RULES 7.8).
 
@@ -2101,7 +2103,8 @@ func arrival(from: Vector2i, to: Vector2i) -> int      # the node a step from ce
 func is_step(from: Vector2i, to: Vector2i) -> bool     # a neighbor step or a twin step exists from `from` to `to`
 func twin_of(cell: Vector2i) -> Vector2i               # a stump's twin; (-1, -1) for any other cell
 func under_bridge(from: Vector2i, to: Vector2i) -> bool   # a step that runs north or south with a bridge at either end: it passes
-                                                       # under the deck (render draw order, 14.10)
+                                                       # under the deck (render draw order, 14.10). It checks only the two
+                                                       # cells, not that the step exists (S8)
 func distances(closed: Array[Vector2i]) -> PackedInt32Array   # steps to the base per node, node_count() long; -1 when cut off or not road
 func next_node(node: int, dist: PackedInt32Array) -> int      # one step closer, ties as above; the node itself when there is none
 func route(from: Vector2i, dist: PackedInt32Array) -> Array[Vector2i]   # unchanged signature
@@ -2138,6 +2141,7 @@ towers.json:
 | lure_ms | attack, optional | 50 to 60,000 | A flyer it hits is low for this long (Moth Lantern) | 5.15 |
 
 - Checks: a stat block holds at most one of `pulse`, `line` and `lure_ms`, none of them together with a `splash` above 0, and `targets` above 1 only without `pulse` and `line`. `lure_ms` needs `hits` `air`. `pulse`, `line` and `lure_ms` are on every stat block of a tower or on none, so a tower's way of attacking never changes with its tier.
+- Card effects keep to this (S9): `Modifiers.tower_stats` leaves `splash` at 0 on a pulse, line or lure stat block, and `targets` at 1 on a pulse or line block, whatever `tower_add` adds. So no card gives a tower a number the sim never uses.
 - `TowerStats` gains a field for each, and `numbers()` returns them too, 0 or false when absent. `TowerType.kind` may be `&"fright"`.
 
 enemies.json, new optional fields:
@@ -2155,6 +2159,7 @@ enemies.json, new optional fields:
 | dig_first_ms, dig_every_ms, dig_ms | 50 to 600,000; 50 to 600,000; 50 to 60,000 and below `dig_every_ms`. All three or none. Walkers only. | Digs under `dig_first_ms` after it appears, then every `dig_every_ms`, for `dig_ms` each time | 6.3 |
 
 - Release checks add: a summoned creature has no `wake_reach`, for the same reason it has no `heal` (2.6): summons are not counted in the save bounds, and `MAX_WAKERS` (14.7) bounds the wakers.
+- A creature with `nap_ms` has no `heal` and no dig fields (DM, 2026-10-27; Catalog checks it from S10b), so a napping creature never heals or digs (14.5).
 - `EnemyType` gains a field for each key.
 - The bosses in these fields: Burrowbelly digs with `dig_first_ms` 6,000, `dig_every_ms` 8,000 and `dig_ms` 2,000, and its Mistwisps are its `summon` (2 every 8,000 ms, 300 ms apart), so they come as it comes up. Glimmertoad's hop is a blink of 3 tiles every 6,000 ms, no slow reaches it because its `wake_reach` of 200 wakes itself, and its Flitters are its `release`. Old Hayrick has `dazzle` and `nap_ms` 3,000. Snowsnore has `grow_pct` 2, `grow_cap_pct` 150, and a yawn of 6,000 ms, reach 200 and doze 3,000 ms.
 
@@ -2166,7 +2171,7 @@ New state, read only outside src/sim/:
 
 | Status | Field | Saved | Worked out |
 |---|---|---|---|
-| Out of reach | `EnemyState.out_of_reach: bool` | no | Each time the sim buckets the creatures (before wake and the rings when they have work, and at the start of the towers step), and on load |
+| Out of reach | `EnemyState.out_of_reach: bool` | no | Each time the sim buckets the creatures (14.12), and on load. A dig or a surfacing sets it at once |
 | Hidden | `EnemyState.hidden: bool` | no | At the start of the towers step, and on load |
 | Awake | `EnemyState.awake: bool` | no | Last in the timers step, and on load |
 | Napping | `EnemyState.nap_ticks: int`, above 0 while napping; `napped: bool`, its one nap is used | yes | Defeats and timers steps |
@@ -2200,13 +2205,13 @@ The rules (RULES 5.12 to 5.15, 6.2, 6.3, 8.8):
   Every product stays below 10^14: positions are below 3 * 10^5, L below 2.1 * 10^8 (reach is at most `MAX_TOWER_STAT`), and r at most 5 * 10^4. So each line shot takes one `Sim.isqrt`, the only root besides one per flyer path.
 - **Lure.** An attacking tower with `lure_ms` aims at flyers that are not low first, in its mode's order, and at low ones only with targets to spare. A hit that no bubble blocks also sets `low_ticks = maxi(low_ticks, lure_ms / 50)`. It counts at once: towers later in the same towers step treat that flyer as low.
 - **Dazzle.** When creatures with `dazzle` are among those a tower can aim at in its range, its first target is the best of them by its mode, and any further targets go by its mode as usual. For a Moth Lantern, dazzle decides first, then the rule of not-low first, then its mode.
-- **Nap.** In the defeats step, a creature with `nap_ms` that is not `napped` and is at 0 health or less is not defeated. Its health becomes `Sim.pct_half_up(max_health, 50)`, `napped` becomes true, `nap_ticks` becomes `nap_ms / 50`, its slow and fright end, and `napped` is sent. No bounty, no release. While `nap_ticks` is above 0 it does not move, cannot be hit, no heal reaches it, and it does not regrow or blink. In the timers step `nap_ticks` runs down, and at 0 it wakes (`woke`) and walks on. The next time it falls to 0 or less it is defeated as usual.
+- **Nap.** In the defeats step, a creature with `nap_ms` that is not `napped` and is at 0 health or less is not defeated. Its health becomes `Sim.pct_half_up(max_health, 50)`, `napped` becomes true, `nap_ticks` becomes `nap_ms / 50`, its slow and fright end, and `napped` is sent. No bounty, no release. While `nap_ticks` is above 0 it does not move, cannot be hit, no heal reaches it, and it does not regrow or blink. It also does not break a gate, summon, release or yawn (DM, 2026-10-27). Its break timer and its summon timer pause during the nap and go on from where they were when it wakes, and a speed up or health release that comes due waits until it wakes. A release begun before the nap still finishes (3.1). It never heals or digs, because Catalog refuses `nap_ms` with `heal` or digging (14.4). In the timers step `nap_ticks` runs down, and at 0 it wakes (`woke`) and walks on. The next time it falls to 0 or less it is defeated as usual.
 - **Grow.** Each time a walker with `grow_pct` reaches a cell center while walking (the end of a twin step counts, its spawn at its entrance does not), and its `max_health` is below its cap, `start_health * grow_cap_pct / 100` truncated, both `max_health` and `health` rise by `mini(Sim.pct_half_up(start_health, grow_pct), cap - max_health)`.
 - **Yawn and doze.** A yawn makes every attacking tower whose center is within `yawn_reach` of the yawner's center doze: `doze_ticks = maxi(doze_ticks, doze_ms / 50)`. A dozing tower skips the towers step: its reload timer does not run down, and it does not fire.
 - **Blink.** In the movement step, when `blink_at <= tick`, `blink_at` moves on by `blink_ms / 50`. Unless the creature is napping, it first walks `blink_tiles * UNIT` along its route with no slow (deciding at each center, a twin step counting as one tile, growing at centers, getting through at the base), sets `prev_pos` where it landed, sends `blinked`, and then walks its usual move. Glimmertoad's hop is a blink.
 - **Dig.** In the timers step `dig_ticks` runs down, and at 0 the creature comes up (`surfaced`). Then, when `dig_at <= tick`, `dig_ticks` becomes `dig_ms / 50`, `dig_at` moves on by `dig_every_ms / 50`, and `burrowed` is sent.
 - **Regrow.** In the timers step, when `regrow_at <= tick`, `regrow_at` moves on by `regrow_ms / 50`, and unless the creature is napping it gains `regrow` at its wave's strength (rounded half up, at least 1, as a heal), up to its max health.
-- A timer that moves on does so whether its effect happened or not, so a nap never bunches them.
+- A regrow, yawn or blink timer moves on whether its effect happened or not, so a nap never bunches them.
 
 Tick order (RULES 8.1; this grouping gives exactly its results, because every rule in 2b changes only its own creature):
 
@@ -2231,7 +2236,7 @@ New events:
 | `&"blinked"` | `id: int`, `enemy: StringName`, `from: Vector2i` (before the blink), `pos: Vector2i` (where it landed) |
 | `&"yawned"` | `id: int`, `enemy: StringName`, `pos: Vector2i`, `cells: Array[Vector2i]` (the towers that doze, in spot order; may be empty) |
 
-`fired` keeps its fields of 3.1. A pulse lists every creature it hit in `targets` and `at`, in id order. A line does the same and adds `to: Vector2i`, the end of its segment (B above). A Moth Lantern lists its targets as any shot does. One `fired` per pulse, line or shot.
+`fired` keeps its fields of 3.1. A pulse lists every creature it hit in `targets`, with each one's position in `at`, in id order. A line lists every creature it hit the same way, in id order, so its target is among them but not always first, and adds `to: Vector2i`, the end of its segment (B above). A Moth Lantern lists its targets as any shot does, in the order it picked them. One `fired` per pulse, line or shot.
 
 Queries:
 
@@ -2314,7 +2319,7 @@ func record_finish(day: String, result: Dictionary, tier: int = 0) -> void
 ```
 
 - `RunSegments` takes the new characters (`ROAD_CHARS`, 14.2). Which segments may hold features, and where, are level design rules (14.13).
-- `RunCards.has_stat`: `splash` and `targets` only for an attacking tower without `pulse` or `line`, so no perk adds them where they mean nothing.
+- `RunCards.has_stat`: `splash` only for an attacking tower without `pulse`, `line` or `lure_ms`, and `targets` only without `pulse` or `line`, so no perk adds them where they mean nothing (14.4; the roguelite engineer fixes `splash` for lure towers in E5.1).
 
 The App (3.6):
 
@@ -2337,11 +2342,16 @@ static func draw_ground(canvas: CanvasItem, grid: PackedStringArray, cell: float
     # the road under a bridge and the road through a tunnel
 static func draw_features(canvas: CanvasItem, grid: PackedStringArray, cell: float) -> void
     # the feature layer only: tunnel mounds with their mouths, bridge decks, and stumps with their symbols
-# Silhouettes: TOWERS, SPECS, CREATURES and BOSSES gain the ids of 14.1. FLYERS does not change.
+# Silhouettes: SPECS gains the 4 new towers now. TOWERS, CREATURES and BOSSES gain the new ids when U5 and V4 land;
+# until then the new ids are in these three lists (below). FLYERS does not change.
+const EXPANSION_TOWERS: Array[StringName]              # the 4 new towers; each list in campaign order
+const EXPANSION_CREATURES: Array[StringName]           # the 8 new creatures
+const EXPANSION_BOSSES: Array[StringName]              # the 4 new bosses
 const MARKS: Array[StringName] = [&"hidden", &"napping", &"fright", &"awake", &"doze", &"low", &"dug"]
 static func draw_mark(canvas: CanvasItem, mark: StringName, center: Vector2, size: float, frame: int = 0) -> void
 ```
 
+- The EXPANSION lists (A2): until U5 (InfoScreen takes its ids from the catalog) and V4 (the render loops over catalog ids), the new ids live in `EXPANSION_TOWERS`, `EXPANSION_CREATURES` and `EXPANSION_BOSSES`. `has_tower()`, `has_enemy()` and every draw function know them. They move into `TOWERS`, `CREATURES` and `BOSSES` when U5 and V4 land, so no unnamed piece shows before region 5's data is in.
 - Grounds: all 8 regions as EXPANSION_LOOK.md 3 draws them, regions 2 to 4 included (Bart, 2026-10-27). Lantern Hill keeps the meadow, and so does a run map with no feature. Play never depends on the ground.
 - Marks (RULES 8.8, EXPANSION_LOOK.md 5): `hidden` the small mist curl; `napping` the crescent over a creature lying on its side (the render lays the sprite down); `fright` the shiver lines; `awake` the open eye; `doze` the one big "z" over a tower; `low` the pale ring at a low flyer's shadow; `dug` the moving dirt mound with claw tips, drawn in place of the creature. Stump sparkles are the render's.
 - Palette: the tokens of all 8 grounds and their scenery, the feature tokens, and the fills of the new towers and creatures (EXPANSION_LOOK.md 3). Lantern Hill changes two values: `ROAD_EDGE` becomes `#856143` and `MEADOW_LIGHT` becomes `#507458`, so its road on light grass passes 3:1. `text_pairs()` and `graphic_pairs()` gain every new pair, so tests/theme/ checks every region.
@@ -2356,7 +2366,7 @@ func setup(battle: Battle, region: StringName = &"lantern_hill") -> void   # Map
 ```
 
 - Layers, bottom to top: the ground; route lines; walkers under a bridge deck, that is, on a step where `battle.map.under_bridge(from_cell, to_cell)` is true, while inside the bridge cell; the feature layer (`MapArt.draw_features`, drawn once and kept, like the ground); the parts of route lines that cross a deck east to west, so they run on top of it; gates and marks; towers and the other creatures in row order; then shots and the rest as today.
-- Out of reach: a walker in a tunnel fades out at one mouth and back in at the other. A walker on a twin step (`to_cell == battle.map.twin_of(from_cell)`) is hidden, with a few sparkles at `from_cell`. A creature whose `dig_ticks` is above 0 is drawn as the `dug` mark. `enemy_at()` finds only creatures it draws.
+- Out of reach: a walker in a tunnel fades out at one mouth and back in at the other. A walker on a twin step (`to_cell == battle.map.twin_of(from_cell)`, progress below UNIT) fades out at the stump over 0.15 s of game time, with a few sparkles at `from_cell`, is hidden for the rest of the step, and fades in at the twin over 0.15 s once it lands (the V3 follow-up). One first seen on a twin step, after a load or as a release, is hidden at once. A creature whose `dig_ticks` is above 0 is drawn as the `dug` mark. `enemy_at()` finds only creatures it draws.
 - Statuses: a napping creature lies on its side with the `napping` mark. Hidden, frightened and awake creatures wear their marks, drawn small so a crowd stays readable. A low flyer is drawn just above its shadow with the `low` ring. A dozing tower wears the `doze` mark.
 - Growth: a creature with `grow_pct` is drawn at 1 + 0.5 * (max_health - start_health) / (cap - start_health) times its size, 1.5 at its cap (cap as in 14.5).
 - Jumps: `prev_pos` already holds the landing point (14.3). `blinked` shows sparkles at `from` and at `pos`.
@@ -2382,14 +2392,14 @@ audio-engineer:
 
 ### 14.12 Performance (section 9)
 
-The sim's tick is the thinnest margin on the Fold5: a 99th percentile near 2 ms at 78 live creatures (docs/render/perf-fold5-2026-10-26.md). The new rules must not widen it:
+The sim's tick is the thinnest margin on the Fold5: a 99th percentile of 1.96 to 2.16 ms at 114 live creatures, measured before S10a (9.2, docs/render/perf-fold5-2026-10-27.md). The new rules must not widen it:
 
 - Waves of regions 5 to 8 aim for 80 or fewer creatures, and bring at most 6 Hootlings and 6 Mistwisps (RULES 12.5). tests/levels/ checks the Hootlings and Mistwisps. The 200 live budget of 9.1 stays.
-- Bucket reuse: one bucket build serves wake and the rings, and one the towers step, so never more than two a tick, as today.
+- Bucket reuse (S10a): never more than two bucket builds a tick. The rings step reuses the bucket of the last towers step when, in between, no creature left the map or started or stopped being out of reach, napping or low (a new creature joins the bucket). The towers step builds its bucket only when a tower is ready, unless out of reach and hidden must be worked out every tick: on a map with tunnels or stumps, or while a creature with `mist` is on the map. tests/sim/test_battle_tick_cost.gd plays battles with and without these shortcuts and gets equal states and events.
 - No cost when absent: no misty tiles without a creature with `mist`, no wake pass without a waker, no low flyer loop while no flyer is low, no dazzle ranking unless a dazzler is among a tower's candidates. The hot targeting loop reads one flag per creature, whether it can be aimed at, set when the sim buckets the creatures.
 - A pulse reads the cells in its tower's reach, and a line the cells around its segment, as splash does. `MAX_WAKERS` bounds the wake pass of a tampered save.
 - tests/sim/test_battle_perf.gd gains a crowded case: about 200 live over two waves, with Mistwisps, Hootlings, Yawners, Mossbuds, Gleamers, a lured flock and a digging Burrowbelly, on a fixture map with a tunnel, a bridge, a slide and stumps, against Bramble Cottages, Snow Forts, Scarecrows, Moth Lanterns and today's towers. The bar is the same as the other cases: a mean under 2 ms a tick on the dev PC.
-- The Fold5 decides, as 9.2 says: the most crowded wave of regions 5 to 8 (the balance passes find it) at 3x on both screens, with a fold mid-wave. A sim 99th percentile over 2 ms sends the sim engineer to speed up the sim before more content lands.
+- The Fold5 decides, as 9.2 says: the most crowded wave of regions 5 to 8 (the balance passes find it) at 3x on both screens, with a fold mid-wave. The frame budget is the trigger: only when it fails and the sim's 99th percentile tick is over 2 ms does the sim engineer speed up the sim before more content lands. Otherwise 2 ms is a target and a warning (DM, 2026-10-27).
 
 ### 14.13 Tests (section 10)
 
@@ -2406,7 +2416,7 @@ The sim's tick is the thinnest margin on the Fold5: a 99th percentile near 2 ms 
 
 Map rules for tests/levels/ (RULES 3.5 to 3.9, 14.2):
 
-- Tunnels: runs of 1 to 4 joined tunnel tiles, at most 6 tiles a map; no tunnel tile next to a socket, across segment seams too; tunnels hold at most a quarter of the steps of any entrance's shortest route with no gates.
+- Tunnels: straight runs of 1 to 4 tunnel tiles, in one row or one column, with no fork or bend: each tunnel tile has exactly two road neighbors, on opposite sides, in the line of its tunnel. At most 6 tunnel tiles a map; no tunnel tile next to a socket, across segment seams too; tunnels hold at most a quarter of the steps of any entrance's shortest route with no gates.
 - Bridges: four road neighbors, so never on the map edge; at most 3 a map, with a plain road tile between two; each on the shortest route of some gate placement.
 - Slides: straight runs of 2 or more, every arrow along the run; the tile an arrow points to is road; no slide is a dead end with no gates.
 - Stumps: at most 2 pairs; each pair on the shortest route of some gate placement.

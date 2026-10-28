@@ -36,7 +36,7 @@ const BOOST_TILE: float = 1.1
 const GATE_TILE: float = 1.3
 const HEART_TILE: float = 1.0
 
-enum Kind { TOWER, ENEMY, DROWSY, BUBBLE, BOOST, GATE, HEART, PIECE }
+enum Kind { TOWER, ENEMY, DROWSY, BUBBLE, BOOST, GATE, HEART, PIECE, ROUTE }
 
 
 ## One picture on the sheet.
@@ -201,6 +201,21 @@ func add_shot_pieces() -> void:
 		_add(p)
 
 
+## The chevron, dot and dash that route lines move (RoutePieces), each drawn once.
+func add_route_pieces() -> void:
+	if _index.has(RoutePieces.key(0)):
+		return
+	for piece: int in RoutePieces.Piece.size():
+		var r: Entry = Entry.new()
+		r.key = RoutePieces.key(piece)
+		r.kind = Kind.ROUTE
+		r.frame = piece
+		r.tile = RoutePieces.TILES[piece] * CELL
+		r.center = RoutePieces.ANCHORS[piece] * CELL
+		r.anchor = r.center
+		_add(r)
+
+
 ## Every look of a gate on a road that runs across or up and down the screen.
 func add_gates() -> void:
 	if _index.has(gate_key(0, false)):
@@ -272,6 +287,8 @@ func paint(canvas: CanvasItem) -> void:
 				MapArt.draw_gate_at(canvas, at, CELL * texel_scale, e.frame == 1, e.tier as MapArt.Gate)
 			Kind.PIECE:
 				ShotPieces.draw(canvas, e.frame, at, CELL * texel_scale)
+			Kind.ROUTE:
+				RoutePieces.draw(canvas, e.frame, at, CELL * texel_scale)
 
 
 ## How many times the sheet's pictures were really drawn (not just queued).
