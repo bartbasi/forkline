@@ -25,6 +25,13 @@ extends Node
 ## every voice and the music at once. The notifications reach this node by
 ## themselves, so the App forwards nothing. On Windows and in tests the
 ## service is always in front, as before.
+##
+## Two switches. set_enabled is the Settings sound switch: off silences sounds
+## and music. set_music_on is the music switch (the HUD button and the Settings
+## Music row): off silences only the music, with a short fade. Music plays only
+## when both are on and the app is in front. Sound effects follow set_enabled
+## alone. Music back on starts the wanted tune again from its beginning with
+## the usual fade in.
 
 const SFX_BUS: StringName = &"Sfx"
 const MUSIC_BUS: StringName = &"Music"
@@ -162,6 +169,7 @@ const PUFF_PITCHES: PackedFloat32Array = [0.9, 1.0, 1.12]
 
 var _bank: SoundBank = null
 var _enabled: bool = true
+var _music_on: bool = true
 var _voices: Array[AudioStreamPlayer] = []
 var _voice_sound: Array[StringName] = []
 var _voice_end: PackedInt64Array = PackedInt64Array()
@@ -212,7 +220,7 @@ func _ready() -> void:
 	tree_exiting.connect(_release_playback)
 	# Music picked before the node joined the tree starts now.
 	_music_playing = &""
-	if _can_play() and _music_wanted != &"":
+	if _can_music() and _music_wanted != &"":
 		_apply_music()
 
 
@@ -241,7 +249,7 @@ func _process(_delta: float) -> void:
 		if _frames >= FRONT_FRAMES:
 			_set_front(true)
 		return
-	if _music_wanted == &"" or not _enabled or _music_playing == _music_wanted:
+	if _music_wanted == &"" or not _enabled or not _music_on or _music_playing == _music_wanted:
 		set_process(false)
 		return
 	_start_music()
@@ -250,6 +258,11 @@ func _process(_delta: float) -> void:
 ## True when sound may play: on, and the app in front.
 func _can_play() -> bool:
 	return _enabled and _front
+
+
+## True when music may play: sound on, music on, and the app in front.
+func _can_music() -> bool:
+	return _enabled and _music_on and _front
 
 
 ## True when the app is in front, or the service does not track that.
@@ -269,7 +282,7 @@ func _set_front(front: bool) -> void:
 		return
 	_frames = 0
 	set_process(false)
-	if _enabled and _music_wanted != &"":
+	if _can_music() and _music_wanted != &"":
 		_apply_music()
 
 
@@ -315,7 +328,25 @@ func set_enabled(on: bool) -> void:
 	_enabled = on
 	if not on:
 		_stop_all()
-	elif _front and _music_wanted != &"":
+	elif _can_music() and _music_wanted != &"":
+		_apply_music()
+
+
+## Turns the music on or off, leaving sound effects alone (the music switch).
+## Off fades the music out in a third of a second. On starts the wanted tune
+## again with a fade in. Nothing starts while sound is off or the app is away.
+func set_music_on(on: bool) -> void:
+	if on == _music_on:
+		return
+	_music_on = on
+	if not on:
+		_kill_tween()
+		# A track change may be mid fade out (nothing marked as playing, the
+		# player still sounding), so the player itself is checked too.
+		if _music_playing != &"" or _music.playing:
+			_music_playing = &""
+			_fade_out_then(Callable())
+	elif _can_music() and _music_wanted != &"":
 		_apply_music()
 
 
@@ -344,7 +375,7 @@ func set_music(track: StringName) -> void:
 	if wanted == _music_wanted:
 		return
 	_music_wanted = wanted
-	if _can_play():
+	if _can_music():
 		_apply_music()
 
 
@@ -355,11 +386,16 @@ func current_music() -> StringName:
 
 ## True when the music is playing right now.
 func is_music_playing() -> bool:
-	return _can_play() and _music_playing != &"" and (not _music.is_inside_tree() or _music.playing)
+	return _can_music() and _music_playing != &"" and (not _music.is_inside_tree() or _music.playing)
 
 
 func is_enabled() -> bool:
 	return _enabled
+
+
+## True when the music switch is on. Music still needs sound on to be heard.
+func is_music_on() -> bool:
+	return _music_on
 
 
 ## Voices in use right now. With a sound id, only that sound's voices.
@@ -382,7 +418,7 @@ func wait_until_ready() -> void:
 	if _bank == null:
 		return
 	_bank.wait()
-	if _can_play() and _music_wanted != &"" and _music_playing != _music_wanted:
+	if _can_music() and _music_wanted != &"" and _music_playing != _music_wanted:
 		_start_music()
 
 
@@ -494,7 +530,7 @@ func _play(sound: StringName, pitch: float) -> void:
 func _apply_music() -> void:
 	_kill_tween()
 	if _music_wanted == &"":
-		if _music_playing != &"":
+		if _music_playing != &"" or _music.playing:
 			_music_playing = &""
 			_fade_out_then(Callable())
 		return
@@ -508,7 +544,7 @@ func _apply_music() -> void:
 
 
 func _start_music() -> void:
-	if not _can_play() or _music_wanted == &"":
+	if not _can_music() or _music_wanted == &"":
 		return
 	var stream: AudioStreamWAV = _stream(_music_wanted)
 	if stream == null:
@@ -518,6 +554,12 @@ func _start_music() -> void:
 	_kill_tween()
 	_music_playing = _music_wanted
 	if not is_inside_tree():
+		return
+	if _music.playing and _music.stream == stream:
+		# A fade out was cut short by music coming back on. Climb from the
+		# current level, so there is no jump and no restart.
+		_tween = create_tween()
+		_tween.tween_property(_music, "volume_db", MUSIC_DB, FADE_IN_SECONDS)
 		return
 	_music.stream = stream
 	_music.volume_db = -40.0
