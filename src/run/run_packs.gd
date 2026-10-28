@@ -6,7 +6,9 @@ extends RefCounted
 ## RunData calls it. A pack is read into a plain Dictionary:
 ## {"id": StringName, "band": int, "boss": StringName, "waves": Array of {"groups": Array of
 ## {"enemy": String, "count": int, "entrance": int, "at_ms": int, "every_ms": int}}}.
-## A band 6 pack's third wave (the boss wave) also holds "strength": int. No other wave does.
+## A pack also holds "tier": int, the highest tier among its creatures and its boss, counting
+## what they summon, split into or release (RULES 14.9). A band 6 pack's third wave (the boss
+## wave) also holds "strength": int. No other wave does.
 ## Group fields stay in the file's units (1 based entrance, milliseconds).
 
 ## Equal to RunData.BANDS (a test checks). RunPacks does not name RunData, so the two
@@ -23,8 +25,10 @@ const GROUP_KEYS: PackedStringArray = ["enemy", "count", "entrance", "at_ms", "e
 
 ## bands: run.json's six creature lists as arrays of StringName, or [] when run.json is
 ## unusable (the creature rules are then skipped). risks: [{"id": StringName, "effects":
-## Array[Dictionary]}] for each risk card, for the spawn bound.
-static func read(data: Variant, catalog: Catalog, bands: Array, risks: Array, problems: PackedStringArray) -> Array[Dictionary]:
+## Array[Dictionary]}] for each risk card, for the spawn bound. creature_tiers: a creature or
+## boss id to its tier, from run.json's tiers (anything not in it is tier 0). A creature a
+## tier lists may come in any band: which band it joins is a level design rule.
+static func read(data: Variant, catalog: Catalog, bands: Array, risks: Array, problems: PackedStringArray, creature_tiers: Dictionary = {}) -> Array[Dictionary]:
 	var packs: Array[Dictionary] = []
 	var chk: DataCheck = DataCheck.new("packs.json")
 	if chk.object(data, "", ["format", "packs"]):
@@ -33,7 +37,7 @@ static func read(data: Variant, catalog: Catalog, bands: Array, risks: Array, pr
 		var list: Array = chk.array(top, "packs", "", 1, PACKS_MAX)
 		var seen: Array[StringName] = []
 		for i: int in list.size():
-			var pack: Dictionary = _read_pack(list[i], "packs[%d]" % i, catalog, bands, risks, chk)
+			var pack: Dictionary = _read_pack(list[i], "packs[%d]" % i, catalog, bands, risks, creature_tiers, chk)
 			if pack.is_empty():
 				continue
 			if seen.has(pack["id"]):
@@ -46,7 +50,7 @@ static func read(data: Variant, catalog: Catalog, bands: Array, risks: Array, pr
 	return packs
 
 
-static func _read_pack(raw: Variant, path: String, catalog: Catalog, bands: Array, risks: Array, chk: DataCheck) -> Dictionary:
+static func _read_pack(raw: Variant, path: String, catalog: Catalog, bands: Array, risks: Array, creature_tiers: Dictionary, chk: DataCheck) -> Dictionary:
 	if not chk.object(raw, path, ["id", "band", "boss", "waves"]):
 		return {}
 	var item: Dictionary = raw
@@ -74,9 +78,10 @@ static func _read_pack(raw: Variant, path: String, catalog: Catalog, bands: Arra
 		waves.append(_read_wave(wave_list[w], "%s.waves[%d]" % [path, w], boss_wave, catalog, chk))
 	if id == &"" or band == 0:
 		return {}
-	var pack: Dictionary = {"id": id, "band": band, "boss": boss, "waves": waves}
+	var pack: Dictionary = {"id": id, "band": band, "boss": boss, "waves": waves, "tier": 0}
 	if waves.size() == WAVES:
-		_check_creatures(pack, path, catalog, bands, chk)
+		pack["tier"] = pack_tier(pack, catalog, creature_tiers)
+		_check_creatures(pack, path, catalog, bands, creature_tiers, chk)
 		_check_spawn_bound(pack, path, catalog, risks, chk)
 	return pack
 
@@ -111,7 +116,7 @@ static func _read_wave(raw: Variant, path: String, boss_wave: bool, catalog: Cat
 
 
 ## Which creatures a pack may use (2.9), the first wave of band 1, and the boss group.
-static func _check_creatures(pack: Dictionary, path: String, catalog: Catalog, bands: Array, chk: DataCheck) -> void:
+static func _check_creatures(pack: Dictionary, path: String, catalog: Catalog, bands: Array, creature_tiers: Dictionary, chk: DataCheck) -> void:
 	var band: int = pack["band"]
 	var boss: StringName = pack["boss"]
 	var allowed: Array[String] = []
@@ -119,6 +124,8 @@ static func _check_creatures(pack: Dictionary, path: String, catalog: Catalog, b
 		for b: int in band:
 			for creature: Variant in bands[b]:
 				allowed.append(String(creature))
+		for creature: Variant in creature_tiers.keys():
+			allowed.append(String(creature))
 	var boss_groups: int = 0
 	var waves: Array = pack["waves"]
 	for w: int in waves.size():
@@ -143,6 +150,29 @@ static func _check_creatures(pack: Dictionary, path: String, catalog: Catalog, b
 				chk.fail(group_path, "the first wave of a band 1 pack holds only %s" % SCAMP)
 	if boss != &"" and boss_groups != 1:
 		chk.fail(DataCheck.join(path, "waves"), "must hold the boss in exactly one group")
+
+
+## The highest tier among a pack's creatures and its boss, counting what each summons, splits
+## into or releases. Releases never chain (2.6), so one step is enough.
+static func pack_tier(pack: Dictionary, catalog: Catalog, creature_tiers: Dictionary) -> int:
+	var best: int = _tier_with_children(pack["boss"], catalog, creature_tiers)
+	for wave: Variant in pack["waves"]:
+		for group: Variant in (wave as Dictionary)["groups"]:
+			best = maxi(best, _tier_with_children(StringName(String((group as Dictionary)["enemy"])), catalog, creature_tiers))
+	return best
+
+
+static func _tier_with_children(id: StringName, catalog: Catalog, creature_tiers: Dictionary) -> int:
+	var best: int = int(creature_tiers.get(id, 0))
+	var type: EnemyType = catalog.enemy(id)
+	if type == null:
+		return best
+	var children: Array[StringName] = [type.split_into]
+	children.append(StringName(String(type.summon.get("enemy", ""))))
+	children.append(StringName(String(type.release.get("enemy", ""))))
+	for child: StringName in children:
+		best = maxi(best, int(creature_tiers.get(child, 0)))
+	return best
 
 
 ## One wave spawns at most 120 creatures, with no risk card and with each risk card of
@@ -185,15 +215,15 @@ static func spawn_total(groups: Array, catalog: Catalog, effects: Array[Dictiona
 	return total
 
 
-## At least 4 packs in every band, and a band 6 pack for every boss.
+## At least 4 packs of tier 0 in every band, and a band 6 pack for every boss.
 static func _check_totals(packs: Array[Dictionary], catalog: Catalog, chk: DataCheck) -> void:
 	for band: int in range(1, BANDS + 1):
 		var count: int = 0
 		for pack: Dictionary in packs:
-			if pack["band"] == band:
+			if pack["band"] == band and int(pack["tier"]) == 0:
 				count += 1
 		if count < MIN_PER_BAND:
-			chk.fail("packs", "band %d needs at least %d packs; it has %d" % [band, MIN_PER_BAND, count])
+			chk.fail("packs", "band %d needs at least %d packs of tier 0; it has %d" % [band, MIN_PER_BAND, count])
 	for id: StringName in catalog.enemy_ids():
 		var type: EnemyType = catalog.enemy(id)
 		if not type.boss:

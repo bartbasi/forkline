@@ -6,7 +6,8 @@ extends RefCounted
 ## RunData calls it. A card is read into a plain Dictionary:
 ## {"id": StringName, "kind": StringName, "tower": StringName (&"" for none), "name": String,
 ## "text": String, "once": bool, "unlock": Dictionary ({} or {"counter": String, "at": int}),
-## "effects": Array[Dictionary]}.
+## "effects": Array[Dictionary], "tier": int}. A card's tier is its tower's tier, 0 without a
+## tower (RULES 14.9).
 
 const CARDS_MAX: int = 256
 const KINDS: PackedStringArray = ["tower", "perk", "gate", "economy", "risk"]
@@ -25,8 +26,9 @@ const RISK_ENTRANCE: int = 1
 
 
 ## start_towers: run.json's towers, or [] when run.json is unusable (the tower card
-## coverage rule is then skipped).
-static func read(data: Variant, catalog: Catalog, start_towers: Array[StringName], problems: PackedStringArray) -> Array[Dictionary]:
+## coverage rule is then skipped). tower_tiers and creature_tiers: StringName to tier for
+## what run.json's tiers list; anything not in them is tier 0.
+static func read(data: Variant, catalog: Catalog, start_towers: Array[StringName], problems: PackedStringArray, tower_tiers: Dictionary = {}, creature_tiers: Dictionary = {}) -> Array[Dictionary]:
 	var cards: Array[Dictionary] = []
 	var chk: DataCheck = DataCheck.new("cards.json")
 	if chk.object(data, "", ["format", "cards"]):
@@ -35,7 +37,7 @@ static func read(data: Variant, catalog: Catalog, start_towers: Array[StringName
 		var list: Array = chk.array(top, "cards", "", 1, CARDS_MAX)
 		var seen: Array[StringName] = []
 		for i: int in list.size():
-			var card: Dictionary = _read_card(list[i], "cards[%d]" % i, catalog, chk)
+			var card: Dictionary = _read_card(list[i], "cards[%d]" % i, catalog, tower_tiers, creature_tiers, chk)
 			if card.is_empty():
 				continue
 			if seen.has(card["id"]):
@@ -49,7 +51,7 @@ static func read(data: Variant, catalog: Catalog, start_towers: Array[StringName
 	return cards
 
 
-static func _read_card(raw: Variant, path: String, catalog: Catalog, chk: DataCheck) -> Dictionary:
+static func _read_card(raw: Variant, path: String, catalog: Catalog, tower_tiers: Dictionary, creature_tiers: Dictionary, chk: DataCheck) -> Dictionary:
 	var kind: String = ""
 	if typeof(raw) == TYPE_DICTIONARY and DataCheck.is_string((raw as Dictionary).get("kind", null)):
 		kind = String((raw as Dictionary)["kind"])
@@ -78,7 +80,19 @@ static func _read_card(raw: Variant, path: String, catalog: Catalog, chk: DataCh
 	}
 	if id == &"":
 		return {}
+	var tier: int = int(tower_tiers.get(tower, 0))
+	card["tier"] = tier
+	_check_creature_tiers(card["effects"], tier, creature_tiers, DataCheck.join(path, "effects"), chk)
 	return card
+
+
+## A card never names a creature of a higher tier than its own, so no tier leaks in
+## through a risk card (14.8).
+static func _check_creature_tiers(effects: Array[Dictionary], tier: int, creature_tiers: Dictionary, path: String, chk: DataCheck) -> void:
+	for i: int in effects.size():
+		var named: StringName = StringName(String(effects[i].get("enemy", "")))
+		if named != &"" and int(creature_tiers.get(named, 0)) > tier:
+			chk.fail("%s[%d].enemy" % [path, i], "%s is of a higher tier than the card" % named)
 
 
 static func _read_unlock(raw: Variant, path: String, chk: DataCheck) -> Dictionary:
@@ -161,15 +175,18 @@ static func _check_perk_effect(effect: Dictionary, tower: StringName, path: Stri
 		chk.fail(DataCheck.join(path, "stat"), "%s has no %s" % [tower, effect["stat"]])
 
 
-## True when the tower's kind has the stat (2.11): reach for any tower; damage, reload_ms,
-## splash and targets for an attacking tower; slow_pct for a Bell or an attacking tower
-## with a slow on some tier or path; boost_pct and boost_damage for a Bakery.
+## True when the tower's kind has the stat (2.11): reach for any tower; damage and reload_ms
+## for an attacking tower; splash and targets for an attacking tower without pulse or line
+## (14.8); slow_pct for a Bell or an attacking tower with a slow on some tier or path;
+## boost_pct and boost_damage for a Bakery.
 static func has_stat(tower: TowerType, stat: String) -> bool:
 	match stat:
 		"reach":
 			return true
-		"damage", "reload_ms", "splash", "targets":
+		"damage", "reload_ms":
 			return tower.kind == &"attack"
+		"splash", "targets":
+			return tower.kind == &"attack" and not _area_attack(tower)
 		"slow_pct":
 			if tower.kind == &"slow":
 				return true
@@ -185,6 +202,27 @@ static func has_stat(tower: TowerType, stat: String) -> bool:
 		"boost_pct", "boost_damage":
 			return tower.kind == &"boost"
 	return false
+
+
+## True when some stat block of the tower has `pulse` or `line` (14.4).
+static func _area_attack(tower: TowerType) -> bool:
+	var blocks: Array[TowerStats] = []
+	for tier: int in [1, 2]:
+		blocks.append(tower.stats(tier, -1))
+	for spec: int in [0, 1]:
+		blocks.append(tower.stats(3, spec))
+	for block: TowerStats in blocks:
+		if block != null and is_area_block(block):
+			return true
+	return false
+
+
+## True when a stat block has `pulse` true or `line` above 0. A block without those fields (the
+## stats before regions 5 to 8) has neither, so this reads them by name and never fails on them.
+static func is_area_block(block: Object) -> bool:
+	var pulse: Variant = block.get(&"pulse")
+	var line: Variant = block.get(&"line")
+	return (typeof(pulse) == TYPE_BOOL and pulse) or (typeof(line) == TYPE_INT and line > 0)
 
 
 ## Every tower not in the run's start has exactly one tower card, and no start tower has.

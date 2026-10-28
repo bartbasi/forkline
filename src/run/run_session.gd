@@ -23,6 +23,8 @@ const FREE_TOWER_LIMIT: int = 3
 const RISK_CUTOFF: int = 17
 const TAG_DRAFT: String = "draft"
 const SAVE_KEYS: PackedStringArray = ["format", "seed", "day", "pool", "picks"]
+## Saved by A12 builds. A save without it is a tier 0 run (14.7).
+const SAVE_OPTIONAL: PackedStringArray = ["tier"]
 ## The card kinds in draft order (3.4).
 const KINDS: Array[StringName] = [&"tower", &"perk", &"gate", &"economy", &"risk"]
 
@@ -32,6 +34,8 @@ var daily: bool = false
 var day: String = ""
 var pool: Array[StringName] = []
 var picks: Array[StringName] = []
+## The run's content tier, 0 to the tier count of run.json. It is fixed at the start and saved (14.8).
+var tier: int = 0
 
 var _data: RunData = null
 var _in_pool: Dictionary[StringName, bool] = {}
@@ -40,19 +44,22 @@ var _in_pool: Dictionary[StringName, bool] = {}
 ## A new run. day is "" for a normal run. A daily passes its day key, run_seed equal to
 ## RunSeeds.daily_seed(day), and relaxed false. Null when the seed is outside 0 to 2^32 - 1,
 ## a daily breaks any of that, the pool is not a list of 1 to 256 known cards with no
-## repeats, holds no economy card that can be taken again (so a draft is never empty), or the
-## map cannot be built.
-static func start(seed_value: int, day_key: String, relaxed: bool, pool_ids: Array[StringName], data: RunData, catalog: Catalog) -> RunSession:
+## repeats, holds a card above the tier, holds no economy card that can be taken again (so a
+## draft is never empty), the tier is outside 0 to the tier count of run.json, or the map cannot
+## be built. The map comes from the bosses, segments and packs of the tier and below (14.8).
+static func start(seed_value: int, day_key: String, relaxed: bool, pool_ids: Array[StringName], data: RunData, catalog: Catalog, tier_value: int = 0) -> RunSession:
 	if data == null or catalog == null:
+		return null
+	if tier_value < 0 or tier_value > data.tiers.size():
 		return null
 	if seed_value < 0 or seed_value > RunSeeds.SEED_MAX:
 		return null
 	if day_key != "":
 		if not RunSeeds.is_day_key(day_key) or RunSeeds.daily_seed(day_key) != seed_value or relaxed:
 			return null
-	if not _pool_ok(pool_ids, data):
+	if not _pool_ok(pool_ids, data, tier_value):
 		return null
-	var level: LevelData = MapAssembler.assemble(seed_value, data, catalog)
+	var level: LevelData = MapAssembler.assemble(seed_value, data, catalog, tier_value)
 	if level == null:
 		return null
 	var no_twist: Array[Dictionary] = []
@@ -61,6 +68,7 @@ static func start(seed_value: int, day_key: String, relaxed: bool, pool_ids: Arr
 		return null
 	var session: RunSession = new()
 	session._set_up(made, seed_value, day_key, pool_ids, data)
+	session.tier = tier_value
 	return session
 
 
@@ -182,7 +190,7 @@ func to_data() -> Dictionary:
 	var pick_ids: Array[String] = []
 	for id: StringName in picks:
 		pick_ids.append(String(id))
-	return {"format": FORMAT, "seed": run_seed, "day": day, "pool": pool_ids, "picks": pick_ids}
+	return {"format": FORMAT, "seed": run_seed, "day": day, "pool": pool_ids, "picks": pick_ids, "tier": tier}
 
 
 ## A run read from a save (5.6), around the battle that was saved with it. Everything is
@@ -191,13 +199,17 @@ static func from_data(raw: Variant, saved_battle: Battle, run_data: RunData) -> 
 	if saved_battle == null or run_data == null:
 		return null
 	var chk: DataCheck = DataCheck.new("run")
-	if not chk.object(raw, "", SAVE_KEYS):
+	if not chk.object(raw, "", SAVE_KEYS, SAVE_OPTIONAL):
 		return null
 	var top: Dictionary = raw
 	chk.integer(top, "format", "", FORMAT, FORMAT)
 	var seed_value: int = chk.integer(top, "seed", "", 0, RunSeeds.SEED_MAX)
+	# Missing means tier 0: a save from before regions 5 to 8.
+	var tier_value: int = 0
+	if top.has("tier"):
+		tier_value = chk.integer(top, "tier", "", 0, run_data.tiers.size())
 	var day_key: String = _read_day(top.get("day", null), seed_value, saved_battle, chk)
-	var pool_ids: Array[StringName] = _read_pool(top.get("pool", null), run_data, chk)
+	var pool_ids: Array[StringName] = _read_pool(top.get("pool", null), run_data, tier_value, chk)
 	var pick_ids: Array[StringName] = _read_picks(top.get("picks", null), pool_ids, run_data, chk)
 	if pick_ids.size() > _cleared(saved_battle):
 		chk.fail("picks", "more picks than cleared waves")
@@ -209,6 +221,7 @@ static func from_data(raw: Variant, saved_battle: Battle, run_data: RunData) -> 
 		return null
 	var session: RunSession = new()
 	session._set_up(saved_battle, seed_value, day_key, pool_ids, run_data)
+	session.tier = tier_value
 	session.picks = pick_ids
 	return session
 
@@ -229,7 +242,7 @@ static func _read_day(value: Variant, seed_value: int, saved_battle: Battle, chk
 	return text
 
 
-static func _read_pool(value: Variant, run_data: RunData, chk: DataCheck) -> Array[StringName]:
+static func _read_pool(value: Variant, run_data: RunData, tier_value: int, chk: DataCheck) -> Array[StringName]:
 	var out: Array[StringName] = []
 	var list: Array = chk.array_value(value, "pool", 1, POOL_MAX)
 	for i: int in list.size():
@@ -239,6 +252,8 @@ static func _read_pool(value: Variant, run_data: RunData, chk: DataCheck) -> Arr
 			continue
 		if run_data.card(id).is_empty():
 			chk.fail(path, "names no card")
+		elif int(run_data.card(id)["tier"]) > tier_value:
+			chk.fail(path, "is a card of a higher tier than the run")
 		elif out.has(id):
 			chk.fail(path, "repeats %s" % id)
 		else:
@@ -312,12 +327,12 @@ static func _same(a: Array, b: Array) -> bool:
 	return a == b
 
 
-static func _pool_ok(pool_ids: Array[StringName], data: RunData) -> bool:
+static func _pool_ok(pool_ids: Array[StringName], data: RunData, tier_value: int) -> bool:
 	if pool_ids.size() < 1 or pool_ids.size() > POOL_MAX:
 		return false
 	var seen: Dictionary[StringName, bool] = {}
 	for id: StringName in pool_ids:
-		if seen.has(id) or data.card(id).is_empty():
+		if seen.has(id) or data.card(id).is_empty() or int(data.card(id)["tier"]) > tier_value:
 			return false
 		seen[id] = true
 	return _has_repeatable_economy(pool_ids, data)

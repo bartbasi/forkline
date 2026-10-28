@@ -96,8 +96,8 @@ func test_a_daily_round_trips_with_its_day() -> void:
 func test_the_saved_run_is_plain_data_in_the_contract_shape() -> void:
 	var data: Dictionary = Fx.through_json(Fx.saved_run(_with_picks()).to_data())
 	var run: Dictionary = data["run"]
-	assert_eq(run.keys().size(), 5)
-	for key: String in ["format", "seed", "day", "pool", "picks"]:
+	assert_eq(run.keys().size(), 6)
+	for key: String in ["format", "seed", "day", "pool", "picks", "tier"]:  # tier since A12 (contract 14.7)
 		assert_true(run.has(key), key)
 	assert_eq(run["picks"].size(), 2)
 	assert_eq(data["level_id"], "")

@@ -49,6 +49,7 @@ static func run_plan() -> Dictionary:
 			["mender", "dusk_moth"], ["gatecrasher"], [],
 		],
 		"weights": {"tower": 30, "perk": 25, "gate": 10, "economy": 20, "risk": 15},
+		"tiers": [],
 	}
 
 

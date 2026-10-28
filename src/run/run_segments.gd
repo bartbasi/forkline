@@ -5,11 +5,13 @@ extends RefCounted
 ## Checks index.json and the segment files (docs/ARCHITECTURE.md 2.9). Internal to
 ## src/run/: RunData calls it. A segment is read into a plain Dictionary:
 ## {"id": StringName, "kind": StringName, "grid": PackedStringArray, "top_ports": Array[int],
-## "bottom_ports": Array[int], "spots": int, "sockets": int}.
+## "bottom_ports": Array[int], "spots": int, "sockets": int, "tier": int}. A segment's tier is
+## the highest tier among the map feature characters in its grid (RULES 14.9).
 
 const KINDS: PackedStringArray = ["top", "middle", "bottom"]
 const INDEX_MAX: int = 256
-const ROAD_CHARS: String = "#G1234B"
+## Road cells: the plain ones and the map features (docs/ARCHITECTURE.md 14.2).
+const ROAD_CHARS: String = "#G1234BTX^v<>PQ"
 
 
 ## The ids listed in index.json, or [] with problems. Missing is reported by the caller.
@@ -33,10 +35,11 @@ static func read_index(data: Variant, problems: PackedStringArray) -> Array[Stri
 
 
 ## One segment. rows: the heights run.json sets, {"top": int, "middle": int, "bottom": int},
-## or {} when run.json is unusable. Returns {} when the segment has a problem.
-static func read_segment(data: Variant, listed_id: StringName, rows: Dictionary, problems: PackedStringArray) -> Dictionary:
+## or {} when run.json is unusable. feature_tiers: a feature character to its tier, from run.json's
+## tiers (a character not in it is tier 0). Returns {} when the segment has a problem.
+static func read_segment(data: Variant, listed_id: StringName, rows: Dictionary, problems: PackedStringArray, feature_tiers: Dictionary = {}) -> Dictionary:
 	var chk: DataCheck = DataCheck.new("%s.json" % listed_id)
-	var segment: Dictionary = _read(data, listed_id, rows, chk)
+	var segment: Dictionary = _read(data, listed_id, rows, feature_tiers, chk)
 	problems.append_array(chk.problems)
 	if not chk.ok():
 		return {}
@@ -89,7 +92,16 @@ static func check_coverage(segments: Array[Dictionary], problems: PackedStringAr
 			problems.append("%s.json: no bottom segment fits under this middle segment" % middle["id"])
 
 
-static func _read(data: Variant, listed_id: StringName, rows: Dictionary, chk: DataCheck) -> Dictionary:
+## The highest tier among the feature characters in a grid; 0 when it holds none.
+static func tier_of(grid: PackedStringArray, feature_tiers: Dictionary) -> int:
+	var best: int = 0
+	for line: String in grid:
+		for ch: String in line:
+			best = maxi(best, int(feature_tiers.get(ch, 0)))
+	return best
+
+
+static func _read(data: Variant, listed_id: StringName, rows: Dictionary, feature_tiers: Dictionary, chk: DataCheck) -> Dictionary:
 	var segment: Dictionary = {}
 	if not chk.object(data, "", ["format", "id", "kind", "grid"]):
 		return segment
@@ -137,7 +149,7 @@ static func _read(data: Variant, listed_id: StringName, rows: Dictionary, chk: D
 		"id": listed_id, "kind": StringName(kind), "grid": grid,
 		"top_ports": top_ports if kind != "top" else no_ports,
 		"bottom_ports": bottom_ports if kind != "bottom" else no_ports,
-		"spots": spots, "sockets": sockets,
+		"spots": spots, "sockets": sockets, "tier": tier_of(grid, feature_tiers),
 	}
 
 

@@ -146,8 +146,9 @@ func test_a_daily_plays_and_keeps_its_day_through_a_save() -> void:
 func test_the_saved_run_is_the_seed_the_day_the_pool_and_the_picks() -> void:
 	var s: RunSession = Player.session(12345)
 	var data: Dictionary = s.to_data()
-	assert_eq(data.keys().size(), 5)
+	assert_eq(data.keys().size(), 6)
 	assert_eq(data["format"], 1)
+	assert_eq(data["tier"], 0)
 	assert_eq(data["seed"], 12345)
 	assert_eq(data["day"], "")
 	assert_eq(data["pool"], Fx.run_data().pool({}).map(func(id: StringName) -> String: return String(id)))

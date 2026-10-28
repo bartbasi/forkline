@@ -303,7 +303,7 @@ func test_pack_creature_rules_hostile() -> void:
 	_expect("boss as a group of 2", func(f: Dictionary) -> void: _groups(f, "band6_pack0", 2)[0]["count"] = 2, "one group of 1")
 	_expect("boss twice", func(f: Dictionary) -> void: _groups(f, "band6_pack0", 2)[1]["enemy"] = "grumblesack", "exactly one group")
 	_expect("no boss group", func(f: Dictionary) -> void: _groups(f, "band6_pack0", 2)[0]["enemy"] = "scamp", "exactly one group")
-	_expect("too few packs in a band", func(f: Dictionary) -> void: f["segments/packs.json"]["packs"].erase(_pack(f, "band1_pack3")), "band 1 needs at least 4 packs; it has 3")
+	_expect("too few packs in a band", func(f: Dictionary) -> void: f["segments/packs.json"]["packs"].erase(_pack(f, "band1_pack3")), "band 1 needs at least 4 packs of tier 0; it has 3")
 	_expect("no pack for a boss", func(f: Dictionary) -> void: _no_old_tusk(f), "no band 6 pack for the boss old_tusk")
 
 

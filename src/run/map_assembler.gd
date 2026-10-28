@@ -13,10 +13,11 @@ const TAG_PACK: String = "pack"
 const WAVES_PER_BAND: int = 3
 
 
-## The run's level: its map and its 18 waves. Null on a data bug, or for a seed outside
-## 0 to 2^32 - 1.
-static func assemble(run_seed: int, data: RunData, catalog: Catalog) -> LevelData:
-	var picks: Dictionary = plan(run_seed, data)
+## The run's level: its map and its 18 waves, from the bosses, segments and packs of that
+## tier and below (14.8). Null on a data bug, for a seed outside 0 to 2^32 - 1, or for a tier
+## outside 0 to the tier count.
+static func assemble(run_seed: int, data: RunData, catalog: Catalog, tier: int = 0) -> LevelData:
+	var picks: Dictionary = plan(run_seed, data, tier)
 	if picks.is_empty():
 		return null
 	var pack_ids: Array[StringName] = picks["packs"]
@@ -25,34 +26,38 @@ static func assemble(run_seed: int, data: RunData, catalog: Catalog) -> LevelDat
 
 ## The seeded picks, in the order of 3.4. Returns {"boss": StringName, "top": StringName,
 ## "middle": StringName, "bottom": StringName, "packs": Array[StringName]} (the pack of
-## band 1 first), or {} when a pick has nothing to choose from.
-static func plan(run_seed: int, data: RunData) -> Dictionary:
+## band 1 first), or {} when a pick has nothing to choose from or the tier is outside 0 to the
+## tier count. Things above the tier leave every list before any pick, and the picks walk the
+## lists in file order (14.8).
+static func plan(run_seed: int, data: RunData, tier: int = 0) -> Dictionary:
 	if data == null or run_seed < 0 or run_seed > RunSeeds.SEED_MAX:
 		return {}
+	if tier < 0 or tier > data.tiers.size():
+		return {}
 	# 1. The boss, over the bosses that have a band 6 pack, in enemies.json order.
-	var bosses: Array[StringName] = data.boss_ids()
+	var bosses: Array[StringName] = data.boss_ids(tier)
 	if bosses.is_empty():
 		return {}
 	var boss_rng: RandomNumberGenerator = generator(run_seed, TAG_BOSS, 0)
 	var boss: StringName = bosses[boss_rng.randi_range(0, bosses.size() - 1)]
 	# 2. The map: a top, then a middle that fits under it, then a bottom that fits under that.
 	var map_rng: RandomNumberGenerator = generator(run_seed, TAG_MAP, 0)
-	var tops: Array[Dictionary] = data.segments_of(&"top")
+	var tops: Array[Dictionary] = data.segments_of(&"top", tier)
 	if tops.is_empty():
 		return {}
 	var top: Dictionary = tops[map_rng.randi_range(0, tops.size() - 1)]
-	var middles: Array[Dictionary] = data.segments_under(top["id"])
+	var middles: Array[Dictionary] = data.segments_under(top["id"], tier)
 	if middles.is_empty():
 		return {}
 	var middle: Dictionary = middles[map_rng.randi_range(0, middles.size() - 1)]
-	var bottoms: Array[Dictionary] = data.segments_under(middle["id"])
+	var bottoms: Array[Dictionary] = data.segments_under(middle["id"], tier)
 	if bottoms.is_empty():
 		return {}
 	var bottom: Dictionary = bottoms[map_rng.randi_range(0, bottoms.size() - 1)]
 	# 3. One pack per band, each on its own generator. Band 6 uses only the boss's packs.
 	var pack_ids: Array[StringName] = []
 	for band: int in range(1, RunData.BANDS + 1):
-		var choices: Array[Dictionary] = data.packs_of(band, boss if band == RunData.BANDS else &"")
+		var choices: Array[Dictionary] = data.packs_of(band, boss if band == RunData.BANDS else &"", tier)
 		if choices.is_empty():
 			return {}
 		var pack_rng: RandomNumberGenerator = generator(run_seed, TAG_PACK, band)
