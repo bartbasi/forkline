@@ -58,6 +58,12 @@ const SPEC_NAMES: Dictionary[StringName, String] = {
 	&"hush_bell": "Hush Bell", &"night_bell": "Night Bell", &"giant_bow": "Giant Bow", &"triple_bow": "Triple Bow",
 	&"star_bloom": "Star Bloom", &"skyrocket": "Skyrocket", &"grand_oven": "Grand Oven", &"spice_kitchen": "Spice Kitchen",
 }
+## The first four regions' cast, which these images show. The later regions'
+## cast is on the expansion sheets (docs/art/EXPANSION_LOOK.md).
+const CAST_TOWERS: Array[StringName] = [&"sling_post", &"pumpkin_catapult", &"lullaby_bell", &"longbow_loft", &"firework_tower", &"bakery"]
+const CAST_CREATURES: Array[StringName] = [&"scamp", &"pip", &"skitter", &"flitter", &"shellback", &"bubbler", &"puffball", &"puff", &"mender", &"gatecrasher", &"dusk_moth"]
+const CAST_BOSSES: Array[StringName] = [&"grumblesack", &"ironshell", &"moon_moth", &"old_tusk"]
+## Per tower in CAST_TOWERS.
 const COSTS: Array[int] = [100, 120, 90, 150, 110, 130]
 
 
@@ -372,8 +378,8 @@ func _hud_portrait(root_c: Control, top: Rect2, bottom: Rect2, build: bool) -> v
 	cards.add_theme_constant_override(&"separation", 10)
 	cards.custom_minimum_size = Vector2(0, 168)
 	col.add_child(cards)
-	for i: int in Silhouettes.TOWERS.size():
-		cards.add_child(_card(Silhouettes.TOWERS[i], i == 0 and build, i == 3))
+	for i: int in CAST_TOWERS.size():
+		cards.add_child(_card(CAST_TOWERS[i], i == 0 and build, i == 3))
 	col.add_child(_buttons(build))
 
 
@@ -421,8 +427,8 @@ func _hud_landscape(root_c: Control, side: Rect2, build: bool) -> void:
 	grid.columns = 3
 	grid.add_theme_constant_override(&"h_separation", 14)
 	grid.add_theme_constant_override(&"v_separation", 14)
-	for i: int in Silhouettes.TOWERS.size():
-		var card: Button = _card(Silhouettes.TOWERS[i], false, i == 3)
+	for i: int in CAST_TOWERS.size():
+		var card: Button = _card(CAST_TOWERS[i], false, i == 3)
 		card.custom_minimum_size = Vector2(0, 230)
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		grid.add_child(card)
@@ -493,7 +499,7 @@ func _card(type: StringName, selected: bool, dim: bool) -> Button:
 		Silhouettes.draw_tower(ci, type, 1, -1, r.get_center() + Vector2(0, cell * 0.12), cell)
 	v.add_child(ic)
 	var cost: Label = Label.new()
-	cost.text = "%d" % COSTS[Silhouettes.TOWERS.find(type)]
+	cost.text = "%d" % COSTS[CAST_TOWERS.find(type)]
 	cost.theme_type_variation = &"CardMutedLabel"
 	cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	cost.add_theme_font_override(&"font", UiTheme.font(UiTheme.WEIGHT_BOLD))
@@ -575,17 +581,17 @@ func _sheet_scene(size: Vector2) -> Control:
 	_band(root_c, Rect2(40, 700, w, 170), Palette.ROAD)
 	_band(root_c, Rect2(40, 1110, w, 250), Palette.ROAD)
 	for i: int in 6:
-		var t: StringName = Silhouettes.TOWERS[i]
+		var t: StringName = CAST_TOWERS[i]
 		var x: float = 40.0 + tw * (float(i) + 0.5)
 		_label(root_c, NAMES[t], Vector2(x, 395), tw, 32, false)
 		_label(root_c, JOBS[t], Vector2(x, 437), tw, 24, true)
 	for i: int in 11:
-		var t: StringName = Silhouettes.CREATURES[i]
+		var t: StringName = CAST_CREATURES[i]
 		var x: float = 40.0 + cw * (float(i) + 0.5)
 		_label(root_c, NAMES[t], Vector2(x, 875), cw + 20.0, 26, false)
 		_label(root_c, JOBS[t], Vector2(x, 910), cw + 20.0, 20, true)
 	for i: int in 4:
-		var t: StringName = Silhouettes.BOSSES[i]
+		var t: StringName = CAST_BOSSES[i]
 		var x: float = 40.0 + bw * (float(i) * 2.0 + 1.0)
 		_label(root_c, NAMES[t], Vector2(x, 1365), bw * 2.0, 30, false)
 		_label(root_c, JOBS[t], Vector2(x, 1405), bw * 2.0, 22, true)
@@ -594,18 +600,18 @@ func _sheet_scene(size: Vector2) -> Control:
 	art.paint = func(ci: CanvasItem) -> void:
 		for i: int in 6:
 			var x: float = 40.0 + tw * (float(i) + 0.5)
-			var t: StringName = Silhouettes.TOWERS[i]
+			var t: StringName = CAST_TOWERS[i]
 			MapArt.draw_spot(ci, Vector2(x, 290), 190.0)
 			Silhouettes.draw_tower(ci, t, 1, -1, Vector2(x, 290), 190.0)
 			Silhouettes.draw_tower(ci, t, 1, -1, Vector2(x, 600), 152.0, Palette.INK_LINE)
 		for i: int in 11:
 			var x: float = 40.0 + cw * (float(i) + 0.5)
-			var t: StringName = Silhouettes.CREATURES[i]
+			var t: StringName = CAST_CREATURES[i]
 			var cs: float = Silhouettes.enemy_size(t, 180.0)
 			Silhouettes.draw_enemy(ci, t, Vector2(x, 840 - cs * Silhouettes.FEET), cs, 0)
 			Silhouettes.draw_enemy(ci, t, Vector2(x, 1078 - cs * Silhouettes.FEET), cs, 0, Palette.INK_LINE)
 		for i: int in 4:
-			var t: StringName = Silhouettes.BOSSES[i]
+			var t: StringName = CAST_BOSSES[i]
 			var bs: float = Silhouettes.enemy_size(t, 150.0)
 			Silhouettes.draw_enemy(ci, t, Vector2(40.0 + bw * (float(i) * 2.0 + 0.5), 1330 - bs * Silhouettes.FEET), bs, 0)
 			Silhouettes.draw_enemy(ci, t, Vector2(40.0 + bw * (float(i) * 2.0 + 1.5), 1330 - bs * Silhouettes.FEET), bs, 0, Palette.INK_LINE)
@@ -623,7 +629,7 @@ func _tiers_scene(size: Vector2) -> Control:
 	for k: int in 8:
 		_label(root_c, heads[k % 4], Vector2(40.0 + label_w + col_w * (float(k) + 0.5), top), col_w, 26, true)
 	for i: int in 6:
-		var t: StringName = Silhouettes.TOWERS[i]
+		var t: StringName = CAST_TOWERS[i]
 		var y: float = top + 40.0 + row_h * float(i)
 		_band(root_c, Rect2(40.0 + label_w, y, col_w * 4.0 - 10.0, 176.0), Palette.MEADOW)
 		var l: Label = Label.new()
@@ -642,7 +648,7 @@ func _tiers_scene(size: Vector2) -> Control:
 	art.z_index = 1
 	art.paint = func(ci: CanvasItem) -> void:
 		for i: int in 6:
-			var t: StringName = Silhouettes.TOWERS[i]
+			var t: StringName = CAST_TOWERS[i]
 			var y: float = top + 40.0 + row_h * float(i)
 			for k: int in 8:
 				var x: float = 40.0 + label_w + col_w * (float(k) + 0.5)
@@ -761,11 +767,11 @@ func _cover_strip_scene(size: Vector2) -> Control:
 		ci.draw_rect(Rect2(20, 140, size.x - 40.0, 160), Palette.MEADOW)
 		for i: int in 6:
 			var x: float = 90.0 + cell * float(i)
-			Silhouettes.draw_tower(ci, Silhouettes.TOWERS[i], 1, -1, Vector2(x, 215), cell)
-			Silhouettes.draw_tower(ci, Silhouettes.TOWERS[i], 1, -1, Vector2(x + 6.0 * cell + 40.0, 215), cell, Palette.INK_LINE)
+			Silhouettes.draw_tower(ci, CAST_TOWERS[i], 1, -1, Vector2(x, 215), cell)
+			Silhouettes.draw_tower(ci, CAST_TOWERS[i], 1, -1, Vector2(x + 6.0 * cell + 40.0, 215), cell, Palette.INK_LINE)
 		ci.draw_rect(Rect2(20, 320, size.x - 40.0, 110), Palette.ROAD)
 		var x: float = 50.0
-		for t: StringName in Silhouettes.CREATURES:
+		for t: StringName in CAST_CREATURES:
 			var cs: float = Silhouettes.enemy_size(t, cell)
 			x += cs * 0.5
 			Silhouettes.draw_enemy(ci, t, Vector2(x, 375), cs, 0)
@@ -773,7 +779,7 @@ func _cover_strip_scene(size: Vector2) -> Control:
 			x += cs * 0.5 + 12.0
 		ci.draw_rect(Rect2(20, 570, size.x - 40.0, 190), Palette.ROAD)
 		x = 60.0
-		for t: StringName in Silhouettes.BOSSES:
+		for t: StringName in CAST_BOSSES:
 			var bs: float = Silhouettes.enemy_size(t, cell)
 			Silhouettes.draw_enemy(ci, t, Vector2(x + bs * 0.5, 670), bs, 0)
 			Silhouettes.draw_enemy(ci, t, Vector2(x + bs * 1.5 + 10.0, 670), bs, 0, Palette.INK_LINE)

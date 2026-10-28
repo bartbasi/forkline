@@ -517,13 +517,11 @@ func test_a_blink_snaps_to_the_landing_with_no_streak() -> void:
 # The atlas budget.
 
 func _everything(atlas: MapAtlas) -> void:
-	for t: StringName in Silhouettes.TOWERS + Silhouettes.EXPANSION_TOWERS:
+	for t: StringName in Silhouettes.TOWERS:
 		atlas.add_tower_looks(t)
 	var ids: Array[StringName] = []
 	ids.append_array(Silhouettes.CREATURES)
 	ids.append_array(Silhouettes.BOSSES)
-	ids.append_array(Silhouettes.EXPANSION_CREATURES)
-	ids.append_array(Silhouettes.EXPANSION_BOSSES)
 	for id: StringName in ids:
 		atlas.add_enemy(id, Silhouettes.is_flyer(id))
 	atlas.add_marks()

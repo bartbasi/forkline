@@ -28,7 +28,10 @@ extends RefCounted
 ## Status marks (draw_mark) are drawn over a creature or tower by the render,
 ## each a shape of its own, so no status shows by color alone.
 
-const TOWERS: Array[StringName] = [&"sling_post", &"pumpkin_catapult", &"lullaby_bell", &"longbow_loft", &"firework_tower", &"bakery"]
+## Every tower, creature and boss with a drawing, each list in campaign order:
+## the first four regions' cast, then the expansion's (contract 14.1). What the
+## game shows comes from the catalog (data/stats/), not from these lists.
+const TOWERS: Array[StringName] = [&"sling_post", &"pumpkin_catapult", &"lullaby_bell", &"longbow_loft", &"firework_tower", &"bakery", &"bramble_cottage", &"scarecrow", &"snow_fort", &"moth_lantern"]
 ## Spec ids per tower: index 0 and 1 are the `spec` argument at tier 3.
 const SPECS: Dictionary[StringName, Array] = {
 	&"sling_post": [&"quickshot", &"stone_sling"],
@@ -42,16 +45,11 @@ const SPECS: Dictionary[StringName, Array] = {
 	&"snow_fort": [&"big_snowball", &"flurry"],
 	&"moth_lantern": [&"beacon_lantern", &"lantern_garland"],
 }
-const CREATURES: Array[StringName] = [&"scamp", &"pip", &"skitter", &"flitter", &"shellback", &"bubbler", &"puffball", &"puff", &"mender", &"gatecrasher", &"dusk_moth"]
-const BOSSES: Array[StringName] = [&"grumblesack", &"ironshell", &"moon_moth", &"old_tusk"]
-## The expansion's cast (contract 14.1), in campaign order. Every one is drawn,
-## and has_tower() and has_enemy() know them. They join TOWERS, CREATURES and
-## BOSSES (contract 14.9) once the Info screen lists only what the data holds,
-## because InfoScreen draws those lists and the data has none of these ids
-## until region 5 is built.
-const EXPANSION_TOWERS: Array[StringName] = [&"bramble_cottage", &"scarecrow", &"snow_fort", &"moth_lantern"]
-const EXPANSION_CREATURES: Array[StringName] = [&"mossbud", &"mistwisp", &"gleamer", &"sleepyhead", &"snowroller", &"yawner", &"blinker", &"hootling"]
-const EXPANSION_BOSSES: Array[StringName] = [&"burrowbelly", &"old_hayrick", &"snowsnore", &"glimmertoad"]
+const CREATURES: Array[StringName] = [
+	&"scamp", &"pip", &"skitter", &"flitter", &"shellback", &"bubbler", &"puffball", &"puff", &"mender", &"gatecrasher", &"dusk_moth",
+	&"mossbud", &"mistwisp", &"gleamer", &"sleepyhead", &"snowroller", &"yawner", &"blinker", &"hootling",
+]
+const BOSSES: Array[StringName] = [&"grumblesack", &"ironshell", &"moon_moth", &"old_tusk", &"burrowbelly", &"old_hayrick", &"snowsnore", &"glimmertoad"]
 const FLYERS: Array[StringName] = [&"flitter", &"dusk_moth", &"moon_moth"]
 ## Drawing box per creature, as a fraction of the map cell. On the Fold5 cover
 ## screen a cell is about 49 dp, so a Scamp is about 28 dp and a boss about 57 dp.
@@ -92,11 +90,11 @@ static func enemy_size(type: StringName, cell: float) -> float:
 
 
 static func has_tower(type: StringName) -> bool:
-	return TOWERS.has(type) or EXPANSION_TOWERS.has(type)
+	return TOWERS.has(type)
 
 
 static func has_enemy(type: StringName) -> bool:
-	return CREATURES.has(type) or BOSSES.has(type) or EXPANSION_CREATURES.has(type) or EXPANSION_BOSSES.has(type)
+	return CREATURES.has(type) or BOSSES.has(type)
 
 
 static func is_flyer(type: StringName) -> bool:
@@ -1019,7 +1017,9 @@ static func _round_top(x: float, base: float, half: float, h: float) -> PackedVe
 static func _moth_lantern(pen: InkPen, spec: int) -> void:
 	if spec == 0:
 		pen.stroke(Vector2(8, -32), Vector2(8, -70), 6.0, Palette.TIMBER)
-		pen.glow(Vector2(8, -80), 44.0, Palette.GLOW, 1.6)
+		# Centered a little below the lantern and kept small enough that the
+		# whole glow stays under MapAtlas.TOWER_REACH (tests/render/tower_extent.gd).
+		pen.glow(Vector2(8, -72), 29.0, Palette.GLOW, 1.6)
 		pen.box(-6, -70, 22, -66, Palette.TIMBER)
 		pen.box(-3, -88, 19, -70, Palette.LANTERN)
 		pen.detail_circle(Vector2(8, -79), 6.0, Palette.LANTERN_CORE)

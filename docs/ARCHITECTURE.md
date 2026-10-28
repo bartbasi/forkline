@@ -1,6 +1,6 @@
 # Forkline: Architecture
 
-Owner: architect. Status: revised for phase 7, and brought up to the built sim (S1), the run code (R1, R2), the saves (S2), the run segments (L4), the Twist and run screens (U2), the rules alignment (G1), the run tuning (G3), the security fixes (S4, R4, S5) and the ceilings on stacked effects (S6, S7), 2026-10-25; then to the perk rule (G5, R5), the QA round 3 fixes (docs/reviews/qa-2026-10-26.md), the Fold5 frame times (V2) and the shot rework (commit a68c16c), 2026-10-26; then section 13 marked up to B5, with what is in progress or next, and brought up to the wave start save (QA 2026-10-27 m1), the shot polish and the release build (P2), 2026-10-27. Then change block A12 (section 14), 2026-10-27: the expansion to 8 regions, with its build plan at the end of section 13. Then A12 brought up to S8, A2, R6, S9, A3, V3, U4 and S10a, the V3 follow-up, and the Fold5 rerun (docs/render/perf-fold5-2026-10-27.md), with those steps and G6 marked done in section 13, 2026-10-27.
+Owner: architect. Status: revised for phase 7, and brought up to the built sim (S1), the run code (R1, R2), the saves (S2), the run segments (L4), the Twist and run screens (U2), the rules alignment (G1), the run tuning (G3), the security fixes (S4, R4, S5) and the ceilings on stacked effects (S6, S7), 2026-10-25; then to the perk rule (G5, R5), the QA round 3 fixes (docs/reviews/qa-2026-10-26.md), the Fold5 frame times (V2) and the shot rework (commit a68c16c), 2026-10-26; then section 13 marked up to B5, with what is in progress or next, and brought up to the wave start save (QA 2026-10-27 m1), the shot polish and the release build (P2), 2026-10-27. Then change block A12 (section 14), 2026-10-27: the expansion to 8 regions, with its build plan at the end of section 13. Then A12 brought up to S8, A2, R6, S9, A3, V3, U4 and S10a, the V3 follow-up, and the Fold5 rerun (docs/render/perf-fold5-2026-10-27.md), with those steps and G6 marked done in section 13, 2026-10-27. Then A12 amended, 2026-10-28: the music setting, Restart and finger scrolling (3.5, 3.6, 3.8, 5.5, 7.4), the perf test's ratio rule (9.2), the Silhouettes lists (14.9), the doze, grower and tier rules (14.5, 14.7, 14.8), the wake pass (14.12), and a note on `no_lives_lost` (14.6).
 
 This is the contract every agent builds against: folders and owners, ids and data files, every public class with its methods and data shapes, routing, saves, resume, orientation, outbound links, the performance budget, the tests, the build plans for phase 5 (section 11), phase 7 and the expansion (section 13), and the expansion's changes (section 14). Do not invent a public method that another area must call. If you need a change here, put it in your report for the DM.
 
@@ -1134,7 +1134,8 @@ func load_daily() -> DailyRecord
 func save_daily(daily: DailyRecord) -> bool
 
 class_name Settings extends RefCounted                 # src/save/settings.gd
-var sound_on: bool = true
+var sound_on: bool = true                              # sound effects, and the master switch: off silences the music too
+var music_on: bool = true                              # A12: the music, heard only while sound_on is on too (5.5)
 func to_data() -> Dictionary
 static func from_data(data: Variant) -> Settings       # any bad field falls back to its default
 
@@ -1194,7 +1195,8 @@ static func from_data(data: Variant) -> DailyRecord
 class_name App extends Control                         # src/ui/app.gd, root of scenes/ui/app.tscn
 ## Creates GameData, SaveStore, Settings, Progress, the saved games and AudioService once and passes them down with setup().
 ## Routes between screens, saves on lifecycle notifications, handles the back button.
-signal sound_changed(on: bool)                         # the Settings toggle
+signal sound_changed(on: bool)                         # the Settings sound effects toggle
+signal music_changed(on: bool)                         # A12: the music toggle, from Settings or the battle HUD's music button
 signal continue_requested()                            # the mode screen's taps; the battle flow answers them (Roguelite and Daily from U3)
 signal campaign_requested()
 signal roguelite_requested()
@@ -1246,6 +1248,8 @@ signal save_requested()                                # a build phase began, a 
 signal ended(result: Dictionary)                       # won, lost, or abandoned from Pause after a confirm (then won is false). result is
                                                        # Battle.result() plus "abandoned", "relaxed" and "twist" (the battle has Twist effects)
 signal left()                                          # "Back to menu" in Pause; the game stays saved
+signal restart_confirmed()                             # A12: Restart in Pause, after a confirm; the App starts the game again (below)
+signal music_changed(on: bool)                         # A12: the HUD's music button; on is what the music should be now
 var stars_in_play: bool = true                         # false in a run or daily (set_run sets it). Star lines and star warnings
                                                        # need it true and a battle with no Twist.
 func setup(battle: Battle, audio: AudioService, progress: Progress, region: StringName = &"lantern_hill") -> void   # region: A12 (14.11)
@@ -1258,12 +1262,13 @@ func needs_pause_menu() -> bool                        # a wave is on, Pause is 
 func pause_for_leave() -> bool                         # the app is being left: when needs_pause_menu(), pause() and true (Pause's
                                                        # save_requested has saved). Else false and the caller saves. While a first sight
                                                        # card holds the wave, Pause opens when the card closes, as after a resize (7.5).
+func set_music_state(music_on: bool, sound_on: bool) -> void   # A12: what the HUD's music button shows (below)
 
 class_name Links extends RefCounted                    # src/ui/links.gd (section 8)
 ```
 
 - ScreenFrame (every full screen) and Modal (Settings, Pause, the confirm dialog) are the base classes in src/ui/. BattleScreen opens PausePanel with `App.open_modal()`, and Info and Settings with `open_info()` and `open_settings()`. Other App members are internal.
-- The other screens are used only inside src/ui/, so their signals can change without a contract change: FrontDoor, ModeScreen (the Continue card, Campaign, Roguelite, Daily), LevelSelect, LevelCard (RULES 10.5: name, waves, gates, the three star lines, stars earned, the hint, Normal or Relaxed with Normal always preselected, the Twist once open), WavePreview, InfoCard (first sight), PausePanel (Resume, Info, Settings, "Back to menu" with the game kept saved, "Abandon" after a confirm, the quiet coffee row), SettingsPanel (sound, About), InfoScreen, AboutScreen, EndPanel, ConfirmDialog, and in phase 7 RunCard, DraftPanel and RunEndPanel.
+- The other screens are used only inside src/ui/, so their signals can change without a contract change: FrontDoor, ModeScreen (the Continue card, Campaign, Roguelite, Daily), LevelSelect, LevelCard (RULES 10.5: name, waves, gates, the three star lines, stars earned, the hint, Normal or Relaxed with Normal always preselected, the Twist once open), WavePreview, InfoCard (first sight), PausePanel (Resume, Info, Settings, "Back to menu" with the game kept saved, "Restart" (A12) and "Abandon" side by side, each after a confirm, the quiet coffee row), SettingsPanel (sound effects, music (A12), About), InfoScreen, AboutScreen, EndPanel, ConfirmDialog, and in phase 7 RunCard, DraftPanel and RunEndPanel.
 - `BattleScreen.set_run(run)`: call it after `setup()`. It sets `stars_in_play` false, so Pause shows no star lines and nothing warns about stars. Every call of the next wave goes through `run.start_next_wave()`. While a card is owed, the call button says "Pick a card first" in a build phase or "Card due after this wave" during a wave, with the locked look, and a tap shows the sentence of 3.4. Card names and texts come from `run.card()`, and the owed count from `run.drafts_owed()`.
 - Phase 7 additions to those screens:
   - LevelCard: once `Progress.twist_open()`, a Twist part after the level's own: the Twist's name and text from the level file, whether it is cleared (a check mark and words), its own Normal or Relaxed choice with Normal preselected, and a button to play it. A saved game of the Twist offers Resume in that part, and a saved game of the level itself in the level's part.
@@ -1275,6 +1280,10 @@ class_name Links extends RefCounted                    # src/ui/links.gd (sectio
   - DraftPanel: opens by itself whenever `run.draft_open()`, in portrait as a sheet like the build panel and in landscape in the side column, so the map stays readable. It shows each offer's kind in words, name and text, with the tower's silhouette for tower and perk cards and a glyph for the other kinds (`Silhouettes.draw_glyph`: gate, coin for economy, moon for risk). A pick takes a tap on a card, then Take. It cannot be skipped, and the next draft owed opens after it. While it is open, taps on the map and gate drags do nothing, and no other battle panel opens. The back button never closes it: back opens Pause, as in a battle with no panel open.
   - WavePreview: in a run, the waiting risk card (`run.risk_card()`) shows first, as a row at the top of the open preview with its name and text, and as a chip at the start of the strip (RULES 9.1).
   - InfoScreen: every tower, creature and boss from the data, and the rules of Twists, runs, cards and the daily (RULES 13 to 15).
+- A12 additions (Bart, 2026-10-28):
+  - **Restart.** Pause has Restart beside Abandon. Each asks first, and the Restart question says in plain words what happens to this game. On a yes, BattleScreen sends `restart_confirmed`, and the App ends the game and starts it again. A campaign level or Twist starts over on the same difficulty and records nothing, like an abandoned one. A run or daily follows the start over rule (RULES 4.10, 14.7): it counts as lost at its current wave and records what an ended run records (step 5). Then a new run starts: after a normal run, a new one on the same difficulty, as the run card's Start makes it; after a daily, its own day's daily again, with the same seed and tier.
+  - **The music button.** The battle HUD has a small round button beside the call button: a music note, crossed out when the music is off, so it never relies on color. A tap turns the music on or off and nothing else: the App saves `Settings.music_on` and calls `AudioService.set_music_on()`. While sound effects are off the music is silent whatever its setting, so the button shows the crossed out note, dimmed, and cannot be tapped. Settings shows two rows, "Sound effects" (`sound_on`, the master switch) and "Music" (`music_on`). The Music row keeps its value while sound effects are off.
+  - **Finger scrolling.** Every button is a `TapButton` (src/ui/tap_button.gd). Once a finger that went down on one has moved 24 px (`DEADZONE`) up or down, the button scrolls the nearest ScrollContainer above it that scrolls vertically, following the finger, and lets go of its press, so the lift is not a tap. A finger that stays inside 24 px still taps. `BattlePanel` (src/ui/battle_panel.gd, the base of the HUD and every battle panel) uses `MOUSE_FILTER_PASS`, so a drag that starts on a panel's background reaches the scroll container above it too, while the map under the panel still gets no touch.
 
 App flow:
 
@@ -1323,14 +1332,16 @@ func record_tick_usec(usec: int) -> void               # how long one Battle.ste
 ```gdscript
 class_name AudioService extends Node                   # src/audio/audio_service.gd
 func _init(gated: bool = OS.has_feature("mobile")) -> void   # gated: silent until the app is in front (below); tests pass true on a desktop
-func set_enabled(on: bool) -> void
+func set_enabled(on: bool) -> void                     # the sound effects switch, and the master switch: off silences the music too
+func set_music_on(on: bool) -> void                    # A12: the music switch; music plays only while both switches are on
+func is_music_on() -> bool                             # A12: the music switch, whatever set_enabled says
 func play_events(events: Array[Dictionary]) -> void    # battle events to sounds, with caps (section 9)
 func play_ui(sound: StringName) -> void                # &"tap", &"refuse" (RULES 7.4) or &"star"
 func set_music(track: StringName) -> void              # &"menu", &"battle", or &"" for silence
 func is_in_front() -> bool                             # the app is in front, or the service is not gated
 ```
 
-- The App creates the service with `AudioService.new()`, adds it as its own child (no autoload), and calls `set_enabled(settings.sound_on)` once at boot, then again whenever the setting changes. It passes the service down with `setup()`.
+- The App creates the service with `AudioService.new()`, adds it as its own child (no autoload), and calls `set_enabled(settings.sound_on)` and, since A12, `set_music_on(settings.music_on)` once at boot, then again whenever either setting changes (3.6, the music button). It passes the service down with `setup()`.
 - AudioService makes its Sfx and Music buses at run time, so project.godot and the bus layout need nothing.
 - A shot's sound comes from the `fired` event's `tower` and `spec` (3.1).
 - A12 adds the sounds of 14.11.
@@ -1363,8 +1374,7 @@ static func draw_bubble(canvas: CanvasItem, center: Vector2, size: float) -> voi
 static func draw_drowsy(canvas: CanvasItem, center: Vector2, size: float, frame: int) -> void
 static func draw_boost(canvas: CanvasItem, center: Vector2, size: float) -> void
 static func draw_glyph(canvas: CanvasItem, glyph: StringName, center: Vector2, size: float, flat: Color = NO_FLAT) -> void   # &"heart", &"coin", &"moon", &"star", &"gate"
-# A12 adds the new ids to SPECS, and to TOWERS, CREATURES and BOSSES after U5 and V4; until then they are in the
-# EXPANSION lists. Also MARKS and draw_mark() (14.9)
+# A12: SPECS, TOWERS, CREATURES and BOSSES hold the new ids too; also MARKS and draw_mark() (14.9)
 
 class_name MapArt extends RefCounted                   # src/theme/map_art.gd: the map, in map local pixels
 enum Gate { SOCKET, CLOSED, FIXED, BROKEN, REFUSED, OPEN }   # OPEN (phase 7): a placed gate standing open under gates_open;
@@ -1466,7 +1476,7 @@ All in `user://` (the app's private storage, removed on uninstall). Each may hav
 
 | File | Holds | Written | Size cap |
 |---|---|---|---|
-| settings.json | sound on or off | when it changes | 4 KB |
+| settings.json | sound effects and, since A12, music, each on or off | when it changes | 4 KB |
 | progress.json | star bits per level, Twists won, seen ids, counters | when any of it changes | 64 KB |
 | game_level.json, game_run.json, game_daily.json | one saved game per mode (Bart, hard stop A), at the exact moment | when a new level, run or daily opens, when a build phase begins, when a wave starts or is called early, after a card pick, when the HUD pause button pauses the game, when Pause opens, on focus loss, app pause and close request, and when leaving the battle. Deleted when that game ends. | 1 MB each |
 | daily.json (phase 7) | the day's best daily result and the streak | when a daily ends | 4 KB |
@@ -1504,8 +1514,10 @@ Then try a valid `<name>.tmp` first (it is always the newest attempt); if it is 
 Ceilings are far above anything a real player reaches. Counters saturate at their ceiling, so the game never writes a value its own check refuses.
 
 ```json
-{"format": 1, "sound": true}
+{"format": 1, "sound": true, "music": true}
 ```
+
+- settings.json: `sound` is sound effects and the master switch, and `music` (A12), an optional key, is the music. Either one missing or bad means on, so a file from before `music` loads with music on. Music plays only while both are on.
 
 ```json
 {"format": 1,
@@ -1632,7 +1644,7 @@ Why 1.5: every phone shape stays portrait, and the Fold5 inner screen gets the l
 
 The map never rotates. The same 7 column grid shows in both layouts; only the HUD moves (RULES 3.1).
 
-- **Portrait:** the HUD above the map and nothing else in the layout flow. The HUD is two rows of 48 dp controls, 360 logical px with its margins. The first row holds the numbers, the gate chip and the pause button; the second the speeds and the call button. The map gets the rest of the safe area, as large as fits, aligned to the top. On the cover the width decides, so cells stay 154 px, 49 dp for any row count up to 13. The map never loses height to any state.
+- **Portrait:** the HUD above the map and nothing else in the layout flow. The HUD is two rows of 48 dp controls, 360 logical px with its margins. The first row holds the numbers, the gate chip and the pause button; the second the speeds and the call button, and since A12 the round music button after it (3.6). The map gets the rest of the safe area, as large as fits, aligned to the top. On the cover the width decides, so cells stay 154 px, 49 dp for any row count up to 13. The map never loses height to any state.
 - **The gate chip** shows the gate picture and the number in hand, and a lock during a wave. Drag from it as from the landscape strip. A tap on it shows its sentence, "Drag one onto a marked road, or tap a marked road.", as a dock message (FUN_REVIEW_R1 item 6).
 - **The call button** has the honey `PrimaryButton` look only as "Start wave N" in a build phase. An early call keeps the plain `Button` look with its "+N" and works the same (FUN_REVIEW_R1 item 3).
 - **The dock** floats at the bottom of the safe area, under the map or over its lowest rows. Top to bottom it holds the messages (the HUD's and the gate chip's), the Paused strip and the wave preview. The dock and the floating hint hide while a build, tower, creature or draft sheet is open. Messages last 3 s. Besides refusals they include "Wave 3 cleared: +35 gold." when a wave is cleared, from the `wave_cleared` event (FUN_REVIEW_R1 item 8).
@@ -1764,7 +1776,7 @@ Target: 60 fps on the Fold5 (Snapdragon 8 Gen 2), on both screens, through the l
 
 These Fold5 numbers are the budget. The dev PC number is only an early warning.
 
-- **Dev PC, headless.** tests/sim/test_battle_perf.gd times a crowd of 200 or more creatures. Its 0.5 ms per tick is a **mean**, not a worst case. The test fails only past a 2 ms mean, so a busy machine does not fail the suite. The 99th percentile is printed, not budgeted, because other programs on the PC move it. Three runs on 2026-10-23, peak 205 creatures: mean 0.35 to 0.51 ms, 99th percentile 0.9 to 1.1 ms.
+- **Dev PC, headless** (A12, 2026-10-28). tests/sim/test_battle_perf.gd steps three copies of each crowded case in lockstep and keeps each tick's fastest step. It divides their mean by the mean of a fixed piece of plain GDScript, the reference, timed between the steps, because a busy machine slows the reference about as much as the tick. Each case fails past 1.5 times its ratio measured on the dev PC on 2026-10-28, so a tick 2 times slower fails and a busy machine does not. Every limit is below a 2 ms mean on the idle dev PC, where the reference takes about 170 microseconds. The absolute means and the 99th percentile are printed, not asserted. After a lasting sim speedup the sim engineer lowers the bases by hand, so the margin stays.
 - **The Fold5 decides, in phase 6.** The render engineer plays the largest region 1 wave at 3x on both screens and reads PerfProbe's wave summary (9.4):
   1. Mean frame at most 16.7 ms and 99th percentile frame at most 20 ms, on both screens: no more performance work, whatever the PC shows.
   2. Otherwise, if the sim's 99th percentile tick is over 2 ms: the sim engineer speeds up the sim before any more content.
@@ -2207,7 +2219,7 @@ The rules (RULES 5.12 to 5.15, 6.2, 6.3, 8.8):
 - **Dazzle.** When creatures with `dazzle` are among those a tower can aim at in its range, its first target is the best of them by its mode, and any further targets go by its mode as usual. For a Moth Lantern, dazzle decides first, then the rule of not-low first, then its mode.
 - **Nap.** In the defeats step, a creature with `nap_ms` that is not `napped` and is at 0 health or less is not defeated. Its health becomes `Sim.pct_half_up(max_health, 50)`, `napped` becomes true, `nap_ticks` becomes `nap_ms / 50`, its slow and fright end, and `napped` is sent. No bounty, no release. While `nap_ticks` is above 0 it does not move, cannot be hit, no heal reaches it, and it does not regrow or blink. It also does not break a gate, summon, release or yawn (DM, 2026-10-27). Its break timer and its summon timer pause during the nap and go on from where they were when it wakes, and a speed up or health release that comes due waits until it wakes. A release begun before the nap still finishes (3.1). It never heals or digs, because Catalog refuses `nap_ms` with `heal` or digging (14.4). In the timers step `nap_ticks` runs down, and at 0 it wakes (`woke`) and walks on. The next time it falls to 0 or less it is defeated as usual.
 - **Grow.** Each time a walker with `grow_pct` reaches a cell center while walking (the end of a twin step counts, its spawn at its entrance does not), and its `max_health` is below its cap, `start_health * grow_cap_pct / 100` truncated, both `max_health` and `health` rise by `mini(Sim.pct_half_up(start_health, grow_pct), cap - max_health)`.
-- **Yawn and doze.** A yawn makes every attacking tower whose center is within `yawn_reach` of the yawner's center doze: `doze_ticks = maxi(doze_ticks, doze_ms / 50)`. A dozing tower skips the towers step: its reload timer does not run down, and it does not fire.
+- **Yawn and doze.** A yawn makes every attacking tower whose center is within `yawn_reach` of the yawner's center doze: `doze_ticks = maxi(doze_ticks, doze_ms / 50)`. A dozing tower skips the towers step: its reload timer does not run down, and it does not fire. Every doze ends when a build phase begins: `doze_ticks` becomes 0 on every tower. A wave cleared while another still runs starts no build phase, so dozes run on (2026-10-28, RULES 6.2).
 - **Blink.** In the movement step, when `blink_at <= tick`, `blink_at` moves on by `blink_ms / 50`. Unless the creature is napping, it first walks `blink_tiles * UNIT` along its route with no slow (deciding at each center, a twin step counting as one tile, growing at centers, getting through at the base), sets `prev_pos` where it landed, sends `blinked`, and then walks its usual move. Glimmertoad's hop is a blink.
 - **Dig.** In the timers step `dig_ticks` runs down, and at 0 the creature comes up (`surfaced`). Then, when `dig_at <= tick`, `dig_ticks` becomes `dig_ms / 50`, `dig_at` moves on by `dig_every_ms / 50`, and `burrowed` is sent.
 - **Regrow.** In the timers step, when `regrow_at <= tick`, `regrow_at` moves on by `regrow_ms / 50`, and unless the creature is napping it gains `regrow` at its wave's strength (rounded half up, at least 1, as a heal), up to its max health.
@@ -2236,6 +2248,8 @@ New events:
 | `&"blinked"` | `id: int`, `enemy: StringName`, `from: Vector2i` (before the blink), `pos: Vector2i` (where it landed) |
 | `&"yawned"` | `id: int`, `enemy: StringName`, `pos: Vector2i`, `cells: Array[Vector2i]` (the towers that doze, in spot order; may be empty) |
 
+`no_lives_lost` is not an event. It is a star 3 kind (2.7), and the sim sends no event of that kind. AudioService maps an event of that kind to silence on purpose, because the won sound already says it, and tests/audio pins that (2026-10-28).
+
 `fired` keeps its fields of 3.1. A pulse lists every creature it hit in `targets`, with each one's position in `at`, in id order. A line lists every creature it hit the same way, in id order, so its target is among them but not always first, and adds `to: Vector2i`, the end of its segment (B above). A Moth Lantern lists its targets as any shot does, in the order it picked them. One `fired` per pulse, line or shot.
 
 Queries:
@@ -2263,7 +2277,8 @@ Saves made before the expansion keep loading (EXPANSION.md 11.2):
 | napped, nap_ticks | a bool; 0 to `nap_ms / 50`, above 0 only when napped |
 | fright_pct, fright_ticks | 0 to 1,000 and 0 to 1,200; both 0 or both above 0 |
 | low_ticks | 0 to 1,200 |
-| towers' doze_ticks | 0 to 1,200; above 0 only on an attacking tower |
+| a grower's max_health | from its `start_health` to its cap, `start_health * grow_cap_pct / 100` truncated (14.5), as play leaves it |
+| towers' doze_ticks | 0 to 1,200; above 0 only on an attacking tower, and only in `wave`: a build phase ends every doze (14.5) |
 | wave effects | The max health ceiling counts growers at their cap: for every creature type of the catalog, its health at the wave's strength with the wave's `health_pct` effects, times its `grow_cap_pct` over 100 (100 when it does not grow), is at most 1,000,000,000. `_wave_effects_problem` does this, so `Battle.create` and `add_effects` refuse the same, and play never makes a creature that a save cannot hold. |
 | at once | A third tally beside the healers' and the summoners': creatures with `wake_reach`. The `max_waves_running` largest add up to at most `MAX_WAKERS`, 40. Real levels and runs stay far below: at most 6 Hootlings a wave (RULES 12.5). |
 
@@ -2288,7 +2303,7 @@ run.json gains the key `tiers`, required like every run.json key: 0 to 4 entries
 ]
 ```
 
-- Keys exactly `level` (a level id), `towers` (0 to 10 tower ids, none of run.json `towers`), `creatures` (0 to 64 creature ids, no boss and no `puff`), `bosses` (0 to 8 boss ids) and `grid` (0 to 8 characters of `TX^v<>PQ`, no repeats). Each id and character appears in at most one tier. GameData checks that each tier's `level` is the last level of a campaign region, and that the tiers come in campaign order.
+- Keys exactly `level` (a level id), `towers` (0 to 10 tower ids, none of run.json `towers`), `creatures` (0 to 64 creature ids, no boss and no `puff`), `bosses` (0 to 8 boss ids) and `grid` (0 to 8 characters of `TX^v<>PQ`, no repeats). Each id and character appears in at most one tier. GameData checks that each tier's `level` is the last level of a campaign region, and that the tiers come in campaign order. When either check fails, GameData reports the problem and leaves `run` null, as for any run file problem (2.12).
 - Tiers of things, as RULES 14.9 says: what a tier lists has that tier, and anything else tier 0. A card has its tower's tier, 0 without a tower. A pack has the highest tier among its creatures and its boss, counting what they summon, split into or release. A segment has the highest tier among its grid characters. RunData works these out at load and adds `"tier": int` to the card, pack and segment shapes (3.4).
 - `RunData.check` adds: a card's effects never name a creature of a higher tier than the card's own, so no tier leaks in through a risk card; every band holds at least 4 packs of tier 0 (RULES 14.3); and the coverage of 2.9 holds at every tier from 0 to the tier count, over the segments of that tier and below.
 - A tier 0 run is today's run. Things above a run's tier leave every list before any pick, and the picks walk the lists in file order as before (3.4), so new cards, packs and segments may sit anywhere in their files.
@@ -2324,7 +2339,7 @@ func record_finish(day: String, result: Dictionary, tier: int = 0) -> void
 The App (3.6):
 
 - A normal run: `tier` is `progress.tier(game)`, the pool `game.run.pool(progress.unlock_counters(), tier)`, then `RunSession.start(..., tier)`.
-- The daily: its tier is the daily record's `tier` when the record's `day` is today, else `progress.tier(game)`, and never above `game.run.tiers.size()`. Its pool is `game.run.card_ids(tier)`. At its end, `record_finish(run.day, result, run.tier)`. So the day's first daily fixes the day's tier, and a tier earned later that day joins tomorrow's daily (RULES 15).
+- The daily: its tier is the saved daily's tier when a daily of today is saved, else the daily record's `tier` when the record's `day` is today, else `progress.tier(game)`, and never above `game.run.tiers.size()` (2026-10-28). Its pool is `game.run.card_ids(tier)`. At its end, `record_finish(run.day, result, run.tier)`. So the day's first daily fixes the day's tier, and a tier earned later that day joins tomorrow's daily (RULES 15).
 - The Daily button says "Regions 1 to N" (RULES 15). N is the number of the campaign region that holds the daily's tier's `level`; for tier 0, one less than the region of tier 1's `level`, or the number of regions when run.json has no tiers. Fixed UI text, with the number from the data.
 
 ### 14.9 Theme (3.9; art-director)
@@ -2342,16 +2357,12 @@ static func draw_ground(canvas: CanvasItem, grid: PackedStringArray, cell: float
     # the road under a bridge and the road through a tunnel
 static func draw_features(canvas: CanvasItem, grid: PackedStringArray, cell: float) -> void
     # the feature layer only: tunnel mounds with their mouths, bridge decks, and stumps with their symbols
-# Silhouettes: SPECS gains the 4 new towers now. TOWERS, CREATURES and BOSSES gain the new ids when U5 and V4 land;
-# until then the new ids are in these three lists (below). FLYERS does not change.
-const EXPANSION_TOWERS: Array[StringName]              # the 4 new towers; each list in campaign order
-const EXPANSION_CREATURES: Array[StringName]           # the 8 new creatures
-const EXPANSION_BOSSES: Array[StringName]              # the 4 new bosses
+# Silhouettes (2026-10-28): TOWERS, CREATURES and BOSSES hold every drawn id, each in campaign order, and SPECS every
+# tower's paths. FLYERS does not change. What the game shows comes from the catalog, never from these lists.
 const MARKS: Array[StringName] = [&"hidden", &"napping", &"fright", &"awake", &"doze", &"low", &"dug"]
 static func draw_mark(canvas: CanvasItem, mark: StringName, center: Vector2, size: float, frame: int = 0) -> void
 ```
 
-- The EXPANSION lists (A2): until U5 (InfoScreen takes its ids from the catalog) and V4 (the render loops over catalog ids), the new ids live in `EXPANSION_TOWERS`, `EXPANSION_CREATURES` and `EXPANSION_BOSSES`. `has_tower()`, `has_enemy()` and every draw function know them. They move into `TOWERS`, `CREATURES` and `BOSSES` when U5 and V4 land, so no unnamed piece shows before region 5's data is in.
 - Grounds: all 8 regions as EXPANSION_LOOK.md 3 draws them, regions 2 to 4 included (Bart, 2026-10-27). Lantern Hill keeps the meadow, and so does a run map with no feature. Play never depends on the ground.
 - Marks (RULES 8.8, EXPANSION_LOOK.md 5): `hidden` the small mist curl; `napping` the crescent over a creature lying on its side (the render lays the sprite down); `fright` the shiver lines; `awake` the open eye; `doze` the one big "z" over a tower; `low` the pale ring at a low flyer's shadow; `dug` the moving dirt mound with claw tips, drawn in place of the creature. Stump sparkles are the render's.
 - Palette: the tokens of all 8 grounds and their scenery, the feature tokens, and the fills of the new towers and creatures (EXPANSION_LOOK.md 3). Lantern Hill changes two values: `ROAD_EDGE` becomes `#856143` and `MEADOW_LIGHT` becomes `#507458`, so its road on light grass passes 3:1. `text_pairs()` and `graphic_pairs()` gain every new pair, so tests/theme/ checks every region.
@@ -2395,10 +2406,10 @@ audio-engineer:
 The sim's tick is the thinnest margin on the Fold5: a 99th percentile of 1.96 to 2.16 ms at 114 live creatures, measured before S10a (9.2, docs/render/perf-fold5-2026-10-27.md). The new rules must not widen it:
 
 - Waves of regions 5 to 8 aim for 80 or fewer creatures, and bring at most 6 Hootlings and 6 Mistwisps (RULES 12.5). tests/levels/ checks the Hootlings and Mistwisps. The 200 live budget of 9.1 stays.
-- Bucket reuse (S10a): never more than two bucket builds a tick. The rings step reuses the bucket of the last towers step when, in between, no creature left the map or started or stopped being out of reach, napping or low (a new creature joins the bucket). The towers step builds its bucket only when a tower is ready, unless out of reach and hidden must be worked out every tick: on a map with tunnels or stumps, or while a creature with `mist` is on the map. tests/sim/test_battle_tick_cost.gd plays battles with and without these shortcuts and gets equal states and events.
+- Bucket reuse (S10a): never more than two bucket builds a tick. The rings step reuses the bucket of the last towers step when, in between, no creature left the map or started or stopped being out of reach, napping or low (a new creature joins the bucket). The towers step builds its bucket only when a tower is ready, unless out of reach and hidden must be worked out every tick: on a map with tunnels or stumps, or while a creature with `mist` is on the map. tests/sim/test_battle_tick_cost.gd plays battles with and without these shortcuts and gets equal states and events. The wake pass does not use the bucket and adds no bucket build: Hootlings walk in clumps, so it marks each cell with the wakers whose reach touches it and measures a creature only against its cell's wakers (2026-10-28).
 - No cost when absent: no misty tiles without a creature with `mist`, no wake pass without a waker, no low flyer loop while no flyer is low, no dazzle ranking unless a dazzler is among a tower's candidates. The hot targeting loop reads one flag per creature, whether it can be aimed at, set when the sim buckets the creatures.
 - A pulse reads the cells in its tower's reach, and a line the cells around its segment, as splash does. `MAX_WAKERS` bounds the wake pass of a tampered save.
-- tests/sim/test_battle_perf.gd gains a crowded case: about 200 live over two waves, with Mistwisps, Hootlings, Yawners, Mossbuds, Gleamers, a lured flock and a digging Burrowbelly, on a fixture map with a tunnel, a bridge, a slide and stumps, against Bramble Cottages, Snow Forts, Scarecrows, Moth Lanterns and today's towers. The bar is the same as the other cases: a mean under 2 ms a tick on the dev PC.
+- tests/sim/test_battle_perf.gd gains a crowded case: about 200 live over two waves, with Mistwisps, Hootlings, Yawners, Mossbuds, Gleamers, a lured flock and a digging Burrowbelly, on a fixture map with a tunnel, a bridge, a slide and stumps, against Bramble Cottages, Snow Forts, Scarecrows, Moth Lanterns and today's towers. Its bar is the ratio rule of 9.2, like every other case there.
 - The Fold5 decides, as 9.2 says: the most crowded wave of regions 5 to 8 (the balance passes find it) at 3x on both screens, with a fold mid-wave. The frame budget is the trigger: only when it fails and the sim's 99th percentile tick is over 2 ms does the sim engineer speed up the sim before more content lands. Otherwise 2 ms is a target and a warning (DM, 2026-10-27).
 
 ### 14.13 Tests (section 10)

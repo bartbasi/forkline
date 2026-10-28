@@ -15,7 +15,7 @@ const FLAT: Color = Color(1.0, 0.0, 1.0, 1.0)
 
 
 func test_every_tower_tier_and_spec_draws_inside_its_box() -> void:
-	for type: StringName in _towers():
+	for type: StringName in Silhouettes.TOWERS:
 		for look: Vector2i in [Vector2i(1, -1), Vector2i(2, -1), Vector2i(3, 0), Vector2i(3, 1)]:
 			var pen: InkPen = _tower(type, look.x, look.y, false)
 			var label: String = "%s tier %d spec %d" % [type, look.x, look.y]
@@ -29,9 +29,9 @@ func test_every_tower_tier_and_spec_draws_inside_its_box() -> void:
 
 
 func test_every_creature_and_boss_draws_inside_its_box() -> void:
-	var all: Array[StringName] = _creatures() + _bosses()
-	assert_eq(_creatures().size(), 19, "eighteen creatures plus the Puff")
-	assert_eq(_bosses().size(), 8, "one boss per region")
+	var all: Array[StringName] = Silhouettes.CREATURES + Silhouettes.BOSSES
+	assert_eq(Silhouettes.CREATURES.size(), 19, "eighteen creatures plus the Puff")
+	assert_eq(Silhouettes.BOSSES.size(), 8, "one boss per region")
 	for type: StringName in all:
 		assert_true(Silhouettes.ENEMY_SIZE.has(type), "%s has a size" % type)
 		var size: float = Silhouettes.enemy_size(type, 100.0)
@@ -45,15 +45,15 @@ func test_every_creature_and_boss_draws_inside_its_box() -> void:
 
 
 func test_flat_silhouettes_use_one_color() -> void:
-	for type: StringName in _towers():
+	for type: StringName in Silhouettes.TOWERS:
 		for look: Vector2i in [Vector2i(1, -1), Vector2i(3, 0), Vector2i(3, 1)]:
 			_assert_one_color(_tower(type, look.x, look.y, true), String(type))
-	for type: StringName in _creatures() + _bosses():
+	for type: StringName in Silhouettes.CREATURES + Silhouettes.BOSSES:
 		_assert_one_color(_enemy(type, 0, true), String(type))
 
 
 func test_tiers_and_specs_change_the_shape() -> void:
-	for type: StringName in _towers():
+	for type: StringName in Silhouettes.TOWERS:
 		var masks: Array[PackedByteArray] = []
 		for look: Vector2i in [Vector2i(1, -1), Vector2i(2, -1), Vector2i(3, 0), Vector2i(3, 1)]:
 			masks.append(_mask(_tower(type, look.x, look.y, true), Rect2(-55.0, -90.0, 110.0, 135.0)))
@@ -64,30 +64,29 @@ func test_tiers_and_specs_change_the_shape() -> void:
 
 func test_tower_silhouettes_are_distinct() -> void:
 	var masks: Array[PackedByteArray] = []
-	for type: StringName in _towers():
+	for type: StringName in Silhouettes.TOWERS:
 		masks.append(_mask(_tower(type, 1, -1, true), Rect2(-55.0, -90.0, 110.0, 135.0)))
-	_assert_distinct(_towers(), masks)
+	_assert_distinct(Silhouettes.TOWERS, masks)
 
 
 func test_creature_silhouettes_are_distinct() -> void:
 	# Each at its own size around its position, as on the map.
 	var masks: Array[PackedByteArray] = []
-	for type: StringName in _creatures():
+	for type: StringName in Silhouettes.CREATURES:
 		masks.append(_mask(_enemy(type, 0, true), Rect2(-50.0, -50.0, 100.0, 100.0)))
-	_assert_distinct(_creatures(), masks)
+	_assert_distinct(Silhouettes.CREATURES, masks)
 
 
 func test_boss_silhouettes_are_distinct() -> void:
 	var masks: Array[PackedByteArray] = []
-	for type: StringName in _bosses():
+	for type: StringName in Silhouettes.BOSSES:
 		masks.append(_mask(_enemy(type, 0, true), Rect2(-75.0, -75.0, 150.0, 150.0)))
-	_assert_distinct(_bosses(), masks)
+	_assert_distinct(Silhouettes.BOSSES, masks)
 
 
 func test_spec_list_matches_the_towers() -> void:
-	assert_eq(Silhouettes.TOWERS.size(), 6)
-	assert_eq(_towers().size(), 10)
-	for type: StringName in _towers():
+	assert_eq(Silhouettes.TOWERS.size(), 10)
+	for type: StringName in Silhouettes.TOWERS:
 		assert_true(Silhouettes.SPECS.has(type), "%s has specs" % type)
 		assert_eq((Silhouettes.SPECS[type] as Array).size(), 2, "%s has two specs" % type)
 	assert_true(Silhouettes.has_tower(&"bakery"))
@@ -96,36 +95,45 @@ func test_spec_list_matches_the_towers() -> void:
 	assert_false(Silhouettes.is_flyer(&"scamp"))
 
 
-## The expansion ids of contract 14.1 (docs/art/NAMES.md), specs in order,
-## after the first four regions' ids. Flyers do not change.
-func test_expansion_ids_follow_the_contract() -> void:
-	assert_eq(Silhouettes.EXPANSION_TOWERS, [&"bramble_cottage", &"scarecrow", &"snow_fort", &"moth_lantern"] as Array[StringName])
+## The ids of docs/art/NAMES.md in campaign order: the first four regions'
+## cast, then the expansion's (contract 14.1), specs in order. Flyers do not
+## change.
+func test_ids_follow_the_contract_in_campaign_order() -> void:
+	assert_eq(Silhouettes.TOWERS, [
+		&"sling_post", &"pumpkin_catapult", &"lullaby_bell", &"longbow_loft", &"firework_tower", &"bakery",
+		&"bramble_cottage", &"scarecrow", &"snow_fort", &"moth_lantern",
+	] as Array[StringName])
 	assert_eq(Silhouettes.SPECS[&"bramble_cottage"], [&"wild_bramble", &"holly_crown"])
 	assert_eq(Silhouettes.SPECS[&"scarecrow"], [&"tall_scarecrow", &"crow_keeper"])
 	assert_eq(Silhouettes.SPECS[&"snow_fort"], [&"big_snowball", &"flurry"])
 	assert_eq(Silhouettes.SPECS[&"moth_lantern"], [&"beacon_lantern", &"lantern_garland"])
-	assert_eq(Silhouettes.EXPANSION_CREATURES, [&"mossbud", &"mistwisp", &"gleamer", &"sleepyhead", &"snowroller", &"yawner", &"blinker", &"hootling"] as Array[StringName])
-	assert_eq(Silhouettes.EXPANSION_BOSSES, [&"burrowbelly", &"old_hayrick", &"snowsnore", &"glimmertoad"] as Array[StringName])
+	assert_eq(Silhouettes.CREATURES, [
+		&"scamp", &"pip", &"skitter", &"flitter", &"shellback", &"bubbler", &"puffball", &"puff", &"mender", &"gatecrasher", &"dusk_moth",
+		&"mossbud", &"mistwisp", &"gleamer", &"sleepyhead", &"snowroller", &"yawner", &"blinker", &"hootling",
+	] as Array[StringName])
+	assert_eq(Silhouettes.BOSSES, [
+		&"grumblesack", &"ironshell", &"moon_moth", &"old_tusk", &"burrowbelly", &"old_hayrick", &"snowsnore", &"glimmertoad",
+	] as Array[StringName])
 	assert_eq(Silhouettes.FLYERS, [&"flitter", &"dusk_moth", &"moon_moth"] as Array[StringName])
-	for id: StringName in _towers():
+	for id: StringName in Silhouettes.TOWERS:
 		assert_true(Silhouettes.has_tower(id), "%s has a silhouette" % id)
 		assert_eq((Silhouettes.SPECS[id] as Array).size(), 2, "%s has two specs" % id)
-	for id: StringName in _creatures() + _bosses():
+	for id: StringName in Silhouettes.CREATURES + Silhouettes.BOSSES:
 		assert_true(Silhouettes.has_enemy(id), "%s has a silhouette" % id)
 		assert_true(Silhouettes.ENEMY_SIZE.has(id), "%s has a size" % id)
 		assert_false(Silhouettes.has_tower(id), "%s is not a tower" % id)
-	assert_eq(Silhouettes.ENEMY_SIZE.size(), _creatures().size() + _bosses().size(), "a size for each and no other")
-	assert_eq(Silhouettes.SPECS.size(), _towers().size(), "specs for each tower and no other")
+	assert_eq(Silhouettes.ENEMY_SIZE.size(), Silhouettes.CREATURES.size() + Silhouettes.BOSSES.size(), "a size for each and no other")
+	assert_eq(Silhouettes.SPECS.size(), Silhouettes.TOWERS.size(), "specs for each tower and no other")
 
 
-## Each new look draws its own picture: a new id never falls back to the
+## Each id in the lists draws its own picture: none falls back to the
 ## placeholder box or circle that an unknown id gets.
-func test_new_ids_never_draw_the_placeholder() -> void:
+func test_listed_ids_never_draw_the_placeholder() -> void:
 	var box: int = _tower(&"no_such_tower", 1, -1, true).shapes.size()
-	for type: StringName in _towers():
+	for type: StringName in Silhouettes.TOWERS:
 		assert_true(_tower(type, 1, -1, true).shapes.size() > box, "%s draws its own picture" % type)
 	var blob: int = _enemy(&"no_such_creature", 0, true).shapes.size()
-	for type: StringName in _creatures() + _bosses():
+	for type: StringName in Silhouettes.CREATURES + Silhouettes.BOSSES:
 		assert_true(_enemy(type, 0, true).shapes.size() > blob, "%s draws its own picture" % type)
 
 
@@ -154,20 +162,6 @@ func test_catalog_ids_have_silhouettes() -> void:
 
 
 # Helpers.
-
-## Every tower, creature and boss with a silhouette: the first four regions'
-## and the expansion's.
-func _towers() -> Array[StringName]:
-	return Silhouettes.TOWERS + Silhouettes.EXPANSION_TOWERS
-
-
-func _creatures() -> Array[StringName]:
-	return Silhouettes.CREATURES + Silhouettes.EXPANSION_CREATURES
-
-
-func _bosses() -> Array[StringName]:
-	return Silhouettes.BOSSES + Silhouettes.EXPANSION_BOSSES
-
 
 func _tower(type: StringName, tier: int, spec: int, flat: bool) -> InkPen:
 	var pen: InkPen = InkPen.new(null, FLAT if flat else Color(0.0, 0.0, 0.0, 0.0))
