@@ -193,3 +193,61 @@ func test_time_per_tick_with_the_expansion_towers() -> void:
 	var p99: int = sorted[mini(sorted.size() - 1, sorted.size() * 99 / 100)]
 	print("    sim: expansion towers, %d ticks with 120 or more creatures, peak %d, up to %d low: mean %d us, 99th percentile %d us, max %d us per tick" % [times.size(), peak, low, mean, p99, sorted.back()])
 	assert_true(mean < 2000, "mean %d us per tick" % mean)
+
+
+## Level 2-2 (Sleepy Mill) as the balance analyst's most crowded case, waves 9 and 10 with
+## the bot's five towers and its gate, wave 10 called as soon as it may be: about 115 live
+## creatures, the case the Fold5 measured on 2026-10-27 (docs/render/perf-fold5-2026-10-27.md).
+const MILL_GRID: Array = [
+	".1.....",
+	".#.o...",
+	".#G###.",
+	".#o#.#.",
+	".G.#o#.",
+	".#o#.#o",
+	".###.#.",
+	"....o#.",
+	".#####.",
+	".#oG.o.",
+	".###...",
+	"...B...",
+]
+
+
+func test_time_per_tick_in_the_level_2_2_crowd() -> void:
+	var waves: Array = [
+		{"strength": 135, "groups": [Fx.group("skitter", 20, 0, 450), Fx.group("scamp", 40, 8000, 100), Fx.group("flitter", 10, 12000, 400)]},
+		{"strength": 115, "groups": [Fx.group("pip", 56, 0, 50), Fx.group("skitter", 16, 5000, 500), Fx.group("flitter", 8, 9000, 400)]},
+	]
+	var b: Battle = Fx.battle(MILL_GRID, waves, {"start_gold": 10000, "gates": 1, "towers": ["sling_post", "pumpkin_catapult", "lullaby_bell"]})
+	assert_not_null(b)
+	for item: Array in [[Vector2i(3, 1), &"sling_post", 1], [Vector2i(2, 3), &"lullaby_bell", 2], [Vector2i(2, 5), &"pumpkin_catapult", 1],
+			[Vector2i(4, 7), &"sling_post", 2], [Vector2i(5, 9), &"sling_post", 2]]:
+		assert_eq(b.place_tower(item[0], item[1]), Battle.DONE)
+		if item[2] == 2:
+			assert_eq(b.upgrade_tower(item[0]), Battle.DONE)
+	assert_eq(b.place_gate(Vector2i(2, 2)), Battle.DONE)
+	b.start_next_wave()
+	var times: Array[int] = []
+	var peak: int = 0
+	while b.phase == Battle.Phase.WAVE and b.tick < 4000:
+		if b.waves_started == 1 and b.next_wave_info()["refusal"] == &"":
+			b.start_next_wave()
+		var start: int = Time.get_ticks_usec()
+		b.step()
+		var spent: int = Time.get_ticks_usec() - start
+		b.take_events()
+		if b.enemies.size() >= 100:
+			times.append(spent)
+		peak = maxi(peak, b.enemies.size())
+	assert_true(peak >= 100, "peak %d live creatures" % peak)
+	assert_true(times.size() >= 50, "%d ticks measured" % times.size())
+	var total: int = 0
+	for t: int in times:
+		total += t
+	var sorted: Array[int] = times.duplicate()
+	sorted.sort()
+	var mean: int = total / maxi(times.size(), 1)
+	var p99: int = sorted[mini(sorted.size() - 1, sorted.size() * 99 / 100)]
+	print("    sim: level 2-2 crowd, %d ticks with 100 or more creatures, peak %d: mean %d us, 99th percentile %d us, max %d us per tick" % [times.size(), peak, mean, p99, sorted.back()])
+	assert_true(mean < 2000, "mean %d us per tick" % mean)

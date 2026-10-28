@@ -25,7 +25,11 @@ var breaking: int = 0                                  # 1/100 ms of breaking le
 var pos: Vector2i = Vector2i.ZERO                      # sub-units, after this tick
 var prev_pos: Vector2i = Vector2i.ZERO                 # sub-units, after the last tick, or where it last landed
                                                        # after a jump this tick (docs/ARCHITECTURE.md 14.3)
-var out_of_reach: bool = false                         # in a tunnel or on a twin step (RULES 8.8); never saved
+var out_of_reach: bool = false                         # in a tunnel, on a twin step or dug under (RULES 8.8); never saved
+var hidden: bool = false                               # on or next to a Mistwisp's tile (RULES 6.2); never saved
+var napped: bool = false                               # its one nap is used (RULES 6.2)
+var nap_ticks: int = 0                                 # ticks of nap left, above 0 while napping
+var dig_ticks: int = 0                                 # ticks left under the ground, above 0 while dug under (RULES 6.3)
 var fright_pct: int = 0                                # frightened: it takes this percent more from every hit (RULES 5.13)
 var fright_ticks: int = 0                              # ticks of fright left, 0 when not frightened
 var low_ticks: int = 0                                 # flyers: ticks it stays low after a lure, 0 when not low (RULES 5.15)
@@ -40,11 +44,22 @@ var bounty: int = 1
 var break_ms: int = 0                                  # a gate breaker's time per gate, 0 for none (RULES 7.7)
 var watched: bool = false                              # it has a speed up or a health release (RULES 6.3)
 var to_node: int = -1                                  # walkers: the node it is heading to (docs/ARCHITECTURE.md 14.3)
+var step_dir: Vector2i = Vector2i.ZERO                 # walkers: to_cell - from_cell, set with the step
+var rate: int = 0                                      # speed * 10 * speed_pct: the move a tick is rate * (100 - slow) / 10000
+var mist: bool = false                                 # the type's rules (RULES 6.2, 6.3)
+var dazzle: bool = false
+var regrows: bool = false
+var naps: bool = false
+var digs: bool = false
+var timed: bool = false                                # it regrows, naps or digs: it has timers of its own
 ## Internal and saved: ticks until a popped bubble is back (0 when up), the tick of
 ## the next summon batch (0 for none), the tick of the next heal (0 for none), the
-## speed ups taken so far, and whether its health release has begun.
+## speed ups taken so far, whether its health release has begun, and the tick of its
+## next regrow and of its next dig (0 for none).
 var bubble_ticks: int = 0
 var summon_at: int = 0
 var heal_at: int = 0
 var ups: int = 0
 var released: bool = false
+var regrow_at: int = 0
+var dig_at: int = 0

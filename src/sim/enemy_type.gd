@@ -23,6 +23,14 @@ var split_into: StringName = &""
 var split_count: int = 0
 var split_gap_ms: int = 0
 var break_ms: int = 0
+var regrow: int = 0                                    # RULES 6.2: regrow this much every regrow_ms; 0 for none
+var regrow_ms: int = 0
+var mist: bool = false                                 # RULES 6.2: hides the creatures on its tile and the four next to it
+var dazzle: bool = false                               # RULES 6.2: towers that can aim at it aim at it first
+var nap_ms: int = 0                                    # RULES 6.2: naps this long instead of its first defeat; 0 for none
+var dig_first_ms: int = 0                              # RULES 6.3: digs under dig_first_ms after it appears, then every
+var dig_every_ms: int = 0                              # dig_every_ms, for dig_ms each time; 0 for none
+var dig_ms: int = 0
 ## {"enemy": StringName, "count": int, "every_ms": int, "gap_ms": int}, or {} for none.
 var summon: Dictionary = {}
 ## {"at_pct": Array[int], "add": int}, or {} for none.

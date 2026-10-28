@@ -16,7 +16,8 @@ const RULE_KEYS: PackedStringArray = [
 const ENEMY_REQUIRED: PackedStringArray = ["id", "name", "info", "health", "armor", "speed", "lives", "bounty"]
 const ENEMY_OPTIONAL: PackedStringArray = [
 	"flying", "boss", "bubble", "heal", "heal_reach", "heal_ms", "split_into", "split_count",
-	"split_gap_ms", "break_ms", "summon", "speed_up", "release",
+	"split_gap_ms", "break_ms", "summon", "speed_up", "release", "regrow", "regrow_ms", "mist", "dazzle",
+	"nap_ms", "dig_first_ms", "dig_every_ms", "dig_ms",
 ]
 
 var rules: GameRules = null
@@ -239,6 +240,7 @@ func _read_enemies(data: Variant, chk: DataCheck) -> void:
 		if item.has("split_into") != item.has("split_count") or item.has("split_into") != item.has("split_gap_ms"):
 			chk.fail(path, "split_into, split_count and split_gap_ms come together")
 		type.break_ms = chk.integer(item, "break_ms", path, 50, 600000, 50)
+		_read_rules_of_regions_5_and_6(item, path, type, chk)
 		if item.has("summon"):
 			var summon_path: String = DataCheck.join(path, "summon")
 			if chk.object(item["summon"], summon_path, ["enemy", "count", "every_ms", "gap_ms"]):
@@ -298,6 +300,27 @@ func _read_enemies(data: Variant, chk: DataCheck) -> void:
 				chk.fail(DataCheck.join(path, "summon.enemy"), "a summoned creature cannot heal")
 		if not type.release.is_empty():
 			_check_released(type, type.release["enemy"], DataCheck.join(path, "release.enemy"), chk)
+
+
+## docs/ARCHITECTURE.md 14.4: regrow, mist, dazzle, nap and dig (RULES 6.2, 6.3).
+static func _read_rules_of_regions_5_and_6(item: Dictionary, path: String, type: EnemyType, chk: DataCheck) -> void:
+	type.regrow = chk.integer(item, "regrow", path, 1, 10000)
+	type.regrow_ms = chk.integer(item, "regrow_ms", path, 50, 600000, 50)
+	if item.has("regrow") != item.has("regrow_ms"):
+		chk.fail(path, "regrow and regrow_ms come together")
+	type.mist = chk.boolean(item, "mist", path)
+	type.dazzle = chk.boolean(item, "dazzle", path)
+	type.nap_ms = chk.integer(item, "nap_ms", path, 50, 60000, 50)
+	type.dig_first_ms = chk.integer(item, "dig_first_ms", path, 50, 600000, 50)
+	type.dig_every_ms = chk.integer(item, "dig_every_ms", path, 50, 600000, 50)
+	type.dig_ms = chk.integer(item, "dig_ms", path, 50, 60000, 50)
+	var digs: int = (1 if item.has("dig_first_ms") else 0) + (1 if item.has("dig_every_ms") else 0) + (1 if item.has("dig_ms") else 0)
+	if digs != 0 and digs != 3:
+		chk.fail(path, "dig_first_ms, dig_every_ms and dig_ms come together")
+	if type.dig_ms > 0 and type.dig_every_ms > 0 and type.dig_ms >= type.dig_every_ms:
+		chk.fail(DataCheck.join(path, "dig_ms"), "must be below dig_every_ms")
+	if digs > 0 and type.flying:
+		chk.fail(path, "only walkers dig")
 
 
 func _check_released(releaser: EnemyType, id: StringName, path: String, chk: DataCheck) -> void:

@@ -8,8 +8,9 @@ extends RefCounted
 ## Every tower, creature and boss of RULES 5 and 6 runs here: attacking towers (with
 ## pulses, lines and lures since A12), Bells, Scarecrows and Bakeries; walkers, flyers
 ## and low flyers, bubbles, slows, frights, splits, heals, gate breakers, boss
-## summons, speed ups and health releases. Twist, card and risk effects (contract 2.8)
-## come in through create() and add_effects().
+## summons, speed ups and health releases; since A12 also regrow, mist, dazzle, naps and
+## digging (regions 5 and 6). Twist, card and risk effects (contract 2.8) come in through
+## create() and add_effects().
 
 enum Phase { BUILD, WAVE, WON, LOST }
 const FORMAT: int = 1
@@ -156,12 +157,32 @@ var _max_tier: int = 0
 var _max_gates_at_start: int = 0
 var _gates_whole: bool = true
 var _waves_cleared: int = 0
-# Scratch for one tick: walkers bucketed by cell, and the flyers.
+# Scratch for one tick: walkers bucketed by cell, and the flyers. Only creatures that can
+# be hit are listed (docs/ARCHITECTURE.md 14.5). A bucket stays good until a creature
+# moves, leaves the list, or starts or stops being out of reach, napping or low; so the
+# towers step's bucket serves the next tick's rings when nothing of that happened.
 var _head: PackedInt32Array = PackedInt32Array()
 var _link: PackedInt32Array = PackedInt32Array()
 var _flyer_list: PackedInt32Array = PackedInt32Array()
 var _low_list: PackedInt32Array = PackedInt32Array()   # the low flyers (RULES 5.15), empty while none is low
+var _bucket_ok: bool = false
 var _removed: bool = false
+# What a tick can skip (docs/ARCHITECTURE.md 14.12). None of this is saved: load works it out.
+var _on_map: PackedInt32Array = PackedInt32Array()     # per wave: its creatures in `enemies`
+var _downed: bool = false                              # a hit this tick took a creature to 0 health or less
+var _frights_on: bool = false                          # some creature may be frightened
+var _lows_on: bool = false                             # some flyer may be low
+# Creatures with rules of their own (RULES 6.2, 6.3), in id order; gone ones leave at _compact().
+var _watched: Array[EnemyState] = []                   # a speed up or a health release (6.3)
+var _bubblers: Array[EnemyState] = []                  # a bubble (6.2, and Bubble Night)
+var _actors: Array[EnemyState] = []                    # heals or breaks gates (6.2, 7.7)
+var _timed: Array[EnemyState] = []                     # regrow, nap or dig
+var _misters: Array[EnemyState] = []                   # mist
+var _dazzlers: Array[EnemyState] = []                  # dazzle
+var _nappers: int = 0                                  # creatures that nap, on the map
+var _diggers: int = 0                                  # creatures that dig, on the map
+var _misty: PackedByteArray = PackedByteArray()        # per cell: 1 when misty, worked out at the start of the towers step
+var _hidden_set: bool = false                          # some creature may be marked hidden
 
 
 ## A Twist's effects apply first, then Relaxed (11, contract 3.1). Null when the level,
@@ -222,6 +243,8 @@ func _setup(level_data: LevelData, stats: Catalog) -> void:
 	_head.resize(map.size())
 	_closed_mask.resize(map.size())
 	_tunnel.resize(map.size())
+	_misty.resize(map.size())
+	_on_map.resize(level_data.waves.size())
 	for i: int in map.size():
 		match level.feature_at(Vector2i(i % Sim.MAP_COLUMNS, i / Sim.MAP_COLUMNS)):
 			LevelData.Feature.TUNNEL:
@@ -239,12 +262,12 @@ func step() -> void:
 		return
 	_spawn_step()
 	_timer_step()
-	_ring_step()
+	_ring_step(true)
 	_move_step()
 	if phase == Phase.LOST:
 		tick += 1
 		return
-	_tower_step()
+	_tower_step(true)
 	_defeat_step()
 	_wave_step()
 	tick += 1
@@ -585,7 +608,7 @@ func enemy_numbers(id: int) -> Dictionary:
 		"slow_pct": enemy.slow_pct, "slow_ms": enemy.slow_ticks * Sim.MS_PER_TICK,
 		"bubble": enemy.bubble, "bubble_ms": enemy.bubble_ticks * Sim.MS_PER_TICK,
 		"breaking_ms": enemy.breaking / 100,
-		"out_of_reach": enemy.out_of_reach,
+		"out_of_reach": enemy.out_of_reach, "hidden": enemy.hidden, "nap_ms": enemy.nap_ticks * Sim.MS_PER_TICK,
 		"fright_pct": enemy.fright_pct, "fright_ms": enemy.fright_ticks * Sim.MS_PER_TICK,
 		"low_ms": enemy.low_ticks * Sim.MS_PER_TICK,
 	}
@@ -738,6 +761,7 @@ func _spawn_step() -> void:
 				enemy.to_cell = cell
 				enemy.to_node = map.node_of(cell)
 				enemy.progress = Sim.UNIT
+				enemy.step_dir = Vector2i.ZERO
 			_add_enemy(enemy)
 	# Boss summons (6.3): a batch begins at the boss's spot now. Summoners are kept in
 	# spawn order; gone ones (health 0 or less) drop out.
@@ -768,6 +792,7 @@ func _spawn_step() -> void:
 			enemy.to_cell = release.to_cell
 			enemy.to_node = release.to_node
 			enemy.progress = release.progress
+			enemy.step_dir = release.to_cell - release.from_cell
 		_add_enemy(enemy)
 		release.left -= 1
 		release.next += release.gap
@@ -794,29 +819,90 @@ func _begin_release(source: EnemyState, type: StringName, count: int, gap: int, 
 	_emit({"kind": &"released", "id": source.id, "source": source.type, "enemy": type, "count": count, "pos": source.pos})
 
 
-## Step 2, per creature in id order: bubbles, slows, heals, break timers (8.1).
+## Step 2 (8.1, docs/ARCHITECTURE.md 14.5). (a) Per creature in id order: bubbles, slows,
+## heals, break timers. (b) Per creature in id order: regrow, nap and dig, then the fright
+## and low timers. Bubble, slow, fright and low timers change only their own creature and
+## send nothing, and heals and breaks read none of them but a breaker's own slow, so each
+## runs as its own pass with the same results and events. A pass over a list holds only
+## the creatures it can change, and a pass with nothing to do is skipped.
 func _timer_step() -> void:
-	for enemy: EnemyState in enemies:
+	for enemy: EnemyState in _bubblers:
 		if enemy.bubble_ticks > 0:
 			enemy.bubble_ticks -= 1
 			if enemy.bubble_ticks == 0:
 				enemy.bubble = true
+	for enemy: EnemyState in enemies:
 		if enemy.slow_ticks > 0:
 			enemy.slow_ticks -= 1
 			if enemy.slow_ticks == 0:
 				enemy.slow_pct = 0
+	for enemy: EnemyState in _actors:
 		if enemy.heal_at > 0 and enemy.heal_at <= tick:
 			_heal(enemy)
 		if enemy.breaking > 0:
 			_break_tick(enemy)
-		# Fright and low timers (5.13, 5.15). Each changes only its own creature, so here
-		# they give the same as last in the timers step (docs/ARCHITECTURE.md 14.5).
+	for enemy: EnemyState in _timed:
+		# Regrow, nap and dig (RULES 6.2, 6.3), in that order. A timer that moves on does
+		# so whether its effect happened or not.
+		if enemy.regrows and enemy.regrow_at <= tick:
+			_regrow(enemy)
+		if enemy.nap_ticks > 0:
+			enemy.nap_ticks -= 1
+			if enemy.nap_ticks == 0:
+				_bucket_ok = false
+				_emit({"kind": &"woke", "id": enemy.id, "enemy": enemy.type, "pos": enemy.pos})
+		if enemy.digs:
+			if enemy.dig_ticks > 0:
+				enemy.dig_ticks -= 1
+				if enemy.dig_ticks == 0:
+					enemy.out_of_reach = false             # a bucket on a map with features looks again
+					_bucket_ok = false
+					_emit({"kind": &"surfaced", "id": enemy.id, "enemy": enemy.type, "pos": enemy.pos})
+			if enemy.dig_at <= tick:
+				_dig(enemy)
+	if _frights_on or _lows_on:
+		_status_timers()
+
+
+## RULES 6.2, Regrow: unless it naps, it gains its regrow at its wave's strength (rounded
+## half up, at least 1, as a heal), up to its max health.
+func _regrow(enemy: EnemyState) -> void:
+	var type: EnemyType = catalog.enemy(enemy.type)
+	enemy.regrow_at += type.regrow_ms / Sim.MS_PER_TICK
+	if enemy.nap_ticks == 0:
+		enemy.health = mini(enemy.health + _scaled(type.regrow, enemy.wave), enemy.max_health)
+
+
+## RULES 6.3: it digs under for dig_ms, and its next dig is dig_every_ms on.
+func _dig(enemy: EnemyState) -> void:
+	var type: EnemyType = catalog.enemy(enemy.type)
+	enemy.dig_ticks = type.dig_ms / Sim.MS_PER_TICK
+	enemy.dig_at += type.dig_every_ms / Sim.MS_PER_TICK
+	enemy.out_of_reach = true
+	_bucket_ok = false
+	_emit({"kind": &"burrowed", "id": enemy.id, "enemy": enemy.type, "pos": enemy.pos})
+
+
+## Fright and low timers (5.13, 5.15). A flyer that stops being low leaves the low list,
+## so the bucket is made again.
+func _status_timers() -> void:
+	var frights: bool = false
+	var lows: bool = false
+	for enemy: EnemyState in enemies:
 		if enemy.fright_ticks > 0:
 			enemy.fright_ticks -= 1
 			if enemy.fright_ticks == 0:
 				enemy.fright_pct = 0
+			else:
+				frights = true
 		if enemy.low_ticks > 0:
 			enemy.low_ticks -= 1
+			if enemy.low_ticks == 0:
+				_bucket_ok = false
+			else:
+				lows = true
+	_frights_on = frights
+	_lows_on = lows
 
 
 ## 6.2: every other creature within reach gains the heal, up to its max health. The
@@ -832,8 +918,8 @@ func _heal(mender: EnemyState) -> void:
 		if other == mender or other.health >= other.max_health:
 			continue
 		var d: Vector2i = other.pos - mender.pos
-		if d.x * d.x + d.y * d.y > reach_sq:
-			continue
+		if d.x * d.x + d.y * d.y > reach_sq or other.nap_ticks > 0:
+			continue                                   # no heal reaches a napping creature (6.2)
 		other.health = mini(other.health + amount, other.max_health)
 		if ids.size() < HEAL_EVENT_IDS:
 			ids.append(other.id)
@@ -862,44 +948,73 @@ func _break_tick(enemy: EnemyState) -> void:
 ## Step 3, rings, towers in spot order: every creature of the right kind in a Bell's
 ## ring gets its slow with the Bell's time left (8.5), and in a Scarecrow's ring its
 ## fright (5.13). A low flyer counts as a walker (5.15). Neither is a hit, so bubbles do
-## not stop them, and neither reaches a creature out of reach (8.8).
-func _ring_step() -> void:
+## not stop them, and neither reaches a creature out of reach or napping (8.8). In a
+## tick (`reuse`), a bucket still good from the last towers step serves.
+func _ring_step(reuse: bool = false) -> void:
 	if not _has_rings:
 		return
-	_bucket()
+	if not (reuse and _bucket_ok):
+		_bucket(false)
 	for tower: TowerState in towers:
 		if tower.kind != &"slow" and tower.kind != &"fright":
 			continue
 		var stats: TowerStats = tower.stats
+		var fright: bool = tower.kind == &"fright"
+		var ticks: int = (stats.fright_ms if fright else stats.slow_ms) / Sim.MS_PER_TICK
+		if ticks <= 0:
+			continue
+		if fright:
+			_frights_on = true
 		var reach: int = stats.reach * 200
 		var reach_sq: int = reach * reach
 		var center: Vector2i = Sim.center(tower.cell)
-		var fright: bool = tower.kind == &"fright"
 		var pct: int = stats.fright_pct if fright else stats.slow_pct
-		var ticks: int = (stats.fright_ms if fright else stats.slow_ms) / Sim.MS_PER_TICK
+		var ring: PackedInt32Array = PackedInt32Array()
 		if stats.hits_ground:
 			for cell: int in tower.near_cells:
 				var i: int = _head[cell]
 				while i >= 0:
-					if _in_range(enemies[i], center, reach_sq):
-						if fright:
-							_fright(enemies[i], pct, ticks)
-						else:
-							_slow(enemies[i], pct, ticks)
+					ring.append(i)
 					i = _link[i]
-		for i: int in (_flyer_list if stats.hits_air else _low_list):
-			if _in_range(enemies[i], center, reach_sq):
-				if fright:
-					_fright(enemies[i], pct, ticks)
-				else:
-					_slow(enemies[i], pct, ticks)
+		ring.append_array(_flyer_list if stats.hits_air else _low_list)
+		# The range check, _slow() and _fright() inlined: the busiest loop of the step.
+		var cx: int = center.x
+		var cy: int = center.y
+		for i: int in ring:
+			var enemy: EnemyState = enemies[i]
+			var p: Vector2i = enemy.pos
+			var dx: int = p.x - cx
+			var dy: int = p.y - cy
+			if dx * dx + dy * dy > reach_sq or enemy.health <= 0:
+				continue
+			if fright:
+				var held: int = enemy.fright_pct
+				if pct > held:
+					enemy.fright_pct = pct
+					enemy.fright_ticks = ticks
+				elif pct == held and ticks > enemy.fright_ticks:
+					enemy.fright_ticks = ticks
+				continue
+			var slow: int = enemy.slow_pct
+			if pct > slow:
+				enemy.slow_pct = pct
+				enemy.slow_ticks = ticks
+			elif pct == slow and ticks > enemy.slow_ticks:
+				enemy.slow_ticks = ticks
 
 
-## Step 4: movement. A creature at the base center is removed and costs its lives.
+## Step 4: movement. A creature at the base center is removed and costs its lives. A
+## napping creature stays where it is (6.2).
 func _move_step() -> void:
+	_bucket_ok = false
+	var naps: bool = _nappers > 0
 	for enemy: EnemyState in enemies:
-		enemy.prev_pos = enemy.pos
-		var amount: int = enemy.speed * 10 * enemy.speed_pct * (100 - enemy.slow_pct) / 10000
+		var pos: Vector2i = enemy.pos
+		enemy.prev_pos = pos
+		if naps and enemy.nap_ticks > 0:
+			continue
+		# rate is speed * 10 * speed_pct, so this is the move of speed * 10 * speed_pct * (100 - slow) / 10000.
+		var amount: int = enemy.rate * (100 - enemy.slow_pct) / 10000
 		var through: bool = false
 		if enemy.flying:
 			enemy.flown += amount
@@ -907,12 +1022,13 @@ func _move_step() -> void:
 				enemy.flown = enemy.fly_length
 				through = true
 			_place(enemy)
-		elif enemy.progress + amount < Sim.UNIT and not (_has_stumps and _is_twin_step(enemy)):
-			# Inside its step: the position moves exactly `amount` along the step.
-			enemy.progress += amount
-			enemy.pos += (enemy.to_cell - enemy.from_cell) * amount
-			continue
 		else:
+			var progress: int = enemy.progress + amount
+			if progress < Sim.UNIT and not (_has_stumps and _is_twin_step(enemy)):
+				# Inside its step: the position moves exactly `amount` along the step.
+				enemy.progress = progress
+				enemy.pos = pos + enemy.step_dir * amount
+				continue
 			through = _walk(enemy, amount)
 		if not through:
 			continue
@@ -956,6 +1072,7 @@ func _walk(enemy: EnemyState, amount: int) -> bool:
 			enemy.to_cell = next_cell
 			enemy.to_node = next
 			enemy.progress = 0
+			enemy.step_dir = next_cell - enemy.from_cell
 		var room: int = Sim.UNIT - enemy.progress
 		if budget < room:
 			enemy.progress += budget
@@ -974,19 +1091,14 @@ static func _is_twin_step(enemy: EnemyState) -> bool:
 	return absi(gap.x) + absi(gap.y) > 1
 
 
-## RULES 8.8: a walker whose center is in a tunnel tile, or on a twin step that is not
-## done, is out of reach. Never a flyer.
-func _out_of_reach(enemy: EnemyState) -> bool:
-	if enemy.flying or not _reach_features:
-		return false
-	if _tunnel[(enemy.pos.y / Sim.UNIT) * Sim.MAP_COLUMNS + enemy.pos.x / Sim.UNIT] == 1:
-		return true
-	return _has_stumps and enemy.progress < Sim.UNIT and _is_twin_step(enemy)
-
-
-## Step 5: attacking towers in spot order. Hits land at once (5.2, 8.2 to 8.6).
-func _tower_step() -> void:
-	_bucket()
+## Step 5: hiding first, then attacking towers in spot order. Hits land at once (5.2,
+## 8.2 to 8.6). Out of reach and hidden are worked out every tick they can be on. With
+## neither, in a tick (`reuse`), the bucket waits for the first tower that is ready.
+func _tower_step(reuse: bool = false) -> void:
+	var bucketed: bool = false
+	if not reuse or _reach_features or not _misters.is_empty() or _hidden_set:
+		_bucket(true)
+		bucketed = true
 	for tower: TowerState in towers:
 		if tower.kind != &"attack":
 			continue
@@ -995,6 +1107,9 @@ func _tower_step() -> void:
 		tower.reload -= Sim.MS_PER_TICK * (100 + tower.got_pct)
 		if tower.reload > 0:
 			continue
+		if not bucketed:
+			_bucket(true)
+			bucketed = true
 		if stats.pulse:
 			_pulse(tower, stats)
 			continue
@@ -1048,17 +1163,7 @@ func _pulse(tower: TowerState, stats: TowerStats) -> void:
 	var reach: int = stats.reach * 200
 	var reach_sq: int = reach * reach
 	var center: Vector2i = Sim.center(tower.cell)
-	var victims: Array[int] = []
-	if stats.hits_ground:
-		for cell: int in tower.near_cells:
-			var i: int = _head[cell]
-			while i >= 0:
-				if _in_range(enemies[i], center, reach_sq):
-					victims.append(i)
-				i = _link[i]
-	for i: int in (_flyer_list if stats.hits_air else _low_list):
-		if _in_range(enemies[i], center, reach_sq):
-			victims.append(i)
+	var victims: Array[int] = _in_reach(tower.near_cells, center, reach_sq, stats)
 	if victims.is_empty():
 		tower.reload = 0
 		return
@@ -1159,27 +1264,43 @@ func _line_victims(a: Vector2i, b: Vector2i, d: Vector2i, n: int, stats: TowerSt
 	return victims
 
 
-## Step 6: defeats pay their bounties and Puffballs queue their Puffs (4.5, 6.2), then
-## boss health events, in id order: speed ups from the next tick, health releases
-## starting on the next tick, even if the same hit defeated the boss (6.3).
+## Step 6: in id order, a creature that is down naps instead if it still can (6.2), and
+## defeats pay their bounties and Puffballs queue their Puffs (4.5, 6.2); then boss
+## health events, in id order: speed ups from the next tick, health releases starting on
+## the next tick, even if the same hit defeated the boss (6.3). In play only a hit lowers
+## health (_hit), so with no creature down the defeats need no pass.
 func _defeat_step() -> void:
-	var watched: bool = false
-	for enemy: EnemyState in enemies:
-		if enemy.watched:
-			watched = true
-		if enemy.health > 0:
-			continue
-		gold = mini(gold + enemy.bounty, BIG)
-		_removed = true
-		_emit({"kind": &"defeated", "id": enemy.id, "enemy": enemy.type, "pos": enemy.pos, "gold": enemy.bounty})
-		var type: EnemyType = catalog.enemy(enemy.type)
-		if type.split_into != &"":
-			_begin_release(enemy, type.split_into, type.split_count, type.split_gap_ms / Sim.MS_PER_TICK, tick + 1)
-	if watched:
+	if _downed:
+		_downed = false
 		for enemy: EnemyState in enemies:
-			if enemy.watched:
-				_health_events(enemy)
+			if enemy.health > 0:
+				continue
+			if enemy.naps and not enemy.napped:
+				_nap(enemy)
+				continue
+			gold = mini(gold + enemy.bounty, BIG)
+			_removed = true
+			_emit({"kind": &"defeated", "id": enemy.id, "enemy": enemy.type, "pos": enemy.pos, "gold": enemy.bounty})
+			var type: EnemyType = catalog.enemy(enemy.type)
+			if type.split_into != &"":
+				_begin_release(enemy, type.split_into, type.split_count, type.split_gap_ms / Sim.MS_PER_TICK, tick + 1)
+	for enemy: EnemyState in _watched:
+		_health_events(enemy)
 	_compact()
+
+
+## RULES 6.2, Nap: instead of its first defeat it wakes later with half its max health,
+## rounded half up. Its slow and fright end. No bounty, no release.
+func _nap(enemy: EnemyState) -> void:
+	enemy.health = Sim.pct_half_up(enemy.max_health, 50)
+	enemy.napped = true
+	enemy.nap_ticks = catalog.enemy(enemy.type).nap_ms / Sim.MS_PER_TICK
+	enemy.slow_pct = 0
+	enemy.slow_ticks = 0
+	enemy.fright_pct = 0
+	enemy.fright_ticks = 0
+	_bucket_ok = false
+	_emit({"kind": &"napped", "id": enemy.id, "enemy": enemy.type, "pos": enemy.pos})
 
 
 func _health_events(enemy: EnemyState) -> void:
@@ -1201,10 +1322,7 @@ func _health_events(enemy: EnemyState) -> void:
 
 ## Step 7: wave checks (4.1, 4.5, 8.1).
 func _wave_step() -> void:
-	var on_map: PackedInt32Array = PackedInt32Array()
-	on_map.resize(level.waves.size())
-	for enemy: EnemyState in enemies:
-		on_map[enemy.wave] += 1
+	var on_map: PackedInt32Array = _on_map if _releases.is_empty() else _on_map.duplicate()
 	for release: Release in _releases:
 		on_map[release.wave] += 1
 	for w: int in running.duplicate():
@@ -1243,99 +1361,208 @@ func _wave_step() -> void:
 
 # Combat.
 
-## Buckets walkers by the cell they stand on, so a tower checks only cells in its reach.
-## Out of reach walkers are worked out here and left out, so no tower, splash or ring
-## reaches them (RULES 8.8). Low flyers are listed too: a tower that hits walkers hits
-## them (5.15), and with none low no loop over them costs anything.
-func _bucket() -> void:
+## Buckets walkers by the cell they stand on, so a tower checks only cells in its reach,
+## and lists the flyers and the low flyers (5.15). Out of reach is worked out here, and
+## creatures out of reach or napping are left out, so no tower, splash or ring reaches
+## them (RULES 8.8, 6.2). For the towers step (`aim`) hiding is worked out first (6.2).
+## With no feature, no napper or digger and no Mistwisp, none of that costs anything.
+func _bucket(aim: bool = false) -> void:
 	_head.fill(-1)
 	_link.resize(enemies.size())
 	_flyer_list.resize(0)
 	_low_list.resize(0)
-	for i: int in enemies.size():
-		var enemy: EnemyState = enemies[i]
+	var features: bool = _reach_features
+	var naps: bool = _nappers > 0
+	var away: bool = naps or _diggers > 0
+	var mist: bool = aim and _work_out_mist()
+	var rows: int = map.rows
+	var i: int = -1
+	for enemy: EnemyState in enemies:
+		i += 1
+		var p: Vector2i = enemy.pos
+		var column: int = p.x / Sim.UNIT                # positions are never below 0
+		var row: int = p.y / Sim.UNIT
+		var cell: int = row * Sim.MAP_COLUMNS + column
+		if mist:
+			# A flyer may stand on the map's far edge, outside every tile.
+			enemy.hidden = column < Sim.MAP_COLUMNS and row < rows and _misty[cell] == 1 and not enemy.mist
 		if enemy.flying:
+			if naps and enemy.nap_ticks > 0:
+				continue
 			_flyer_list.append(i)
 			if enemy.low_ticks > 0:
 				_low_list.append(i)
 			continue
-		var cell: int = (enemy.pos.y / Sim.UNIT) * Sim.MAP_COLUMNS + enemy.pos.x / Sim.UNIT
-		if _reach_features:
-			enemy.out_of_reach = _tunnel[cell] == 1 or (_has_stumps and enemy.progress < Sim.UNIT and _is_twin_step(enemy))
+		if features:
+			# _out_of_reach() inlined. Without features only digging puts a walker out of
+			# reach, and _dig() and the timers step keep that up to date.
+			var twin: bool = _has_stumps and enemy.progress < Sim.UNIT and _is_twin_step(enemy)
+			enemy.out_of_reach = _tunnel[cell] == 1 or twin or enemy.dig_ticks > 0
 			if enemy.out_of_reach:
 				continue
+		if away and (enemy.dig_ticks > 0 or enemy.nap_ticks > 0):
+			continue
 		_link[i] = _head[cell]
 		_head[cell] = i
+	_bucket_ok = true
 
 
-## Up to `targets` different creatures in reach, in the tower's aim order (8.2). Low
-## flyers count for a tower that hits walkers (5.15).
+## A creature that just appeared joins a good bucket (step 1), as _bucket() would list it.
+func _bucket_add(i: int) -> void:
+	var enemy: EnemyState = enemies[i]
+	_link.resize(enemies.size())
+	if enemy.flying:
+		_flyer_list.append(i)
+		if enemy.low_ticks > 0:
+			_low_list.append(i)
+		return
+	var cell: int = _cell_index(enemy.pos)
+	if _reach_features and _out_of_reach(enemy, cell):
+		return
+	_link[i] = _head[cell]
+	_head[cell] = i
+
+
+## RULES 8.8: a walker whose center is in a tunnel tile (`cell`), on a twin step that is
+## not done, or dug under is out of reach. Sets out_of_reach and returns it.
+func _out_of_reach(enemy: EnemyState, cell: int) -> bool:
+	var twin: bool = _has_stumps and enemy.progress < Sim.UNIT and _is_twin_step(enemy)
+	enemy.out_of_reach = _tunnel[cell] == 1 or twin or enemy.dig_ticks > 0
+	return enemy.out_of_reach
+
+
+static func _cell_index(pos: Vector2i) -> int:
+	return (pos.y / Sim.UNIT) * Sim.MAP_COLUMNS + pos.x / Sim.UNIT
+
+
+## RULES 6.2, Mist: the tile of every creature with mist, and its four neighbors inside
+## the map, are misty. False with no such creature, after clearing any hidden marks left.
+func _work_out_mist() -> bool:
+	if _misters.is_empty():
+		if _hidden_set:
+			for enemy: EnemyState in enemies:
+				enemy.hidden = false
+			_hidden_set = false
+		return false
+	_misty.fill(0)
+	var rows: int = map.rows
+	var last: int = Sim.MAP_COLUMNS - 1
+	for mister: EnemyState in _misters:
+		# Positions are never below 0; a flyer may stand on the far edge, outside every
+		# tile, with its neighbors inside.
+		var column: int = mister.pos.x / Sim.UNIT
+		var row: int = mister.pos.y / Sim.UNIT
+		var cell: int = row * Sim.MAP_COLUMNS + column
+		var inside_row: bool = row < rows
+		var inside_column: bool = column <= last
+		if inside_row and inside_column:
+			_misty[cell] = 1
+		if inside_column and row > 0 and row - 1 < rows:
+			_misty[cell - Sim.MAP_COLUMNS] = 1
+		if inside_column and row + 1 < rows:
+			_misty[cell + Sim.MAP_COLUMNS] = 1
+		if inside_row and column > 0 and column - 1 <= last:
+			_misty[cell - 1] = 1
+		if inside_row and column + 1 <= last:
+			_misty[cell + 1] = 1
+	_hidden_set = true
+	return true
+
+
+## Up to `targets` different creatures in reach that can be aimed at, in the tower's aim
+## order (8.2). Low flyers count for a tower that hits walkers (5.15). Hidden creatures
+## are left out (6.2). A dazzling creature among them is the first target (6.2, Dazzle);
+## for a lure that comes before its rule of flyers that are not low first.
 func _pick_targets(tower: TowerState, stats: TowerStats) -> Array[int]:
 	var reach: int = stats.reach * 200
 	var reach_sq: int = reach * reach
 	var center: Vector2i = Sim.center(tower.cell)
 	var found: PackedInt32Array = PackedInt32Array()
 	var to_go: PackedInt32Array = PackedInt32Array()
+	var hiding: bool = _hidden_set
+	var dazzle: bool = not _dazzlers.is_empty()
+	var dazzled: bool = false
 	if stats.hits_ground:
 		for cell: int in tower.near_cells:
-			var i: int = _head[cell]
-			while i >= 0:
+			var next: int = _head[cell]
+			while next >= 0:
+				var i: int = next
+				next = _link[i]
 				var enemy: EnemyState = enemies[i]
+				if enemy.health <= 0 or (hiding and enemy.hidden):
+					continue
 				var d: Vector2i = enemy.pos - center
-				if enemy.health > 0 and d.x * d.x + d.y * d.y <= reach_sq:
+				if d.x * d.x + d.y * d.y <= reach_sq:
 					found.append(i)
 					# _to_go() for a walker, inlined: this loop is the hottest in the sim.
 					var dist: PackedInt32Array = _free_dist if enemy.breaker else _dist
 					to_go.append(dist[enemy.to_node] * Sim.UNIT + Sim.UNIT - enemy.progress)
-				i = _link[i]
+					if dazzle and enemy.dazzle:
+						dazzled = true
 	for i: int in (_flyer_list if stats.hits_air else _low_list):
-		if _in_range(enemies[i], center, reach_sq):
+		var enemy: EnemyState = enemies[i]
+		if enemy.health <= 0 or (hiding and enemy.hidden):
+			continue
+		var d: Vector2i = enemy.pos - center
+		if d.x * d.x + d.y * d.y <= reach_sq:
 			found.append(i)
-			to_go.append(_to_go(enemies[i]))
+			to_go.append(enemy.fly_length - enemy.flown)
+			if dazzle and enemy.dazzle:
+				dazzled = true
 	var picks: Array[int] = []
 	var lure: bool = stats.lure_ms > 0
+	var strong: bool = tower.aim == TowerState.Aim.STRONG
+	var last: bool = tower.aim == TowerState.Aim.LAST
 	while picks.size() < stats.targets and not found.is_empty():
+		# _better() inlined, with dazzle for the first pick and the lure's rule before it.
 		var best: int = 0
+		var b: EnemyState = enemies[found[0]]
+		var b_go: int = to_go[0]
 		for k: int in range(1, found.size()):
 			var a: EnemyState = enemies[found[k]]
-			var b: EnemyState = enemies[found[best]]
-			# 5.15: a lure aims at flyers that are not low first.
-			if lure and (a.low_ticks > 0) != (b.low_ticks > 0):
-				if b.low_ticks > 0:
-					best = k
-				continue
-			if _better(a, to_go[k], b, to_go[best], tower.aim):
+			var a_go: int = to_go[k]
+			var better: bool = false
+			if dazzled and a.dazzle != b.dazzle:
+				better = a.dazzle
+			elif lure and (a.low_ticks > 0) != (b.low_ticks > 0):
+				better = b.low_ticks > 0
+			elif strong and a.max_health != b.max_health:
+				better = a.max_health > b.max_health
+			elif a_go != b_go:
+				better = a_go > b_go if last else a_go < b_go
+			else:
+				better = a.id < b.id
+			if better:
 				best = k
+				b = a
+				b_go = a_go
 		picks.append(found[best])
 		found.remove_at(best)
 		to_go.remove_at(best)
+		dazzled = false
 	return picks
 
 
-func _in_range(enemy: EnemyState, center: Vector2i, reach_sq: int) -> bool:
-	if enemy.health <= 0:
-		return false
-	var dx: int = enemy.pos.x - center.x
-	var dy: int = enemy.pos.y - center.y
-	return dx * dx + dy * dy <= reach_sq
-
-
-## True when a goes before b for this aim. First: nearest the base. Last: farthest.
-## Strong: highest max health, ties by First. Any other tie: the lower id (8.2).
-func _better(a: EnemyState, to_go_a: int, b: EnemyState, to_go_b: int, aim: TowerState.Aim) -> bool:
-	if aim == TowerState.Aim.STRONG and a.max_health != b.max_health:
-		return a.max_health > b.max_health
-	if to_go_a != to_go_b:
-		return to_go_a > to_go_b if aim == TowerState.Aim.LAST else to_go_a < to_go_b
-	return a.id < b.id
-
-
-## Distance to the base in sub-units, for targeting (docs/ARCHITECTURE.md 4.7).
-func _to_go(enemy: EnemyState) -> int:
-	if enemy.flying:
-		return enemy.fly_length - enemy.flown
-	var dist: PackedInt32Array = _free_dist if enemy.breaker else _dist
-	return dist[enemy.to_node] * Sim.UNIT + (Sim.UNIT - enemy.progress)
+## The creatures in the bucket cells `cells` (if the tower hits ground) and in the flyer
+## or low list that are not down and whose centers are within reach_sq of `at`: what a
+## pulse or a splash reaches (8.4, 5.12), hidden or not.
+func _in_reach(cells: PackedInt32Array, at: Vector2i, reach_sq: int, stats: TowerStats) -> Array[int]:
+	var out: Array[int] = []
+	if stats.hits_ground:
+		for cell: int in cells:
+			var i: int = _head[cell]
+			while i >= 0:
+				var enemy: EnemyState = enemies[i]
+				var d: Vector2i = enemy.pos - at
+				if enemy.health > 0 and d.x * d.x + d.y * d.y <= reach_sq:
+					out.append(i)
+				i = _link[i]
+	for i: int in (_flyer_list if stats.hits_air else _low_list):
+		var enemy: EnemyState = enemies[i]
+		var d: Vector2i = enemy.pos - at
+		if enemy.health > 0 and d.x * d.x + d.y * d.y <= reach_sq:
+			out.append(i)
+	return out
 
 
 ## Every creature of a kind the tower hits, within the splash radius of the target's
@@ -1343,20 +1570,14 @@ func _to_go(enemy: EnemyState) -> int:
 func _splash_victims(at: Vector2i, stats: TowerStats) -> Array[int]:
 	var radius: int = stats.splash * 200
 	var radius_sq: int = radius * radius
-	var victims: Array[int] = []
+	var cells: PackedInt32Array = PackedInt32Array()
 	if stats.hits_ground:
 		var low: Vector2i = Sim.cell_of(at - Vector2i(radius, radius))
 		var high: Vector2i = Sim.cell_of(at + Vector2i(radius, radius))
 		for row: int in range(maxi(low.y, 0), mini(high.y, map.rows - 1) + 1):
 			for column: int in range(maxi(low.x, 0), mini(high.x, Sim.MAP_COLUMNS - 1) + 1):
-				var i: int = _head[row * Sim.MAP_COLUMNS + column]
-				while i >= 0:
-					if _in_range(enemies[i], at, radius_sq):
-						victims.append(i)
-					i = _link[i]
-	for i: int in (_flyer_list if stats.hits_air else _low_list):
-		if _in_range(enemies[i], at, radius_sq):
-			victims.append(i)
+				cells.append(row * Sim.MAP_COLUMNS + column)
+	var victims: Array[int] = _in_reach(cells, at, radius_sq, stats)
 	victims.sort()
 	return victims
 
@@ -1377,12 +1598,15 @@ func _hit(index: int, stats: TowerStats, bonus: int) -> void:
 	if enemy.fright_pct > 0:
 		taken = Sim.pct_half_up(taken, 100 + enemy.fright_pct)
 	enemy.health -= taken
+	if enemy.health <= 0:
+		_downed = true
 	if stats.slow_pct > 0:
 		_slow(enemy, stats.slow_pct, stats.slow_ms / Sim.MS_PER_TICK)
 	if stats.lure_ms > 0 and enemy.flying:
 		if enemy.low_ticks == 0:
 			_low_list.append(index)
 		enemy.low_ticks = maxi(enemy.low_ticks, stats.lure_ms / Sim.MS_PER_TICK)
+		_lows_on = true
 
 
 ## One slow slot per creature: a stronger slow replaces it, an equal one keeps the
@@ -1398,10 +1622,11 @@ func _slow(enemy: EnemyState, pct: int, ticks: int) -> void:
 
 
 ## One fright slot per creature, as for slows: a higher percent replaces it, an equal one
-## keeps the longer time (5.13).
+## keeps the longer time (5.13). The rings step does the same inline.
 func _fright(enemy: EnemyState, pct: int, ticks: int) -> void:
 	if ticks <= 0:
 		return
+	_frights_on = true
 	if pct > enemy.fright_pct:
 		enemy.fright_pct = pct
 		enemy.fright_ticks = ticks
@@ -1797,6 +2022,10 @@ func _new_enemy(type: StringName, w: int) -> EnemyState:
 		enemy.summon_at = tick + int(data.summon["every_ms"]) / Sim.MS_PER_TICK
 	if data.heal > 0:
 		enemy.heal_at = tick + data.heal_ms / Sim.MS_PER_TICK
+	if data.regrow > 0:
+		enemy.regrow_at = tick + data.regrow_ms / Sim.MS_PER_TICK
+	if data.dig_ms > 0:
+		enemy.dig_at = tick + data.dig_first_ms / Sim.MS_PER_TICK
 	return enemy
 
 
@@ -1809,12 +2038,19 @@ func _derive(enemy: EnemyState) -> void:
 	if not data.speed_up.is_empty():
 		enemy.speed += enemy.ups * int(data.speed_up["add"])
 	enemy.speed_pct = (_wave_mods[enemy.wave] as WaveMods).speed_pct
+	enemy.rate = enemy.speed * 10 * enemy.speed_pct
 	enemy.lives = data.lives
 	enemy.bounty = _bounty(data.bounty, enemy.wave)
 	enemy.flying = data.flying
 	enemy.break_ms = _break_ms(enemy.type)
 	enemy.breaker = enemy.break_ms > 0
 	enemy.watched = not data.speed_up.is_empty() or not data.release.is_empty()
+	enemy.mist = data.mist
+	enemy.dazzle = data.dazzle
+	enemy.naps = data.nap_ms > 0
+	enemy.digs = data.dig_ms > 0
+	enemy.regrows = data.regrow > 0
+	enemy.timed = enemy.regrows or enemy.naps or enemy.digs
 
 
 ## A flyer flies straight from `start` to the base center (6.5).
@@ -1830,9 +2066,34 @@ func _add_enemy(enemy: EnemyState) -> void:
 	_place(enemy)
 	enemy.prev_pos = enemy.pos
 	enemies.append(enemy)
+	_track(enemy)
+	if _bucket_ok:
+		_bucket_add(enemies.size() - 1)
+	_emit({"kind": &"spawned", "id": enemy.id, "enemy": enemy.type, "pos": enemy.pos})
+
+
+## A creature joins the map's lists and counts (at spawn and on load).
+func _track(enemy: EnemyState) -> void:
+	_on_map[enemy.wave] += 1
 	if enemy.summon_at > 0:
 		_summoners.append(enemy)
-	_emit({"kind": &"spawned", "id": enemy.id, "enemy": enemy.type, "pos": enemy.pos})
+	if enemy.watched:
+		_watched.append(enemy)
+	var data: EnemyType = catalog.enemy(enemy.type)
+	if data.bubble or _all_bubbles:
+		_bubblers.append(enemy)
+	if data.heal > 0 or enemy.breaker:
+		_actors.append(enemy)
+	if enemy.timed:
+		_timed.append(enemy)
+	if enemy.naps:
+		_nappers += 1
+	if enemy.digs:
+		_diggers += 1
+	if enemy.mist:
+		_misters.append(enemy)
+	if enemy.dazzle:
+		_dazzlers.append(enemy)
 
 
 func _place(enemy: EnemyState) -> void:
@@ -1851,16 +2112,44 @@ func _place(enemy: EnemyState) -> void:
 	enemy.pos = a + (b - a) * enemy.progress / Sim.UNIT
 
 
-## Drops creatures marked gone (health 0 or less), keeping id order.
+## Drops creatures marked gone (health 0 or less), keeping id order, from `enemies` and
+## from the lists of creatures with rules of their own.
 func _compact() -> void:
 	if not _removed:
 		return
 	_removed = false
+	_bucket_ok = false
 	var kept: Array[EnemyState] = []
 	for enemy: EnemyState in enemies:
 		if enemy.health > 0:
 			kept.append(enemy)
+			continue
+		_on_map[enemy.wave] -= 1
+		if enemy.naps:
+			_nappers -= 1
+		if enemy.digs:
+			_diggers -= 1
 	enemies = kept
+	if not _watched.is_empty():
+		_watched = _alive(_watched)
+	if not _bubblers.is_empty():
+		_bubblers = _alive(_bubblers)
+	if not _actors.is_empty():
+		_actors = _alive(_actors)
+	if not _timed.is_empty():
+		_timed = _alive(_timed)
+	if not _misters.is_empty():
+		_misters = _alive(_misters)
+	if not _dazzlers.is_empty():
+		_dazzlers = _alive(_dazzlers)
+
+
+static func _alive(list: Array[EnemyState]) -> Array[EnemyState]:
+	var out: Array[EnemyState] = []
+	for enemy: EnemyState in list:
+		if enemy.health > 0:
+			out.append(enemy)
+	return out
 
 
 ## The road cells a walker in reach could stand on (docs/ARCHITECTURE.md 9.3).
@@ -1937,6 +2226,16 @@ func to_data() -> Dictionary:
 			"heal_at": enemy.heal_at, "breaking": enemy.breaking, "ups": enemy.ups, "released": enemy.released,
 			"fright_pct": enemy.fright_pct, "fright_ticks": enemy.fright_ticks,
 		}
+		# 14.7: keys for one kind of creature, on that kind only.
+		var type: EnemyType = catalog.enemy(enemy.type)
+		if type.regrow > 0:
+			item["regrow_at"] = enemy.regrow_at
+		if type.nap_ms > 0:
+			item["napped"] = enemy.napped
+			item["nap_ticks"] = enemy.nap_ticks
+		if type.dig_ms > 0:
+			item["dig_at"] = enemy.dig_at
+			item["dig_ticks"] = enemy.dig_ticks
 		if enemy.flying:
 			item["fly_from"] = DataCheck.cell_data(enemy.fly_from)
 			item["flown"] = enemy.flown
@@ -2081,6 +2380,8 @@ func _load(data: Variant, stats: Catalog, chk: DataCheck) -> bool:
 	if not chk.ok():
 		return false
 	_refresh_boosts()
+	# Out of reach and hidden are worked out again for the loaded battle (docs/ARCHITECTURE.md 14.5).
+	_bucket(true)
 	return true
 
 
@@ -2225,6 +2526,13 @@ func _load_enemies(data: Variant, chk: DataCheck) -> void:
 			return
 		var keys: PackedStringArray = ENEMY_KEYS.duplicate()
 		keys.append_array(["fly_from", "flown"] if type.flying else ["from", "to", "progress"])
+		# 14.7: keys for one kind of creature are required on that kind and refused on others.
+		if type.regrow > 0:
+			keys.append("regrow_at")
+		if type.nap_ms > 0:
+			keys.append_array(["napped", "nap_ticks"])
+		if type.dig_ms > 0:
+			keys.append_array(["dig_at", "dig_ticks"])
 		# 14.7: keys any creature may hold are optional, 0 when missing, so older saves load.
 		var optional: PackedStringArray = ENEMY_OPTIONAL.duplicate()
 		if type.flying:
@@ -2272,6 +2580,7 @@ func _load_enemies(data: Variant, chk: DataCheck) -> void:
 		else:
 			enemy.heal_at = chk.integer(item, "heal_at", path, tick, tick + type.heal_ms / Sim.MS_PER_TICK, 1, tick)
 		enemy.breaking = chk.integer(item, "breaking", path, 0, enemy.break_ms * 100)
+		_load_own_timers(enemy, type, item, path, chk)
 		if type.flying:
 			var high: Vector2i = Vector2i(Sim.MAP_COLUMNS * Sim.UNIT, level.rows * Sim.UNIT)
 			var start: Vector2i = chk.pair(item["fly_from"], path + ".fly_from", 0, maxi(high.x, high.y))
@@ -2287,16 +2596,33 @@ func _load_enemies(data: Variant, chk: DataCheck) -> void:
 			enemy.to_cell = _loaded_to
 			enemy.to_node = _loaded_node
 			enemy.progress = _loaded_progress
+			enemy.step_dir = _loaded_to - _loaded_from
 			if enemy.breaking > 0 and enemy.progress != Sim.UNIT:
 				chk.fail(path + ".breaking", "a breaker breaks from a cell center")
 		if not chk.ok():
 			return
 		_place(enemy)
 		enemy.prev_pos = enemy.pos
-		enemy.out_of_reach = _out_of_reach(enemy)
 		enemies.append(enemy)
-		if enemy.summon_at > 0:
-			_summoners.append(enemy)
+		_track(enemy)
+		enemy.out_of_reach = enemy.dig_ticks > 0            # tunnels and stumps: _bucket() below
+		_frights_on = _frights_on or enemy.fright_ticks > 0
+		_lows_on = _lows_on or enemy.low_ticks > 0
+
+
+## 14.7: regrow, nap and dig, each between ticks as play leaves it.
+func _load_own_timers(enemy: EnemyState, type: EnemyType, item: Dictionary, path: String, chk: DataCheck) -> void:
+	if type.regrow > 0:
+		enemy.regrow_at = chk.integer(item, "regrow_at", path, tick, tick + type.regrow_ms / Sim.MS_PER_TICK, 1, tick)
+	if type.nap_ms > 0:
+		enemy.napped = chk.boolean(item, "napped", path)
+		enemy.nap_ticks = chk.integer(item, "nap_ticks", path, 0, type.nap_ms / Sim.MS_PER_TICK)
+		if enemy.nap_ticks > 0 and not enemy.napped:
+			chk.fail(path + ".nap_ticks", "only a creature whose nap is used naps")
+	if type.dig_ms > 0:
+		var most: int = maxi(type.dig_first_ms, type.dig_every_ms) / Sim.MS_PER_TICK
+		enemy.dig_at = chk.integer(item, "dig_at", path, tick, tick + most, 1, tick)
+		enemy.dig_ticks = chk.integer(item, "dig_ticks", path, 0, type.dig_ms / Sim.MS_PER_TICK)
 
 
 var _loaded_from: Vector2i = Vector2i.ZERO
