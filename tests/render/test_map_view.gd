@@ -282,7 +282,7 @@ func test_route_lines_show_for_every_entrance() -> void:
 	v.show_routes(routes)
 	var layer: MapRoutes = v.get("_routes") as MapRoutes
 	assert_eq(layer.lines.size(), b.level.entrances.size())
-	assert_true(layer.lines[0].walk.size() > 4)
+	assert_true(layer.lines[0].walk[0].size() > 4)
 	v.show_routes([])
 	assert_false(layer.is_showing())
 

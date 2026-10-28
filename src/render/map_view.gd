@@ -15,6 +15,14 @@ extends Node2D
 ##
 ## Gate looks (3.7): a placed gate takes the first look that applies: BROKEN, then OPEN while
 ## the battle holds the gates open, then FIXED, else CLOSED (see gate_look()).
+##
+## Map features (14.10). The layers, bottom to top: the ground (the region's, from
+## MapArt.ground_of); route lines; walkers under a bridge deck or inside a tunnel; the feature
+## layer (MapArt.draw_features, drawn once and kept); the route lines over decks; gates and marks;
+## towers and the other creatures in row order; then shots and the rest. They are children of this
+## node in that order, so the order needs no z values. A walker inside a tunnel fades out at one
+## mouth and back in at the other. A walker on a twin step is not drawn, with sparkles where it
+## went in. Maps with no tunnel, bridge or stump make none of this.
 
 const CELL: float = 128.0
 ## Sub-units of the sim to local pixels.
@@ -41,6 +49,10 @@ const Z_SHOTS: int = 2
 const Z_STATUS: int = 3
 const Z_SPARKLES: int = 4
 const Z_LEAKS: int = 5
+## A walker inside a tunnel is fully shown at a mouth and gone this far (in cells) inside.
+const TUNNEL_FADE: float = 0.3
+## Farther than this (in cells) in one frame is a jump (a twin step), not a walk.
+const JUMP_CELLS: float = 0.9
 
 
 class TowerView:
@@ -77,6 +89,18 @@ class CreatureView:
 	var pop_t: float = 0.0
 	var bubble_hold: float = -1.0
 	var item: MapStatus.Item = MapStatus.Item.new()
+	## Drawn below the feature layer (under a deck or inside a tunnel).
+	var under: bool = false
+	## How much of it shows: 1 whole, 0 gone (in a tunnel or on a twin step).
+	var alpha: float = 1.0
+	var twin: bool = false
+
+
+## A straight run of tunnel tiles: the box of the run in local pixels, and its direction.
+class TunnelRun:
+	extends RefCounted
+	var rect: Rect2 = Rect2()
+	var vertical: bool = true
 
 
 var battle: Battle
@@ -89,7 +113,10 @@ var handled: Dictionary[StringName, int] = {}
 
 var _atlas: MapAtlas
 var _ground: MapGround
+var _features: MapGround
 var _routes: MapRoutes
+var _overpass: MapRoutes
+var _under: Node2D
 var _gates: MapGates
 var _marks: MapMarks
 var _entities: Node2D
@@ -101,6 +128,11 @@ var _premult: CanvasItemMaterial
 
 var _towers: Dictionary[Vector2i, TowerView] = {}
 var _creatures: Dictionary[int, CreatureView] = {}
+var _tunnels: Dictionary[Vector2i, TunnelRun] = {}
+var _ground_id: StringName = &"lantern_hill"
+## The map has a tunnel or a bridge, so walkers can go under something.
+var _layered: bool = false
+var _has_twins: bool = false
 var _gone: Dictionary[int, CreatureView] = {}
 var _dying: Array[CreatureView] = []
 var _pool: Array[Sprite2D] = []
@@ -138,19 +170,34 @@ func _enter_tree() -> void:
 
 # Setup and layout.
 
-## Builds the static map layer and the sprite sheet for this battle. Calling it again
-## starts over.
-func setup(new_battle: Battle) -> void:
+## Builds the static map layers and the sprite sheet for this battle. `region` is the campaign
+## region, or &"" for a run map, whose ground comes from its first feature (MapArt.ground_of).
+## Calling it again starts over.
+func setup(new_battle: Battle, region: StringName = &"lantern_hill") -> void:
 	_clear()
 	battle = new_battle
 	level = battle.level
 	_premult = CanvasItemMaterial.new()
 	_premult.blend_mode = CanvasItemMaterial.BLEND_MODE_PREMULT_ALPHA
+	_ground_id = MapArt.ground_of(region, level.grid)
 	_ground = MapGround.new()
 	add_child(_ground)
-	_ground.setup(level.grid, _premult)
+	_ground.setup(level.grid, _premult, _ground_id)
 	_routes = MapRoutes.new()
 	add_child(_routes)
+	_scan_features()
+	if _layered:
+		_under = Node2D.new()
+		_under.y_sort_enabled = true
+		add_child(_under)
+	if MapGround.feature_area(level.grid).has_area():
+		_features = MapGround.new()
+		add_child(_features)
+		_features.setup(level.grid, _premult, _ground_id, true)
+		_overpass = MapRoutes.new()
+		_overpass.deck_layer = true
+		_routes.fly_above = true
+		add_child(_overpass)
 	_gates = MapGates.new()
 	_gates.grid = level.grid
 	_gates.material = _premult
@@ -237,6 +284,8 @@ func enemy_at(global_point: Vector2) -> int:
 	var best_d: float = INF
 	for id: int in _creatures:
 		var v: CreatureView = _creatures[id]
+		if v.alpha < 0.5:
+			continue                                       # in a tunnel or on a twin step: not drawn
 		var reach: float = FINGER_CELLS * CELL + v.size_px * 0.25
 		var d: float = v.center.distance_to(p)
 		if d <= reach and d < best_d:
@@ -318,6 +367,8 @@ func play_events(events: Array[Dictionary]) -> void:
 func show_routes(routes: Array[Dictionary]) -> void:
 	if _routes != null:
 		_routes.set_routes(routes, level)
+	if _overpass != null:
+		_overpass.set_routes(routes, level)
 
 
 ## The crossed out gate on that socket for 1.5 s (RULES 7.4).
@@ -389,6 +440,56 @@ func sparkles() -> MapSparkles:
 	return _sparkles
 
 
+## The ground this map is drawn on (MapArt.ground_of).
+func ground_id() -> StringName:
+	return _ground_id
+
+
+## How many times the feature layer was queued for drawing; 0 on a map with no feature.
+func feature_bakes() -> int:
+	return _features.bakes if _features != null else 0
+
+
+func feature_draws() -> int:
+	return _features.draw_count() if _features != null else 0
+
+
+## Which layer a creature is drawn in: &"under" (below the feature layer), &"top", or &"hidden"
+## (not drawn at all, in a tunnel or on a twin step). &"" for an id the view does not hold.
+func layer_of(id: int) -> StringName:
+	var v: CreatureView = _creatures.get(id)
+	if v == null:
+		return &""
+	if v.alpha <= 0.0:
+		return &"hidden"
+	return &"under" if v.under else &"top"
+
+
+## How much of a creature shows, 0 to 1; -1 for an id the view does not hold.
+func creature_alpha(id: int) -> float:
+	var v: CreatureView = _creatures.get(id)
+	return v.alpha if v != null else -1.0
+
+
+## Where a creature is drawn, in local pixels (its center, not its feet).
+func creature_center(id: int) -> Vector2:
+	var v: CreatureView = _creatures.get(id)
+	return v.center if v != null else Vector2(-1.0, -1.0)
+
+
+func creature_faces_left(id: int) -> bool:
+	var v: CreatureView = _creatures.get(id)
+	return v.left if v != null else false
+
+
+## The child nodes that fix the draw order, bottom to top, for tests.
+func layer_nodes() -> Array[Node]:
+	var out: Array[Node] = []
+	for n: Node in [_ground, _routes, _under, _features, _overpass, _gates, _marks, _entities]:
+		out.append(n)
+	return out
+
+
 ## The hearts that float up from the home when creatures get through.
 func leaks() -> MapLeaks:
 	return _leaks
@@ -396,7 +497,9 @@ func leaks() -> MapLeaks:
 
 ## Entity sprites ever made, in use or pooled. It stops growing at the peak.
 func sprite_count() -> int:
-	return _entities.get_child_count() if _entities != null else 0
+	if _entities == null:
+		return 0
+	return _entities.get_child_count() + (_under.get_child_count() if _under != null else 0)
 
 
 func bake_scale() -> float:
@@ -538,11 +641,15 @@ func _sync_creatures(alpha: float) -> void:
 		v.gen = _gen
 		var p: Vector2 = Vector2(e.prev_pos).lerp(Vector2(e.pos), alpha)
 		var c: Vector2 = p * PX_PER_SUB if v.flyer else _curve(p)
-		if c.x < v.center.x - 0.05:
-			v.left = true
-		elif c.x > v.center.x + 0.05:
-			v.left = false
+		# A jump (the end of a twin step) is not a walk: it must not turn the creature round.
+		if c.distance_to(v.center) < JUMP_CELLS * CELL:
+			if c.x < v.center.x - 0.05:
+				v.left = true
+			elif c.x > v.center.x + 0.05:
+				v.left = false
 		v.center = c
+		if _layered or _has_twins:
+			_place_walker(v, e, p * PX_PER_SUB)
 		v.sprite.position = Vector2(c.x, c.y + v.feet)
 		v.sprite.flip_h = v.left
 		anim_rate = FLAP_FPS if v.flyer else WALK_FPS
@@ -558,7 +665,7 @@ func _sync_creatures(alpha: float) -> void:
 		it.drowsy = e.slow_ticks > 0 and e.slow_pct > 0
 		it.bubble = e.bubble or v.bubble_hold > _fx_time
 		it.frame = f
-		if it.bar or it.drowsy or it.bubble:
+		if (it.bar or it.drowsy or it.bubble) and v.alpha >= 0.5:
 			_status_items.append(it)
 		if e.breaking > 0:
 			_note_breaker(e)
@@ -669,6 +776,85 @@ func _build_turns() -> void:
 					dirs.append(i)
 			if dirs.size() == 2 and DIRS[dirs[0]] + DIRS[dirs[1]] != Vector2i.ZERO:
 				_turn[r * Sim.MAP_COLUMNS + c] = dirs[0] * 4 + dirs[1]
+
+
+## Finds the tunnels, bridges and stumps, so a map with none pays nothing each frame.
+func _scan_features() -> void:
+	_tunnels.clear()
+	_layered = false
+	_has_twins = false
+	for r: int in level.rows:
+		for c: int in Sim.MAP_COLUMNS:
+			var at: Vector2i = Vector2i(c, r)
+			match level.feature_at(at):
+				LevelData.Feature.BRIDGE:
+					_layered = true
+				LevelData.Feature.STUMP:
+					_has_twins = true
+				LevelData.Feature.TUNNEL:
+					_layered = true
+					if not _tunnels.has(at):
+						_add_tunnel(at)
+
+
+## Records the straight run of tunnel tiles that starts at `first`, the way FeatureArt draws it.
+func _add_tunnel(first: Vector2i) -> void:
+	var run: TunnelRun = TunnelRun.new()
+	run.vertical = MapArt.road_runs_vertically(level.grid, first)
+	var step: Vector2i = Vector2i(0, 1) if run.vertical else Vector2i(1, 0)
+	var last: Vector2i = first
+	while level.feature_at(last + step) == LevelData.Feature.TUNNEL:
+		last += step
+	run.rect = Rect2(Vector2(first) * CELL, Vector2(last - first + Vector2i.ONE) * CELL)
+	var at: Vector2i = first
+	while true:
+		_tunnels[at] = run
+		if at == last:
+			break
+		at += step
+
+
+## Which layer a walker is drawn in and how much of it shows. `px` is its place in local pixels
+## before the road's turns. Under a bridge deck it is drawn below the deck; inside a tunnel it is
+## drawn below the mound and fades out at the mouth it went in by and back in at the other; on a
+## twin step it is not drawn, and a few sparkles show where it went in.
+func _place_walker(v: CreatureView, e: EnemyState, px: Vector2) -> void:
+	if v.flyer:
+		return
+	var under: bool = false
+	var shown: float = 1.0
+	# The step that ends this tick has progress UNIT and the walker already stands at the twin.
+	var twin: bool = _has_twins and e.progress < Sim.UNIT and e.to_cell == battle.map.twin_of(e.from_cell)
+	if twin:
+		shown = 0.0
+	elif _layered:
+		var cell: Vector2i = Vector2i(floori(px.x / CELL), floori(px.y / CELL))
+		var feature: LevelData.Feature = level.feature_at(cell)
+		if feature == LevelData.Feature.TUNNEL:
+			under = true
+			shown = _tunnel_shown(cell, px)
+		elif feature == LevelData.Feature.BRIDGE and battle.map.under_bridge(e.from_cell, e.to_cell):
+			under = true
+	if twin and not v.twin:
+		_sparkles.burst(_center_px(e.from_cell), MapSparkles.Kind.BUBBLE, 0.6)
+	v.twin = twin
+	if under != v.under:
+		v.under = under
+		v.sprite.reparent(_under if under else _entities, false)
+	if shown != v.alpha:
+		v.alpha = shown
+		v.sprite.visible = shown > 0.0
+		# The sheet is premultiplied, so fading scales every channel.
+		v.sprite.modulate = Color(shown, shown, shown, shown)
+
+
+## 1 at a tunnel's mouth, 0 TUNNEL_FADE cells inside it.
+func _tunnel_shown(cell: Vector2i, px: Vector2) -> float:
+	var run: TunnelRun = _tunnels.get(cell)
+	if run == null:
+		return 1.0
+	var d: float = minf(px.y - run.rect.position.y, run.rect.end.y - px.y) if run.vertical else minf(px.x - run.rect.position.x, run.rect.end.x - px.x)
+	return clampf(1.0 - d / (TUNNEL_FADE * CELL), 0.0, 1.0)
 
 
 func _level_enemy_types() -> Array[StringName]:
@@ -939,6 +1125,9 @@ func _sync_layers() -> void:
 	_shots.advance(_fx_time)
 	_leaks.advance(_fx_time)
 	_routes.advance(_real_dt)
+	if _overpass != null and _routes.is_showing():
+		_overpass.phase = _routes.phase
+		_overpass.queue_redraw()
 	if _marks.is_animated():
 		_marks.set_pulse(0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.006))
 	_gates.set_cracking(_crack_cells, _crack_progress, _fx_time)
@@ -976,6 +1165,9 @@ func _acquire_sprite() -> Sprite2D:
 		_entities.add_child(s)
 	else:
 		s = _pool.pop_back()
+		if s.get_parent() != _entities:
+			s.reparent(_entities, false)
+		s.modulate = Color.WHITE
 	s.visible = true
 	return s
 
@@ -996,6 +1188,8 @@ func _refresh_bake() -> void:
 		return
 	_bake_scale = wanted
 	_ground.bake(_bake_scale)
+	if _features != null:
+		_features.bake(_bake_scale)
 	_rebake()
 
 
@@ -1038,6 +1232,13 @@ func _clear() -> void:
 	_break_total.clear()
 	_atlas = null
 	_ground = null
+	_features = null
+	_routes = null
+	_overpass = null
+	_under = null
+	_tunnels.clear()
+	_layered = false
+	_has_twins = false
 	_entities = null
 	_shots = null
 	_status = null

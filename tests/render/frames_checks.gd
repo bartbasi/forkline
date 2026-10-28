@@ -10,6 +10,7 @@ extends SceneTree
 ## Every problem prints a line starting with "FAIL". The exit code is 0 when nothing failed.
 
 const Fx: GDScript = preload("res://tests/render/render_fixtures.gd")
+const Sx: GDScript = preload("res://tests/sim/fixtures/sim_fixtures.gd")
 const WATCHDOG_SECONDS: float = 120.0
 const FRAMES_PER_LEVEL: int = 240
 
@@ -37,6 +38,9 @@ func _run() -> void:
 			await _play(id, size)
 	for size: Vector2i in [Fx.COVER, Fx.INNER]:
 		await _play_arena(size)
+	for size: Vector2i in [Fx.COVER, Fx.INNER]:
+		for grid: Array in [Sx.TUNNEL_GRID, Sx.BRIDGE_GATE_GRID, Sx.STUMP_GRID, Sx.SLIDE_DOWN_GRID, Sx.FEATURE_GRID]:
+			await _play_feature_map(grid, size)
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -200,5 +204,72 @@ func _play_arena(size: Vector2i) -> void:
 	var atlas: MapAtlas = view.get("_atlas") as MapAtlas
 	check(atlas.draw_count() >= 1, "%s: the sheet, gate looks included, was drawn" % label)
 	check(MapArt.Gate.size() == 6, "%s: six gate looks" % label)
+	host.queue_free()
+	await process_frame
+
+
+## A map with features through real frames: the ground by its first feature, the kept feature
+## layer, walkers under decks, in tunnels and on twin steps, route lines split and over decks.
+func _play_feature_map(grid: Array, size: Vector2i) -> void:
+	var host: SubViewport = SubViewport.new()
+	host.size = size
+	host.transparent_bg = false
+	host.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	root.add_child(host)
+	var stats: Catalog = Sx.catalog()
+	var groups: Array = [Sx.group("scamp", 6, 0, 500), Sx.group("flitter", 2, 0, 900)]
+	if "".join(PackedStringArray(grid)).contains("2"):
+		groups.append(Sx.group("scamp", 4, 300, 500, 2))
+	var waves: Array = [{"groups": groups}]
+	var data: Dictionary = Sx.level_data(grid, waves, {"gates": 1 if "".join(PackedStringArray(grid)).contains("G") else 0, "start_gold": 5000})
+	var b: Battle = Battle.create(LevelData.from_data(data, stats), stats, false, [])
+	if grid == Sx.BRIDGE_GATE_GRID:
+		b.place_gate(Vector2i(4, 1))                       # entrance 1 then goes down and under the deck
+	var label: String = "features %s %s" % [grid[0] + grid[grid.size() - 1], size]
+	var view: MapView = MapView.new()
+	host.add_child(view)
+	view.setup(b, &"")
+	var landscape: bool = size.x * 3 > size.y * 2
+	view.fit(Rect2(24, 60, float(size.y) * 0.5, float(size.y) - 120.0) if landscape else Rect2(0, 236, float(size.x), float(size.x) / 7.0 * float(grid.size())))
+	view.show_routes(b.routes(b.closed_cells()))
+	for i: int in 3:
+		await process_frame
+		view.sync(0.0)
+	var features: bool = MapGround.feature_area(b.level.grid).has_area()
+	check(view.ground_bakes() <= 2, "%s: the ground is drawn once, or twice when fit() asked for a sharper one" % label)
+	check(view.feature_draws() >= (1 if features else 0), "%s: the feature layer was drawn" % label)
+	var bakes: int = view.feature_bakes()
+	var draws: int = view.feature_draws()
+	b.start_next_wave()
+	var clock: BattleClock = BattleClock.new()
+	clock.speed = 3
+	var hidden: int = 0
+	var under: int = 0
+	for i: int in 900:
+		if b.phase == Battle.Phase.WAVE:
+			for t: int in clock.advance(1.0 / 60.0):
+				b.step()
+		var events: Array[Dictionary] = b.take_events()
+		view.sync(clock.alpha())
+		view.play_events(events)
+		if i % 90 == 0:
+			view.show_routes(b.routes(b.closed_cells()))
+		await process_frame
+		check(view.creature_count() == b.enemies.size(), "%s frame %d: a node for each creature" % [label, i])
+		for e: EnemyState in b.enemies:
+			match view.layer_of(e.id):
+				&"hidden":
+					hidden += 1
+				&"under":
+					under += 1
+		if b.phase == Battle.Phase.WON or b.phase == Battle.Phase.LOST:
+			break
+	check(view.feature_bakes() == bakes and view.feature_draws() == draws, "%s: the feature layer was not drawn again while playing" % label)
+	if grid == Sx.TUNNEL_GRID or grid == Sx.STUMP_GRID or grid == Sx.FEATURE_GRID:
+		check(hidden > 0, "%s: a walker was out of sight in a tunnel or on a twin step" % label)
+	if grid == Sx.BRIDGE_GATE_GRID or grid == Sx.FEATURE_GRID:
+		check(under > 0, "%s: a walker went under a deck" % label)
+	view.fit(Rect2(0, 0, 500, 900))
+	await process_frame
 	host.queue_free()
 	await process_frame
