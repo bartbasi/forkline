@@ -20,6 +20,12 @@ const EFFECTS: Array[StringName] = [
 	&"shot_pumpkin_catapult", &"shot_prize_pumpkin", &"shot_jam_pot",
 	&"shot_longbow_loft", &"shot_giant_bow", &"shot_triple_bow",
 	&"shot_firework_tower", &"shot_star_bloom", &"shot_skyrocket",
+	# The expansion's attacking towers. The Scarecrow never fires, so it has none.
+	&"shot_bramble_cottage", &"shot_wild_bramble", &"shot_holly_crown",
+	&"shot_snow_fort", &"shot_big_snowball", &"shot_flurry",
+	&"shot_moth_lantern", &"shot_beacon_lantern", &"shot_lantern_garland",
+	# Expansion creature events: a nap, a wake, a dig, a surfacing, a blink, a yawn.
+	&"napped", &"woke", &"burrowed", &"surfaced", &"blinked", &"yawned",
 ]
 const TRACKS: Array[StringName] = [&"menu", &"battle"]
 
@@ -153,6 +159,18 @@ static func render_effect(id: StringName) -> AudioStreamWAV:
 		&"shot_firework_tower": return _firework(&"shot_firework_tower")
 		&"shot_star_bloom": return _firework(&"shot_star_bloom")
 		&"shot_skyrocket": return _firework(&"shot_skyrocket")
+		&"shot_bramble_cottage", &"shot_wild_bramble", &"shot_holly_crown":
+			return _bramble(id)
+		&"shot_snow_fort", &"shot_big_snowball", &"shot_flurry":
+			return _snowball(id)
+		&"shot_moth_lantern", &"shot_beacon_lantern", &"shot_lantern_garland":
+			return _lantern(id)
+		&"napped": return _napped()
+		&"woke": return _woke()
+		&"burrowed": return _burrowed()
+		&"surfaced": return _surfaced()
+		&"blinked": return _blinked()
+		&"yawned": return _yawned()
 	return null
 
 
@@ -506,4 +524,138 @@ static func _firework(id: StringName) -> AudioStreamWAV:
 	if id == &"shot_star_bloom":
 		AudioSynth.bell(buf, r, 0.16, 1976.0, 0.1, 14.0)
 		AudioSynth.bell(buf, r, 0.2, 2349.0, 0.08, 14.0)
+	return AudioSynth.to_stream(buf, r, false)
+
+
+# The expansion (architecture 14.11). Same gentle voice as the rest.
+
+## Bramble Cottage pulse: a dry leafy rustle and a soft thorn knock. One sound for
+## the whole ring. Wild Bramble rustles wider and lower, Holly Crown adds a bright
+## holly tick on top.
+static func _bramble(id: StringName) -> AudioStreamWAV:
+	var r: int = AudioSynth.EFFECT_RATE
+	if id == &"shot_wild_bramble":
+		var wide: PackedFloat32Array = AudioSynth.buffer(0.3, r)
+		AudioSynth.noise(wide, r, 0.0, 0.18, 0.55, 0.28, 61)
+		AudioSynth.noise(wide, r, 0.06, 0.14, 0.45, 0.32, 62)
+		AudioSynth.noise(wide, r, 0.12, 0.12, 0.35, 0.36, 63)
+		AudioSynth.sweep(wide, r, 0.0, 0.12, 430.0, 300.0, 0.35, 22.0)
+		return AudioSynth.to_stream(wide, r, false)
+	var buf: PackedFloat32Array = AudioSynth.buffer(0.22, r)
+	AudioSynth.noise(buf, r, 0.0, 0.12, 0.5, 0.35, 61)
+	AudioSynth.noise(buf, r, 0.05, 0.09, 0.4, 0.45, 62)
+	AudioSynth.sweep(buf, r, 0.0, 0.08, 540.0, 390.0, 0.35, 30.0)
+	if id == &"shot_holly_crown":
+		AudioSynth.bell(buf, r, 0.03, 1568.0, 0.1, 16.0)
+	return AudioSynth.to_stream(buf, r, false)
+
+
+## Snow Fort line: a soft low whoomph and a breath of snow rolling away. Big
+## Snowball is deeper and longer, Flurry is two light puffs.
+static func _snowball(id: StringName) -> AudioStreamWAV:
+	var r: int = AudioSynth.EFFECT_RATE
+	if id == &"shot_flurry":
+		var flurry: PackedFloat32Array = AudioSynth.buffer(0.26, r)
+		AudioSynth.noise(flurry, r, 0.0, 0.1, 0.35, 0.2, 67)
+		AudioSynth.sweep(flurry, r, 0.0, 0.1, 300.0, 190.0, 0.4, 24.0)
+		AudioSynth.noise(flurry, r, 0.11, 0.1, 0.3, 0.2, 68)
+		AudioSynth.sweep(flurry, r, 0.11, 0.1, 340.0, 210.0, 0.35, 24.0)
+		return AudioSynth.to_stream(flurry, r, false)
+	if id == &"shot_big_snowball":
+		var big: PackedFloat32Array = AudioSynth.buffer(0.5, r)
+		AudioSynth.noise(big, r, 0.0, 0.4, 0.5, 0.1, 65)
+		AudioSynth.sweep(big, r, 0.0, 0.4, 130.0, 60.0, 0.75, 6.0)
+		AudioSynth.sweep(big, r, 0.0, 0.3, 260.0, 120.0, 0.2, 9.0)
+		return AudioSynth.to_stream(big, r, false)
+	var plain: PackedFloat32Array = AudioSynth.buffer(0.36, r)
+	AudioSynth.noise(plain, r, 0.0, 0.28, 0.45, 0.12, 63)
+	AudioSynth.sweep(plain, r, 0.0, 0.3, 180.0, 90.0, 0.6, 9.0)
+	return AudioSynth.to_stream(plain, r, false)
+
+
+## Moth Lantern lure: a warm glow note with a second one a hair off, so the pair
+## flutters like wings. Beacon Lantern is lower and rings longer, Lantern Garland
+## lights three notes in a row, one for each flyer.
+static func _lantern(id: StringName) -> AudioStreamWAV:
+	var r: int = AudioSynth.EFFECT_RATE
+	if id == &"shot_lantern_garland":
+		var garland: PackedFloat32Array = AudioSynth.buffer(0.45, r)
+		AudioSynth.bell(garland, r, 0.0, 988.0, 0.15, 11.0)
+		AudioSynth.bell(garland, r, 0.06, 1175.0, 0.15, 11.0)
+		AudioSynth.bell(garland, r, 0.12, 1480.0, 0.14, 11.0)
+		return AudioSynth.to_stream(garland, r, false)
+	if id == &"shot_beacon_lantern":
+		var beacon: PackedFloat32Array = AudioSynth.buffer(0.6, r)
+		AudioSynth.partial(beacon, r, 0.0, 0.6, 784.0, 0.14, 6.0, 300.0, false)
+		AudioSynth.partial(beacon, r, 0.0, 0.6, 791.0, 0.14, 6.0, 300.0, false)
+		AudioSynth.bell(beacon, r, 0.08, 1175.0, 0.12, 7.0)
+		return AudioSynth.to_stream(beacon, r, false)
+	var buf: PackedFloat32Array = AudioSynth.buffer(0.36, r)
+	AudioSynth.partial(buf, r, 0.0, 0.36, 988.0, 0.13, 10.0, 300.0, false)
+	AudioSynth.partial(buf, r, 0.0, 0.36, 997.0, 0.13, 10.0, 300.0, false)
+	AudioSynth.sweep(buf, r, 0.0, 0.1, 700.0, 1000.0, 0.1, 22.0)
+	AudioSynth.bell(buf, r, 0.06, 1319.0, 0.1, 11.0)
+	return AudioSynth.to_stream(buf, r, false)
+
+
+## A sleeper naps instead of popping: a soft sigh sliding down and one drowsy
+## music box note. Gentle, so the player reads "asleep" and not "defeated".
+static func _napped() -> AudioStreamWAV:
+	var r: int = AudioSynth.EFFECT_RATE
+	var buf: PackedFloat32Array = AudioSynth.buffer(0.7, r)
+	AudioSynth.noise(buf, r, 0.0, 0.25, 0.2, 0.1, 71)
+	AudioSynth.sweep(buf, r, 0.0, 0.3, 620.0, 380.0, 0.35, 7.0)
+	AudioSynth.music_box(buf, r, 0.2, AudioSynth.hz(79), 0.14, false)
+	return AudioSynth.to_stream(buf, r, false)
+
+
+## The sleeper wakes: a small rising blip and two warm music box notes going up.
+static func _woke() -> AudioStreamWAV:
+	var r: int = AudioSynth.EFFECT_RATE
+	var buf: PackedFloat32Array = AudioSynth.buffer(0.7, r)
+	AudioSynth.sweep(buf, r, 0.0, 0.14, 420.0, 760.0, 0.3, 14.0)
+	AudioSynth.music_box(buf, r, 0.08, AudioSynth.hz(72), 0.16, false)
+	AudioSynth.music_box(buf, r, 0.18, AudioSynth.hz(76), 0.16, false)
+	return AudioSynth.to_stream(buf, r, false)
+
+
+## A digger goes under: a dull scoop of earth and a low falling thump.
+static func _burrowed() -> AudioStreamWAV:
+	var r: int = AudioSynth.EFFECT_RATE
+	var buf: PackedFloat32Array = AudioSynth.buffer(0.3, r)
+	AudioSynth.noise(buf, r, 0.0, 0.14, 0.5, 0.15, 73)
+	AudioSynth.noise(buf, r, 0.09, 0.1, 0.35, 0.15, 74)
+	AudioSynth.sweep(buf, r, 0.0, 0.16, 220.0, 80.0, 0.55, 18.0)
+	return AudioSynth.to_stream(buf, r, false)
+
+
+## A digger comes up: a short crumble and a low thump rising.
+static func _surfaced() -> AudioStreamWAV:
+	var r: int = AudioSynth.EFFECT_RATE
+	var buf: PackedFloat32Array = AudioSynth.buffer(0.26, r)
+	AudioSynth.noise(buf, r, 0.0, 0.1, 0.45, 0.2, 75)
+	AudioSynth.sweep(buf, r, 0.0, 0.14, 90.0, 250.0, 0.5, 16.0)
+	AudioSynth.noise(buf, r, 0.1, 0.06, 0.25, 0.2, 76)
+	return AudioSynth.to_stream(buf, r, false)
+
+
+## A blink: a faint high sparkle, two tiny notes and a quick glide. It is the
+## quietest sound in the game, because blinkers repeat all wave long.
+static func _blinked() -> AudioStreamWAV:
+	var r: int = AudioSynth.EFFECT_RATE
+	var buf: PackedFloat32Array = AudioSynth.buffer(0.2, r)
+	AudioSynth.sweep(buf, r, 0.0, 0.05, 1400.0, 2400.0, 0.2, 20.0)
+	AudioSynth.bell(buf, r, 0.0, 2093.0, 0.16, 22.0)
+	AudioSynth.bell(buf, r, 0.04, 2794.0, 0.12, 22.0)
+	return AudioSynth.to_stream(buf, r, false)
+
+
+## A yawn: a slow sigh that falls, with a breath of air. Soft and sleepy, so
+## the player reads "the towers are drowsy" and not "something broke".
+static func _yawned() -> AudioStreamWAV:
+	var r: int = AudioSynth.EFFECT_RATE
+	var buf: PackedFloat32Array = AudioSynth.buffer(0.8, r)
+	AudioSynth.noise(buf, r, 0.0, 0.5, 0.2, 0.1, 77)
+	AudioSynth.sweep(buf, r, 0.0, 0.6, 330.0, 200.0, 0.4, 3.5)
+	AudioSynth.sweep(buf, r, 0.0, 0.5, 660.0, 400.0, 0.1, 5.0)
 	return AudioSynth.to_stream(buf, r, false)

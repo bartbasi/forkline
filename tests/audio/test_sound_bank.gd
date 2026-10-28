@@ -11,6 +11,7 @@ const EVENT_KINDS: Array[StringName] = [
 	&"leaked", &"gate_broken", &"wave_cleared", &"build_started", &"built",
 	&"upgraded", &"sold", &"gate_placed", &"gate_removed", &"won", &"lost",
 	&"released", &"break_started", &"sped_up", &"interest",
+	&"napped", &"woke", &"burrowed", &"surfaced", &"blinked", &"yawned",
 ]
 ## The UI sounds of architecture 3.8.
 const UI_SOUNDS: Array[StringName] = [&"tap", &"refuse", &"star"]

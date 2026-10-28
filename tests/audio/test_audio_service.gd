@@ -9,7 +9,22 @@ const EVENT_KINDS: Array[StringName] = [
 	&"leaked", &"gate_broken", &"wave_cleared", &"build_started", &"built",
 	&"upgraded", &"sold", &"gate_placed", &"gate_removed", &"won", &"lost",
 	&"released", &"break_started", &"sped_up", &"interest",
+	&"napped", &"woke", &"burrowed", &"surfaced", &"blinked", &"yawned",
 ]
+
+## Every tower that fires, with its tier 3 paths in spec order.
+const SHOOTERS: Array[StringName] = [
+	&"sling_post", &"pumpkin_catapult", &"longbow_loft", &"firework_tower",
+	&"bramble_cottage", &"snow_fort", &"moth_lantern",
+]
+## The three attacking towers of the expansion: plain, spec 0 and spec 1 shot sounds.
+const EXPANSION_SHOTS: Dictionary[StringName, Array] = {
+	&"bramble_cottage": [&"shot_bramble_cottage", &"shot_wild_bramble", &"shot_holly_crown"],
+	&"snow_fort": [&"shot_snow_fort", &"shot_big_snowball", &"shot_flurry"],
+	&"moth_lantern": [&"shot_moth_lantern", &"shot_beacon_lantern", &"shot_lantern_garland"],
+}
+## The six events of the expansion (architecture 14.6).
+const CREATURE_EVENTS: Array[StringName] = [&"napped", &"woke", &"burrowed", &"surfaced", &"blinked", &"yawned"]
 
 var service: AudioService = null
 
@@ -32,7 +47,11 @@ func after_each() -> void:
 func _event(kind: StringName) -> Dictionary:
 	if kind == &"fired":
 		return _shot(&"sling_post", -1, Vector2i(2, 3))
-	return {"kind": kind, "id": 7, "cell": Vector2i(1, 1), "tower": &"sling_post", "tier": 1, "spec": -1, "gold": 10}
+	return {
+		"kind": kind, "id": 7, "cell": Vector2i(1, 1), "tower": &"sling_post", "tier": 1, "spec": -1, "gold": 10,
+		"enemy": &"yawner", "pos": Vector2i(30000, 50000), "from": Vector2i(20000, 50000),
+		"cells": [Vector2i(1, 1)],
+	}
 
 
 func _shot(tower: StringName, spec: int, cell: Vector2i) -> Dictionary:
@@ -253,20 +272,20 @@ func test_two_towers_fired_events_pick_different_streams() -> void:
 
 func test_every_tower_and_path_has_a_shot_stream() -> void:
 	var seen: Dictionary[StringName, bool] = {}
-	for tower: StringName in [&"sling_post", &"pumpkin_catapult", &"longbow_loft", &"firework_tower"]:
+	for tower: StringName in SHOOTERS:
 		for spec: int in [-1, 0, 1]:
 			var sound: StringName = AudioService.sound_for(_shot(tower, spec, Vector2i(2, 2)))
 			assert_not_null(service._bank.stream(sound), "%s %d has no stream" % [tower, spec])
 			assert_true(AudioService.SHOT_IDS.has(sound), "%s %d: %s is not a shot" % [tower, spec, sound])
 			seen[sound] = true
-	# Four attacking towers with three sounds each.
-	assert_eq(seen.size(), 12)
-	assert_eq(AudioService.SHOT_IDS.size(), 12)
+	# Seven attacking towers with three sounds each.
+	assert_eq(seen.size(), 21)
+	assert_eq(AudioService.SHOT_IDS.size(), 21)
 
 
-func test_bells_and_bakeries_have_no_shot_sound() -> void:
-	# They never fire (architecture 3.1), so no shot sound is kept for them.
-	for tower: StringName in [&"lullaby_bell", &"bakery"]:
+func test_bells_bakeries_and_scarecrows_have_no_shot_sound() -> void:
+	# They never fire (architecture 3.1, RULES 5.13), so no shot sound is kept for them.
+	for tower: StringName in [&"lullaby_bell", &"bakery", &"scarecrow"]:
 		assert_false(AudioService.SHOT_SOUNDS.has(tower), "%s has a shot row" % tower)
 	for sound: StringName in SoundBank.EFFECTS:
 		var text: String = String(sound)
@@ -287,7 +306,7 @@ func test_shot_pitch_spread_comes_from_the_cell() -> void:
 
 func test_shots_of_every_tower_in_one_frame_stay_under_the_shot_cap() -> void:
 	var all: Array[Dictionary] = []
-	for tower: StringName in [&"sling_post", &"pumpkin_catapult", &"longbow_loft", &"firework_tower"]:
+	for tower: StringName in SHOOTERS:
 		for spec: int in [-1, 0, 1]:
 			all.append(_shot(tower, spec, Vector2i(spec + 1, 2)))
 	var most: int = 0

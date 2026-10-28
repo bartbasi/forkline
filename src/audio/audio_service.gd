@@ -41,9 +41,14 @@ const PLAYBACK_DROP_MS: int = 200
 ## FOCUS_IN notification has arrived.
 const FRONT_FRAMES: int = 2
 
-## Event kind (architecture 3.1) to sound id. Every kind has a sound.
+## Event kind (architecture 3.1, 14.6) to sound id. Every kind has a sound.
 ## break_started and sped_up warn the player, so they are heard. released and
-## interest are soft and quiet.
+## interest are soft and quiet. The expansion kinds: napped and woke show that
+## a sleeper did not pop and is back, yawned that towers are dozing (silent when
+## no tower dozes), burrowed and surfaced are low earthy sounds, and blinked is a
+## faint sparkle. The three that repeat all game (burrowed, surfaced, blinked)
+## are frequent sounds, so they give way to every other sound. no_lives_lost
+## has no entry on purpose: the won sound already says it.
 const EVENT_SOUNDS: Dictionary[StringName, StringName] = {
 	&"wave_started": &"wave_started",
 	&"spawned": &"spawned",
@@ -66,6 +71,12 @@ const EVENT_SOUNDS: Dictionary[StringName, StringName] = {
 	&"break_started": &"break_started",
 	&"sped_up": &"sped_up",
 	&"interest": &"interest",
+	&"napped": &"napped",
+	&"woke": &"woke",
+	&"burrowed": &"burrowed",
+	&"surfaced": &"surfaced",
+	&"blinked": &"blinked",
+	&"yawned": &"yawned",
 }
 ## UI sound names (architecture 3.8). Each is also a sound id.
 const UI_SOUNDS: Array[StringName] = [&"tap", &"refuse", &"star"]
@@ -82,6 +93,11 @@ const GAIN_DB: Dictionary[StringName, float] = {
 	&"shot_pumpkin_catapult": -12.0, &"shot_prize_pumpkin": -11.0, &"shot_jam_pot": -12.0,
 	&"shot_longbow_loft": -13.0, &"shot_giant_bow": -12.0, &"shot_triple_bow": -14.0,
 	&"shot_firework_tower": -14.0, &"shot_star_bloom": -14.0, &"shot_skyrocket": -14.0,
+	&"shot_bramble_cottage": -15.0, &"shot_wild_bramble": -15.0, &"shot_holly_crown": -15.0,
+	&"shot_snow_fort": -13.0, &"shot_big_snowball": -12.0, &"shot_flurry": -14.0,
+	&"shot_moth_lantern": -13.0, &"shot_beacon_lantern": -12.0, &"shot_lantern_garland": -13.0,
+	&"napped": -12.0, &"woke": -12.0, &"burrowed": -17.0, &"surfaced": -17.0,
+	&"blinked": -20.0, &"yawned": -12.0,
 }
 ## The least time between two starts of the same sound, in ms. Events in the
 ## same frame therefore make one sound, not a stack.
@@ -96,15 +112,27 @@ const GAP_MS: Dictionary[StringName, int] = {
 	&"shot_pumpkin_catapult": 70, &"shot_prize_pumpkin": 70, &"shot_jam_pot": 70,
 	&"shot_longbow_loft": 60, &"shot_giant_bow": 60, &"shot_triple_bow": 60,
 	&"shot_firework_tower": 70, &"shot_star_bloom": 70, &"shot_skyrocket": 70,
+	# A pulse is one sound for all its hits, and many cottages pulse in a big wave,
+	# so the cottage gap is the longest of the shots.
+	&"shot_bramble_cottage": 110, &"shot_wild_bramble": 110, &"shot_holly_crown": 110,
+	&"shot_snow_fort": 70, &"shot_big_snowball": 70, &"shot_flurry": 70,
+	&"shot_moth_lantern": 70, &"shot_beacon_lantern": 70, &"shot_lantern_garland": 70,
+	&"napped": 150, &"woke": 150, &"burrowed": 200, &"surfaced": 200,
+	&"blinked": 250, &"yawned": 300,
 }
 ## Shot sounds by tower id: the tower's plain shot, then its tier 3 path 0 and
 ## path 1 (the order of architecture 2.2). The Lullaby Bell and the Bakery never
-## fire (architecture 3.1), so they have no row. Unknown towers use &"fired".
+## fire (architecture 3.1), so they have no row, and neither has the Scarecrow
+## (RULES 5.13). Unknown towers use &"fired". A pulse or a line is one fired
+## event, so it plays one sound however many creatures it hits.
 const SHOT_SOUNDS: Dictionary[StringName, Array] = {
 	&"sling_post": [&"fired", &"shot_quickshot", &"shot_stone_sling"],
 	&"pumpkin_catapult": [&"shot_pumpkin_catapult", &"shot_prize_pumpkin", &"shot_jam_pot"],
 	&"longbow_loft": [&"shot_longbow_loft", &"shot_giant_bow", &"shot_triple_bow"],
 	&"firework_tower": [&"shot_firework_tower", &"shot_star_bloom", &"shot_skyrocket"],
+	&"bramble_cottage": [&"shot_bramble_cottage", &"shot_wild_bramble", &"shot_holly_crown"],
+	&"snow_fort": [&"shot_snow_fort", &"shot_big_snowball", &"shot_flurry"],
+	&"moth_lantern": [&"shot_moth_lantern", &"shot_beacon_lantern", &"shot_lantern_garland"],
 }
 ## Every shot sound.
 const SHOT_IDS: Dictionary[StringName, bool] = {
@@ -113,14 +141,21 @@ const SHOT_IDS: Dictionary[StringName, bool] = {
 	&"shot_pumpkin_catapult": true, &"shot_prize_pumpkin": true, &"shot_jam_pot": true,
 	&"shot_longbow_loft": true, &"shot_giant_bow": true, &"shot_triple_bow": true,
 	&"shot_firework_tower": true, &"shot_star_bloom": true, &"shot_skyrocket": true,
+	&"shot_bramble_cottage": true, &"shot_wild_bramble": true, &"shot_holly_crown": true,
+	&"shot_snow_fort": true, &"shot_big_snowball": true, &"shot_flurry": true,
+	&"shot_moth_lantern": true, &"shot_beacon_lantern": true, &"shot_lantern_garland": true,
 }
 ## Most shot sounds of any kind at once, so a big wave never turns into a rattle.
 const MAX_SHOTS: int = 4
 ## Frequent sounds: every shot, plus these. When all voices are busy they give
 ## way to every other sound. A big split releases many creatures, so released is one.
-const OTHER_COMMON: Array[StringName] = [&"spawned", &"popped", &"defeated", &"healed", &"released"]
+## Diggers and blinkers repeat all wave long, so those three are too.
+const OTHER_COMMON: Array[StringName] = [
+	&"spawned", &"popped", &"defeated", &"healed", &"released",
+	&"burrowed", &"surfaced", &"blinked",
+]
 
-## Shots take one of five pitches by tower cell, and puffs one of three by
+## Shots take one of five pitches by tower cell, and puffs and blinks one of three by
 ## creature id, so a big wave sounds like a music box, not a machine.
 const SHOT_PITCHES: PackedFloat32Array = [0.84, 0.94, 1.05, 1.25, 1.4]
 const PUFF_PITCHES: PackedFloat32Array = [0.9, 1.0, 1.12]
@@ -352,12 +387,16 @@ func wait_until_ready() -> void:
 
 
 ## The sound an event makes, or &"" for an unknown or malformed event. A
-## `fired` event picks its shot by `tower` and `spec` (architecture 3.1).
+## `fired` event picks its shot by `tower` and `spec` (architecture 3.1). A
+## `yawned` event with no tower in `cells` is silent, because nothing dozes.
 static func sound_for(event: Dictionary) -> StringName:
 	var kind: Variant = event.get("kind", &"")
 	if typeof(kind) != TYPE_STRING_NAME and typeof(kind) != TYPE_STRING:
 		return &""
 	var sound: StringName = EVENT_SOUNDS.get(StringName(kind), &"")
+	if sound == &"yawned":
+		var cells: Variant = event.get("cells")
+		return sound if cells is Array and not (cells as Array).is_empty() else &""
 	if sound != &"fired":
 		return sound
 	var tower: Variant = event.get("tower")
@@ -379,7 +418,7 @@ func _pitch_for(sound: StringName, event: Dictionary) -> float:
 		if cell is Vector2i:
 			var c: Vector2i = cell
 			return SHOT_PITCHES[absi(c.x * 3 + c.y * 5) % SHOT_PITCHES.size()]
-	elif sound == &"defeated":
+	elif sound == &"defeated" or sound == &"blinked":
 		var id: Variant = event.get("id")
 		if typeof(id) == TYPE_INT:
 			return PUFF_PITCHES[absi(int(id)) % PUFF_PITCHES.size()]
