@@ -2,20 +2,37 @@
 # Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.
 class_name MapArt
 extends RefCounted
-## Draws the map on the 7 column grid (contract 2.2): meadow, roads, build
-## spots, gate sockets and gates, the entrances and the base, and route lines.
+## Draws the map on the 7 column grid (contract 2.2): each region's ground and
+## scenery, roads, build spots, gate sockets and gates, the entrances and the
+## base, route lines, and the map features (contract 14.9).
 ##
 ## Everything is drawn in the map's local space: cell (column, row) covers
 ## [column * cell, (column + 1) * cell] by [row * cell, (row + 1) * cell]. The
 ## grid is the level file's rows, one character per cell (`.` ground, `#` road,
-## `G` road with a socket, `o` build spot, `1` to `4` entrance, `B` base).
+## `G` road with a socket, `o` build spot, `1` to `4` entrance, `B` base, and
+## the features: `T` tunnel, `X` bridge, `^ v < >` ice slide, `P Q` stumps).
 ##
 ## Roads are sandy bands through the cell centers. A cell where the road turns
 ## draws a quarter circle of radius half a cell, so turns are round. Forks and
 ## the base draw a round plaza. route_points() follows the same curves.
+##
+## The scenery is in SceneryArt and the features in FeatureArt, both internal.
 
 enum Gate { SOCKET, CLOSED, FIXED, BROKEN, REFUSED, OPEN }
 enum Route { WALK, BREAK, FLY }
+
+## The 8 region grounds, in campaign order.
+const GROUNDS: Array[StringName] = [&"lantern_hill", &"millbrook", &"willow_fen", &"moonspire_keep",
+	&"hollow_lanes", &"russet_orchards", &"frostpine_ridge", &"starglen"]
+## The road characters, the same as LevelData.ROAD_CHARS (contract 14.2).
+const ROAD_CHARS: String = "#G1234BTX^v<>PQ"
+## A run map's ground: the region of its first feature character.
+const _FEATURE_GROUND: Dictionary[String, StringName] = {
+	"T": &"hollow_lanes", "X": &"russet_orchards",
+	"^": &"frostpine_ridge", "v": &"frostpine_ridge", "<": &"frostpine_ridge", ">": &"frostpine_ridge",
+	"P": &"starglen", "Q": &"starglen",
+}
+const _SLIDES: String = "^v<>"
 
 ## Road band width and its border, as fractions of a cell.
 const ROAD_WIDTH: float = 0.5
@@ -32,42 +49,32 @@ const _OVERLAP: float = 0.03
 
 # The static map layer.
 
-## Draws everything that does not move: meadow, roads, spots, socket posts,
-## scenery, entrance thickets and the base. Gates and route lines are drawn
-## separately. With a font, each entrance gets its letter (A to D) on a sign.
-static func draw_ground(canvas: CanvasItem, grid: PackedStringArray, cell: float, font: Font = null) -> void:
+## The ground to draw a map on. `region` when it is one of GROUNDS. Otherwise
+## (a run map, region &"") the region of the first feature character in
+## reading order: T Hollow Lanes, X Russet Orchards, ^ v < > Frostpine Ridge,
+## P Q Starglen. With no feature, Lantern Hill.
+static func ground_of(region: StringName, grid: PackedStringArray) -> StringName:
+	if GROUNDS.has(region):
+		return region
+	for line: String in grid:
+		for i: int in line.length():
+			if _FEATURE_GROUND.has(line[i]):
+				return _FEATURE_GROUND[line[i]]
+	return &"lantern_hill"
+
+
+## Draws everything that does not move: the ground of `ground` (one of
+## GROUNDS; any other id draws Lantern Hill) with its scenery, roads, ice
+## slides with their chevrons, the road under a bridge and through a tunnel,
+## spots, socket posts, entrance thickets and the base. Gates, route lines and
+## the feature layer (draw_features) are drawn separately. With a font, each
+## entrance gets its letter (A to D) on a sign.
+static func draw_ground(canvas: CanvasItem, grid: PackedStringArray, cell: float, font: Font = null, ground: StringName = &"lantern_hill") -> void:
 	var pen: InkPen = InkPen.new(canvas)
-	pen.line_px = clampf(cell * 0.03, 1.2, 5.0)
-	var cols: int = _cols(grid)
-	var rows: int = grid.size()
-	var size: Vector2 = Vector2(float(cols), float(rows)) * cell
+	ground_into(pen, grid, cell, ground)
 	pen.begin(Vector2.ZERO, 1.0)
-	pen.box(0.0, 0.0, size.x, size.y, Palette.MEADOW, false)
-	# Lighter patches, then the roads over them.
-	for r: int in rows:
-		for c: int in cols:
-			var h: int = _hash(c, r)
-			if h % 5 == 0:
-				var p: Vector2 = _center(Vector2i(c, r), cell) + Vector2(float(h % 7) - 3.0, float(h % 5) - 2.0) * cell * 0.08
-				pen.detail_poly(InkPen.ellipse_pts(p, cell * (0.55 + float(h % 3) * 0.12), cell * 0.28, 20), Color(Palette.MEADOW_LIGHT, 0.5))
-	_draw_roads(pen, grid, cell, ROAD_EDGE_WIDTH, Palette.ROAD_EDGE)
-	_draw_roads(pen, grid, cell, ROAD_WIDTH, Palette.ROAD)
-	for r: int in rows:
-		for c: int in cols:
-			var at: Vector2i = Vector2i(c, r)
-			var ch: String = _char(grid, at)
-			if _is_road(ch) and _is_straight(grid, at):
-				_cobbles(pen, at, cell)
-			if ch == "G":
-				_socket_posts(pen, grid, at, cell)
-			elif ch == "o":
-				draw_spot(canvas, _center(at, cell), cell)
-	# Scenery, back to front.
-	for r: int in rows:
-		for c: int in cols:
-			var at: Vector2i = Vector2i(c, r)
-			if _char(grid, at) == ".":
-				_scenery(pen, grid, at, cell)
+	var rows: int = grid.size()
+	var cols: int = _cols(grid)
 	for r: int in rows:
 		for c: int in cols:
 			var at: Vector2i = Vector2i(c, r)
@@ -80,9 +87,105 @@ static func draw_ground(canvas: CanvasItem, grid: PackedStringArray, cell: float
 				draw_base(canvas, _center(at, cell), cell)
 
 
+## The feature layer only: tunnel mounds with their mouths, bridge decks, and
+## stumps with their symbols. It goes above the route lines and the walkers
+## under a deck or inside a tunnel (contract 14.10). Ice slides are part of
+## the ground.
+static func draw_features(canvas: CanvasItem, grid: PackedStringArray, cell: float) -> void:
+	features_into(InkPen.new(canvas), grid, cell)
+
+
+## Draws the ground layer with `pen`, all but the entrance thickets, signs
+## and the base. The tests record it with a pen that has no canvas. Internal
+## to src/theme/ and its tests, like InkPen.
+static func ground_into(pen: InkPen, grid: PackedStringArray, cell: float, ground: StringName) -> void:
+	var g: StringName = ground if GROUNDS.has(ground) else &"lantern_hill"
+	var road: Color = Palette.ground_color(g, "ROAD")
+	pen.line_px = clampf(cell * 0.03, 1.2, 5.0)
+	var cols: int = _cols(grid)
+	var rows: int = grid.size()
+	var size: Vector2 = Vector2(float(cols), float(rows)) * cell
+	pen.begin(Vector2.ZERO, 1.0)
+	pen.box(0.0, 0.0, size.x, size.y, Palette.ground_color(g, "GROUND"), false)
+	# Lighter patches, then the roads over them.
+	var light: Color = Color(Palette.ground_color(g, "GROUND_LIGHT"), 0.5)
+	for r: int in rows:
+		for c: int in cols:
+			var h: int = _hash(c, r)
+			if h % 5 == 0:
+				var p: Vector2 = _center(Vector2i(c, r), cell) + Vector2(float(h % 7) - 3.0, float(h % 5) - 2.0) * cell * 0.08
+				pen.detail_poly(InkPen.ellipse_pts(p, cell * (0.55 + float(h % 3) * 0.12), cell * 0.28, 20), light)
+	if g == &"hollow_lanes":
+		# Sunken lanes: a dark bank along both sides of every lane.
+		_draw_roads(pen, grid, cell, 0.86, Palette.LANES_BANK)
+	_draw_roads(pen, grid, cell, ROAD_EDGE_WIDTH, Palette.ground_color(g, "ROAD_EDGE"))
+	_draw_roads(pen, grid, cell, ROAD_WIDTH, road)
+	if g == &"willow_fen":
+		# Boardwalks: two thin seams along the road, never across it, so no
+		# seam looks like a gate's plank or a bridge deck's boards.
+		_draw_roads(pen, grid, cell, 0.27, Palette.FEN_SEAM)
+		_draw_roads(pen, grid, cell, 0.21, road)
+	# Ice slides: pale ice with a blue border over the road.
+	_draw_roads(pen, grid, cell, ROAD_EDGE_WIDTH, Palette.ICE_EDGE, true)
+	_draw_roads(pen, grid, cell, ROAD_WIDTH, Palette.ICE, true)
+	for r: int in rows:
+		for c: int in cols:
+			var at: Vector2i = Vector2i(c, r)
+			var ch: String = _char(grid, at)
+			pen.begin(Vector2.ZERO, 1.0)
+			if ch.length() == 1 and _SLIDES.contains(ch):
+				FeatureArt.chevrons(pen, _center(at, cell), cell, _slide_dir(ch))
+			elif ch == "X":
+				FeatureArt.bridge_shadow(pen, _center(at, cell), cell)
+			elif _is_road(ch) and ch != "T" and _is_straight(grid, at) and g != &"willow_fen":
+				_cobbles(pen, at, cell, Palette.ground_color(g, "ROAD_DOT"))
+			if ch == "G":
+				_socket_posts(pen, grid, at, cell)
+			elif ch == "o":
+				_spot_into(pen, _center(at, cell), cell)
+	# Scenery, back to front.
+	for r: int in rows:
+		for c: int in cols:
+			var at: Vector2i = Vector2i(c, r)
+			if _char(grid, at) == ".":
+				var near_road: bool = false
+				for d: Vector2i in _DIRS:
+					if _is_road(_char(grid, at + d)):
+						near_road = true
+				SceneryArt.draw(pen, _center(at, cell), cell, _hash(c, r), near_road, g)
+
+
+## Draws the feature layer with `pen`. Internal to src/theme/ and its tests.
+## A tunnel is a straight run of tunnel tiles: one mound covers the run.
+static func features_into(pen: InkPen, grid: PackedStringArray, cell: float) -> void:
+	pen.line_px = clampf(cell * 0.03, 1.2, 5.0)
+	var done: Dictionary[Vector2i, bool] = {}
+	for r: int in grid.size():
+		for c: int in _cols(grid):
+			var at: Vector2i = Vector2i(c, r)
+			var ch: String = _char(grid, at)
+			if ch == "T" and not done.has(at):
+				var vertical: bool = _road_runs_vertically(grid, at)
+				var step: Vector2i = Vector2i(0, 1) if vertical else Vector2i(1, 0)
+				var last: Vector2i = at
+				done[at] = true
+				while _char(grid, last + step) == "T":
+					last += step
+					done[last] = true
+				FeatureArt.tunnel(pen, at, last, vertical, cell)
+			elif ch == "X":
+				FeatureArt.bridge(pen, _center(at, cell), cell)
+			elif ch == "P" or ch == "Q":
+				FeatureArt.stump(pen, _center(at, cell), cell, ch == "Q")
+
+
 ## An empty build spot: a round stone pad.
 static func draw_spot(canvas: CanvasItem, center: Vector2, cell: float) -> void:
-	var pen: InkPen = InkPen.new(canvas)
+	_spot_into(InkPen.new(canvas), center, cell)
+
+
+static func _spot_into(pen: InkPen, center: Vector2, cell: float) -> void:
+	var line: float = pen.line_px
 	pen.line_px = clampf(cell * 0.025, 1.2, 4.0)
 	pen.begin(center + Vector2(0.0, SPOT_DROP * cell), cell / 100.0)
 	pen.ellipse(Vector2(0, 4), SPOT_RX * 100.0 + 2.0, SPOT_RY * 100.0 + 2.0, Palette.PAD_EDGE, false)
@@ -92,6 +195,7 @@ static func draw_spot(canvas: CanvasItem, center: Vector2, cell: float) -> void:
 		var a: float = TAU * float(k) / 4.0 + PI / 4.0
 		var p: Vector2 = Vector2(cos(a) * 33.0, sin(a) * 17.0)
 		pen.detail(p * 0.8, p * 1.12, 2.0, Color(Palette.PAD_EDGE, 0.7))
+	pen.line_px = line
 
 
 ## The base: the village hearth hall, standing on the base cell.
@@ -246,17 +350,24 @@ static func road_runs_vertically(grid: PackedStringArray, at: Vector2i) -> bool:
 
 # Roads.
 
-static func _draw_roads(pen: InkPen, grid: PackedStringArray, cell: float, width_frac: float, col: Color) -> void:
+## One band of every road (or, with `slides_only`, of every ice slide) at
+## `width_frac` of a cell. A bridge draws only its north-south road here: the
+## east-west road crosses on the deck (FeatureArt.bridge).
+static func _draw_roads(pen: InkPen, grid: PackedStringArray, cell: float, width_frac: float, col: Color, slides_only: bool = false) -> void:
+	pen.begin(Vector2.ZERO, 1.0)
 	var w: float = width_frac * cell
 	for r: int in grid.size():
 		for c: int in _cols(grid):
 			var at: Vector2i = Vector2i(c, r)
-			if not _is_road(_char(grid, at)):
+			var ch: String = _char(grid, at)
+			if not _is_road(ch) or (slides_only and not _SLIDES.contains(ch)):
 				continue
 			var dirs: Array[Vector2i] = _road_dirs(grid, at)
 			var center: Vector2 = _center(at, cell)
 			var ext: float = 0.5 + _OVERLAP
-			if dirs.size() == 2 and dirs[0] == -dirs[1]:
+			if ch == "X":
+				pen.path(PackedVector2Array([center + Vector2(0, -ext) * cell, center + Vector2(0, ext) * cell]), w, col, false)
+			elif dirs.size() == 2 and dirs[0] == -dirs[1]:
 				pen.path(PackedVector2Array([center + Vector2(dirs[0]) * cell * ext, center + Vector2(dirs[1]) * cell * ext]), w, col, false)
 			elif dirs.size() == 2:
 				var from: Vector2 = center + Vector2(dirs[0]) * cell * 0.5
@@ -312,13 +423,13 @@ static func _quarter_arc(center: Vector2, from: Vector2, to: Vector2, cell: floa
 	return InkPen.arc_pts(corner, cell * 0.5, cell * 0.5, a0, a0 + delta, n)
 
 
-static func _cobbles(pen: InkPen, at: Vector2i, cell: float) -> void:
+static func _cobbles(pen: InkPen, at: Vector2i, cell: float, col: Color) -> void:
 	var h: int = _hash(at.x, at.y)
 	var c: Vector2 = _center(at, cell)
 	for k: int in 3:
 		var hk: int = (h >> (k * 4)) & 15
 		var off: Vector2 = Vector2(float(hk % 4) - 1.5, float(hk / 4) - 1.5) * cell * 0.08
-		pen.detail_poly(InkPen.ellipse_pts(c + off, cell * 0.045, cell * 0.03, 8), Palette.ROAD_DOT)
+		pen.detail_poly(InkPen.ellipse_pts(c + off, cell * 0.045, cell * 0.03, 8), col)
 
 
 static func _socket_posts(pen: InkPen, grid: PackedStringArray, at: Vector2i, cell: float) -> void:
@@ -431,51 +542,7 @@ static func _open_gate(pen: InkPen, across: bool) -> void:
 		pen.lantern(Vector2(13, -56), 4.5)
 
 
-# Scenery.
-
-static func _scenery(pen: InkPen, grid: PackedStringArray, at: Vector2i, cell: float) -> void:
-	var h: int = _hash(at.x, at.y)
-	var c: Vector2 = _center(at, cell)
-	var near_road: bool = false
-	for d: Vector2i in _DIRS:
-		if _is_road(_char(grid, at + d)):
-			near_road = true
-	pen.begin(c, cell / 100.0)
-	var kind: int = h % 10
-	if not near_road and kind < 3:
-		_tree(pen, Vector2(float(h % 9) - 4.0, 28), 0.62 + float(h % 3) * 0.06, kind == 0)
-	elif not near_road and kind < 5:
-		pen.shadow(Vector2(0, 24), 22.0)
-		pen.circle(Vector2(-9, 14), 14.0, Palette.TREE_DARK)
-		pen.circle(Vector2(9, 12), 15.0, Palette.TREE)
-	else:
-		# Flowers and tufts only near roads, so creatures stay easy to see.
-		var n: int = 2 if near_road else 4
-		var petals: Array[Color] = [Palette.PLASTER, Palette.SPARKLE_LILAC, Palette.HONEY, Palette.HEART]
-		for k: int in n:
-			var hk: int = (h >> (k * 3)) & 63
-			var p: Vector2 = Vector2(float(hk % 8) - 3.5, float(hk / 8) - 3.5) * 9.0
-			if k % 2 == 0:
-				pen.detail(p, p + Vector2(-4, -7), 2.0, Palette.MEADOW_DARK)
-				pen.detail(p, p + Vector2(0, -9), 2.0, Palette.MEADOW_DARK)
-				pen.detail(p, p + Vector2(4, -7), 2.0, Palette.MEADOW_DARK)
-			else:
-				pen.detail_circle(p, 3.2, petals[(h + k) % petals.size()])
-				pen.detail_circle(p, 1.3, Palette.LANTERN)
-
-
-static func _tree(pen: InkPen, foot: Vector2, k: float, pine: bool) -> void:
-	pen.shadow(foot, 22.0 * k)
-	if pine:
-		pen.box(foot.x - 4 * k, foot.y - 12 * k, foot.x + 4 * k, foot.y, Palette.TIMBER)
-		pen.poly(PackedVector2Array([foot + Vector2(-24, -10) * k, foot + Vector2(24, -10) * k, foot + Vector2(0, -46) * k]), Palette.TREE_DARK)
-		pen.poly(PackedVector2Array([foot + Vector2(-18, -34) * k, foot + Vector2(18, -34) * k, foot + Vector2(0, -72) * k]), Palette.TREE)
-	else:
-		pen.box(foot.x - 5 * k, foot.y - 26 * k, foot.x + 5 * k, foot.y, Palette.TIMBER)
-		pen.circle(foot + Vector2(-13, -36) * k, 17.0 * k, Palette.TREE_DARK)
-		pen.circle(foot + Vector2(13, -38) * k, 17.0 * k, Palette.TREE_DARK)
-		pen.circle(foot + Vector2(0, -52) * k, 20.0 * k, Palette.TREE)
-
+# Entrances.
 
 ## The dark thicket the night creatures come out of, just outside the map
 ## edge at an entrance.
@@ -530,7 +597,21 @@ static func _char(grid: PackedStringArray, at: Vector2i) -> String:
 
 
 static func _is_road(ch: String) -> bool:
-	return ch == "#" or ch == "G" or ch == "B" or (ch >= "1" and ch <= "4" and ch.length() == 1)
+	return ch.length() == 1 and ROAD_CHARS.contains(ch)
+
+
+## A slide's way out: ^ north, v south, < west, > east.
+static func _slide_dir(ch: String) -> Vector2i:
+	match ch:
+		"^":
+			return Vector2i(0, -1)
+		"v":
+			return Vector2i(0, 1)
+		"<":
+			return Vector2i(-1, 0)
+		">":
+			return Vector2i(1, 0)
+	return Vector2i.ZERO
 
 
 static func _center(at: Vector2i, cell: float) -> Vector2:

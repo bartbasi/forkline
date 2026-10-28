@@ -20,17 +20,120 @@ const HILL_FAR: Color = Color("4a4775")
 const HILL_MID: Color = Color("35506b")
 const HILL_NEAR: Color = Color("253e45")
 
-# The map: meadow, roads, build spots, route lines.
+# The map: meadow, roads, build spots, route lines. This is Lantern Hill's
+# ground. Regions 2 to 4 share its road, border and pebbles.
 const MEADOW: Color = Color("3f644b")
-const MEADOW_LIGHT: Color = Color("52775a")
+const MEADOW_LIGHT: Color = Color("507458")
 const MEADOW_DARK: Color = Color("33543f")
 const ROAD: Color = Color("e2c18e")
-const ROAD_EDGE: Color = Color("8a6548")
+const ROAD_EDGE: Color = Color("856143")
 const ROAD_DOT: Color = Color("cba774")
 const ROUTE: Color = Color("fff4cc")
 const PAD: Color = Color("d0c6b3")
 const PAD_EDGE: Color = Color("8c8274")
 const THICKET: Color = Color("16122a")
+
+# The grounds of regions 2 to 8 (docs/art/EXPANSION_LOOK.md 3). Each keeps
+# about the meadow's luminance, so roads, spots, outlines and route lines keep
+# their contrast. Every ground has GROUND, GROUND_LIGHT and GROUND_DARK under
+# its prefix; regions 5 to 8 also have their own ROAD, ROAD_EDGE and ROAD_DOT.
+# ground_token() gives the name for a region and a role. Scenery colors follow.
+# 2 Millbrook: water meadow, millponds, poplars.
+const MILLBROOK_GROUND: Color = Color("2d6168")
+const MILLBROOK_GROUND_LIGHT: Color = Color("38757d")
+const MILLBROOK_GROUND_DARK: Color = Color("26535a")
+const MILLBROOK_WATER: Color = Color("24506a")
+const MILLBROOK_RIPPLE: Color = Color("a3cad6")
+const MILLBROOK_POPLAR: Color = Color("24483c")
+const MILLBROOK_POPLAR_LIGHT: Color = Color("356550")
+const MILLBROOK_KINGCUP: Color = Color("f2c14e")
+const MILLBROOK_MEADOWSWEET: Color = Color("f3e6d0")
+# 3 Willow Fen: misty sage, boardwalks, willows, peat pools and reeds.
+const FEN_GROUND: Color = Color("505c57")
+const FEN_GROUND_LIGHT: Color = Color("616e68")
+const FEN_GROUND_DARK: Color = Color("444e4a")
+const FEN_SEAM: Color = Color("c4a06c")
+const FEN_PEAT: Color = Color("29332b")
+const FEN_LILY: Color = Color("7f9a55")
+const FEN_LILY_FLOWER: Color = Color("f3d9c4")
+const FEN_REED: Color = Color("c3a565")
+const FEN_REED_HEAD: Color = Color("6e4b33")
+const FEN_WILLOW: Color = Color("93a67c")
+const FEN_WILLOW_DARK: Color = Color("617556")
+const FEN_MARIGOLD: Color = Color("f2b544")
+# 4 Moonspire Keep: old rose stone, broken walls, clipped yews, roses.
+const KEEP_GROUND: Color = Color("634749")
+const KEEP_GROUND_LIGHT: Color = Color("866164")
+const KEEP_GROUND_DARK: Color = Color("553c3e")
+const KEEP_FLAG: Color = Color("765759")
+const KEEP_IVY: Color = Color("557a4a")
+const KEEP_YEW: Color = Color("2b4636")
+const KEEP_YEW_LIGHT: Color = Color("3b5e47")
+const KEEP_ROSE: Color = Color("f0a58f")
+# 5 Hollow Lanes: deep hedge green, sunken lanes between dark banks.
+const LANES_GROUND: Color = Color("41592f")
+const LANES_GROUND_LIGHT: Color = Color("587340")
+const LANES_GROUND_DARK: Color = Color("33482a")
+const LANES_ROAD: Color = Color("e6c793")
+const LANES_ROAD_EDGE: Color = Color("76563a")
+const LANES_ROAD_DOT: Color = Color("cdab78")
+const LANES_BANK: Color = Color("2b3b24")
+const LANES_HEDGE: Color = Color("2d4b2f")
+const LANES_HEDGE_LIGHT: Color = Color("3f6a3c")
+const LANES_BERRY: Color = Color("4a2f5c")
+const LANES_HAW: Color = Color("c24a4a")
+const LANES_BLOSSOM: Color = Color("f3e6d0")
+const LANES_PRIMROSE: Color = Color("f2d36b")
+# 6 Russet Orchards: amber brown stubble, apple trees, hay bales.
+const ORCHARD_GROUND: Color = Color("655531")
+const ORCHARD_GROUND_LIGHT: Color = Color("7d6c3b")
+const ORCHARD_GROUND_DARK: Color = Color("51442a")
+const ORCHARD_ROAD: Color = Color("e8c99a")
+const ORCHARD_ROAD_EDGE: Color = Color("85603e")
+const ORCHARD_ROAD_DOT: Color = Color("cfa878")
+const ORCHARD_LEAF_RUSSET: Color = Color("b4552f")
+const ORCHARD_LEAF_AMBER: Color = Color("d99a3c")
+const ORCHARD_APPLE: Color = Color("c7413a")
+const ORCHARD_CANOPY: Color = Color("8b7d36")
+const ORCHARD_CANOPY_DARK: Color = Color("6a5f2b")
+const ORCHARD_HAY: Color = Color("dcb768")
+const ORCHARD_HAY_DARK: Color = Color("a9843f")
+# 7 Frostpine Ridge: snow at dusk, packed snow roads, snowy pines and rocks.
+const FROST_GROUND: Color = Color("4d5f86")
+const FROST_GROUND_LIGHT: Color = Color("667aa3")
+const FROST_GROUND_DARK: Color = Color("3d4c70")
+const FROST_ROAD: Color = Color("efdfc4")
+const FROST_ROAD_EDGE: Color = Color("8a7764")
+const FROST_ROAD_DOT: Color = Color("d8c5a6")
+const FROST_PINE: Color = Color("23423f")
+const FROST_PINE_LIGHT: Color = Color("2f5a52")
+const FROST_SNOW_CAP: Color = Color("eef3fb")
+const FROST_ROCK: Color = Color("7d8297")
+# 8 Starglen: violet moss, standing stones, warm toadstools, cream motes.
+const GLEN_GROUND: Color = Color("55456a")
+const GLEN_GROUND_LIGHT: Color = Color("716290")
+const GLEN_GROUND_DARK: Color = Color("3f3252")
+const GLEN_ROAD: Color = Color("e2cfb2")
+const GLEN_ROAD_EDGE: Color = Color("7f6a62")
+const GLEN_ROAD_DOT: Color = Color("c8b496")
+const GLEN_STONE: Color = Color("a19eb3")
+const GLEN_STONE_MOSS: Color = Color("5d7a6a")
+const GLEN_CAP: Color = Color("f2a77f")
+const GLEN_CAP_GLOW: Color = Color("ffd3a8")
+const GLEN_STEM: Color = Color("efe3cf")
+const GLEN_FERN: Color = Color("2f4a4f")
+const GLEN_MOTE: Color = Color("fff1c9")
+
+# Map features (EXPANSION_LOOK.md 4), the same on every ground.
+const MOUND: Color = Color("6c9150")
+const MOUND_LIGHT: Color = Color("86a964")
+const ICE: Color = Color("d3eaf6")
+const ICE_EDGE: Color = Color("5e7fae")
+const ICE_DEEP: Color = Color("4f6fa0")
+## A little darker than the concept's #9a6a45, so a stump reaches 3:1 on
+## every region's road, not only Starglen's.
+const BARK: Color = Color("8c603e")
+const BARK_TOP: Color = Color("d9bf98")
 
 # Buildings.
 const LANTERN: Color = Color("ffc65c")
@@ -134,7 +237,7 @@ const HP_FILL: Color = Color("a6e39a")
 ## Text pairs: [foreground token, background token, where it shows]. Each must
 ## reach 4.5:1. A token name is a constant above.
 static func text_pairs() -> Array[PackedStringArray]:
-	return [
+	var out: Array[PackedStringArray] = [
 		PackedStringArray(["TEXT_LIGHT", "PANEL", "HUD numbers, hints, panels, toasts"]),
 		PackedStringArray(["TEXT_SOFT", "PANEL", "secondary text on panels"]),
 		PackedStringArray(["TEXT_LIGHT", "PANEL_RAISED", "buttons"]),
@@ -152,12 +255,16 @@ static func text_pairs() -> Array[PackedStringArray]:
 		PackedStringArray(["HONEY", "PANEL", "highlighted numbers on panels"]),
 		PackedStringArray(["CARD", "INK_LINE", "the wordmark letters in their ink outline"]),
 	]
+	for ground: StringName in GROUND_PREFIX:
+		# No text sits on the map ground today. This holds if it ever does.
+		out.append(PackedStringArray(["TEXT_LIGHT", ground_token(ground, "GROUND"), "text on %s's ground" % ground]))
+	return out
 
 
 ## Graphic pairs: icons, outlines, shapes against what they sit on. Each must
 ## reach 3:1.
 static func graphic_pairs() -> Array[PackedStringArray]:
-	return [
+	var out: Array[PackedStringArray] = [
 		PackedStringArray(["ROAD", "MEADOW", "road against grass"]),
 		PackedStringArray(["ROAD_EDGE", "ROAD", "the road's border"]),
 		PackedStringArray(["INK_LINE", "ROAD", "creature and gate outlines on the road"]),
@@ -210,6 +317,87 @@ static func graphic_pairs() -> Array[PackedStringArray]:
 		PackedStringArray(["INK_LINE", "BOSS_HAY", "Old Hayrick"]),
 		PackedStringArray(["INK_LINE", "BOSS_SNORE", "Snowsnore"]),
 		PackedStringArray(["INK_LINE", "BOSS_TOAD", "Glimmertoad"]),
+	]
+	var listed: Dictionary[String, bool] = {}
+	for pair: PackedStringArray in out:
+		listed[pair[0] + "/" + pair[1]] = true
+	for pair: PackedStringArray in ground_pairs() + feature_pairs():
+		if not listed.has(pair[0] + "/" + pair[1]):
+			listed[pair[0] + "/" + pair[1]] = true
+			out.append(pair)
+	return out
+
+
+## The token prefix of each region's ground, in campaign order (the same
+## order as MapArt.GROUNDS). Lantern Hill's tokens have no prefix: its ground
+## is MEADOW.
+const GROUND_PREFIX: Dictionary[StringName, String] = {
+	&"lantern_hill": "", &"millbrook": "MILLBROOK_", &"willow_fen": "FEN_", &"moonspire_keep": "KEEP_",
+	&"hollow_lanes": "LANES_", &"russet_orchards": "ORCHARD_", &"frostpine_ridge": "FROST_", &"starglen": "GLEN_",
+}
+## The grounds that use Lantern Hill's ROAD, ROAD_EDGE and ROAD_DOT.
+const SHARED_ROAD: Array[StringName] = [&"lantern_hill", &"millbrook", &"willow_fen", &"moonspire_keep"]
+## The grounds a map feature can stand on: a run map with a feature takes
+## one of these (MapArt.ground_of), and regions 1 to 4 have no features.
+const FEATURE_GROUNDS: Array[StringName] = [&"hollow_lanes", &"russet_orchards", &"frostpine_ridge", &"starglen"]
+
+
+## The token name of a ground's color. `role` is GROUND, GROUND_LIGHT,
+## GROUND_DARK, ROAD, ROAD_EDGE or ROAD_DOT. An unknown ground is Lantern Hill.
+static func ground_token(ground: StringName, role: String) -> String:
+	var g: StringName = ground if GROUND_PREFIX.has(ground) else &"lantern_hill"
+	if role.begins_with("ROAD") and SHARED_ROAD.has(g):
+		return role
+	if g == &"lantern_hill":
+		return role.replace("GROUND", "MEADOW")
+	return GROUND_PREFIX[g] + role
+
+
+## A ground's color by role, as ground_token().
+static func ground_color(ground: StringName, role: String) -> Color:
+	return token(ground_token(ground, role))
+
+
+## Graphic pairs on every ground: roads, spots, outlines, walls, route lines
+## and the features that sit on any ground. Bridge decks only on the grounds
+## where bridges can stand.
+static func ground_pairs() -> Array[PackedStringArray]:
+	var out: Array[PackedStringArray] = []
+	for g: StringName in GROUND_PREFIX:
+		var ground: String = ground_token(g, "GROUND")
+		var light: String = ground_token(g, "GROUND_LIGHT")
+		var road: String = ground_token(g, "ROAD")
+		out.append_array([
+			PackedStringArray([road, ground, "%s: road against the ground" % g]),
+			PackedStringArray([road, light, "%s: road against a light patch" % g]),
+			PackedStringArray([ground_token(g, "ROAD_EDGE"), road, "%s: the road's border" % g]),
+			PackedStringArray(["INK_LINE", road, "%s: outlines on the road" % g]),
+			PackedStringArray(["INK_LINE", light, "%s: outlines on the lightest ground" % g]),
+			PackedStringArray(["PAD", ground, "%s: an empty build spot" % g]),
+			PackedStringArray(["PLASTER", ground, "%s: cottage walls" % g]),
+			PackedStringArray(["ROUTE", ground, "%s: a flyer's dotted line" % g]),
+			PackedStringArray(["TIMBER", road, "%s: an open gate over the road" % g]),
+			PackedStringArray(["ICE", ground, "%s: an ice slide on the ground" % g]),
+			PackedStringArray(["ICE", light, "%s: an ice slide on a light patch" % g]),
+			PackedStringArray(["BARK", road, "%s: a stump on the road" % g]),
+		])
+		if FEATURE_GROUNDS.has(g):
+			out.append(PackedStringArray(["WOOD", road, "%s: a bridge deck over the road below" % g]))
+	return out
+
+
+## Graphic pairs inside the map features, the same on every ground.
+static func feature_pairs() -> Array[PackedStringArray]:
+	return [
+		PackedStringArray(["INK_LINE", "MOUND", "a tunnel mound's outline"]),
+		PackedStringArray(["THICKET", "STONE", "a dark tunnel mouth in its stone arch"]),
+		PackedStringArray(["INK_LINE", "WOOD", "a bridge deck's outline"]),
+		PackedStringArray(["ICE_EDGE", "ICE", "an ice slide's border"]),
+		PackedStringArray(["ICE_DEEP", "ICE", "the carved chevrons on a slide"]),
+		PackedStringArray(["INK_LINE", "ICE", "outlines on a slide"]),
+		PackedStringArray(["INK_LINE", "BARK", "a stump's outline"]),
+		PackedStringArray(["MOON", "BARK", "the crescent and star on a stump"]),
+		PackedStringArray(["THICKET", "BARK_TOP", "a stump's dark hollow in its pale top"]),
 	]
 
 

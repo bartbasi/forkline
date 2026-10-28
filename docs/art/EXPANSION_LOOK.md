@@ -1,6 +1,6 @@
 # Forkline expansion: the look of regions 5 to 8
 
-Art director, 2026-10-27. Written next to docs/design/EXPANSION.md. Bart approved it as shown on 2026-10-27, with the Snoozer renamed Yawner. The names are now in NAMES.md. Bart also chose that regions 2 to 4 get their own grounds and scenery while play stays the same. That part ("Regions 2 to 4" in section 3) is new, from the same day, and waits for his review. The cast (section 2) and the status marks (section 5) are in src/theme/ since build step A2 (`Silhouettes`, `Palette`). The grounds and map features come next, in step A3.
+Art director, 2026-10-27. Written next to docs/design/EXPANSION.md. Bart approved it as shown on 2026-10-27, with the Snoozer renamed Yawner. The names are now in NAMES.md. Bart also chose that regions 2 to 4 get their own grounds and scenery while play stays the same. That part ("Regions 2 to 4" in section 3) is new, from the same day, and waits for his review. The cast (section 2) and the status marks (section 5) are in src/theme/ since build step A2 (`Silhouettes`, `Palette`). Since build step A3 the 8 grounds, their scenery and the four map features are there too (`MapArt`, with the internal `SceneryArt` and `FeatureArt`, and `Palette`).
 
 The concept art is drawn in code by throwaway scripts that use the same `InkPen` style as src/theme/. The scripts are not committed. The pictures are in `%TEMP%\forkline_expansion\`:
 
@@ -136,7 +136,7 @@ WCAG 2, from the script. Graphic pairs need 3:1, text 4.5:1. Lantern Hill as it 
 | Pair | Lantern Hill | Hollow Lanes | Russet Orchards | Frostpine Ridge | Starglen |
 |---|---|---|---|---|---|
 | ROAD on GROUND | 3.91 | 4.81 | 4.57 | 4.86 | 5.64 |
-| ROAD on GROUND_LIGHT | 2.96 * | 3.29 | 3.25 | 3.28 | 3.58 |
+| ROAD on GROUND_LIGHT | 3.08 * | 3.29 | 3.25 | 3.28 | 3.58 |
 | ROAD_EDGE on ROAD | 3.04 | 4.10 | 3.54 | 3.27 | 3.33 |
 | INK_LINE on ROAD (outlines on the road) | 9.79 | 10.35 | 10.59 | 12.80 | 11.02 |
 | INK_LINE on GROUND_LIGHT (outlines on the lightest ground) | 3.31 | 3.15 | 3.26 | 3.90 | 3.08 |
@@ -146,7 +146,7 @@ WCAG 2, from the script. Graphic pairs need 3:1, text 4.5:1. Lantern Hill as it 
 | TIMBER on ROAD (open gate) | 4.73 | 5.00 | 5.11 | 6.18 | 5.32 |
 | TEXT_LIGHT on GROUND (text, if a region color ever sits behind text) | 5.67 | 6.60 | 6.14 | 5.39 | 7.27 |
 
-\* Not one of today's tested pairs. It is the one place Lantern Hill is under 3:1, where the road crosses a light grass patch. The border and cobbles carry the edge there. Every new region passes it.
+\* Since step A3. It was 2.96, the one place Lantern Hill was under 3:1, where the road crosses a light grass patch. Step A3 made `MEADOW_LIGHT` a little darker, `#507458` (3.08:1), and the border `#856143`, the same as regions 2 to 4 (ROAD_EDGE on ROAD 3.23:1). Lantern Hill's other ratios in this table are from before; INK_LINE on GROUND_LIGHT is now 3.18. Both changes are hard to see: a color difference of 1.3 and 1.9.
 
 Feature pairs:
 
@@ -160,8 +160,11 @@ Feature pairs:
 | ICE_EDGE on ICE (slide border) | 3.29 |
 | ICE_DEEP on ICE (carved chevrons) | 4.10 |
 | INK_LINE on ICE (outlines on a slide) | 13.48 |
-| BARK on ROAD (stump on the path) | 3.05 |
-| MOON on BARK (crescent and star on a stump) | 4.13 |
+| BARK on ROAD (stump on the path), on the road of every region | 3.18 or more |
+| INK_LINE on BARK (stump outline) | 3.08 |
+| MOON on BARK (crescent and star on a stump) | 4.84 |
+
+Step A3 made `BARK` a little darker than the concept, `#8c603e` instead of `#9a6a45`. The concept passed only on Starglen's road (3.05), but a run map can put stumps on the grounds of regions 5 to 7 too, where it was 2.87 to 2.93. The deck pair WOOD on ROAD holds on the roads of regions 5 to 8 (3.15 to 3.89), the only grounds a bridge can stand on: regions 1 to 4 have no features, and a run map with a feature takes the ground of one of regions 5 to 8. tests/theme/test_grounds.gd checks every pair in this section and the next on each ground where it can show, in normal vision and as a deuteranope sees it.
 
 Flyers fly over the ground, so the ground decides how they stand out. Today's pairs are not 3:1 either: flyers read by their shadow, eyes and outline. For comparison, CREATURE_FLY on the ground is 2.59 on Lantern Hill, and 3.01, 2.80, 2.46 and 3.32 on regions 5 to 8. Frostpine is the one ground a little below today, by 0.13.
 
@@ -226,7 +229,7 @@ WCAG 2, from the script. Every graphic pair passes 3:1 and the text pair 4.5:1, 
 | Pair | Lantern Hill | Millbrook | Willow Fen | Moonspire Keep |
 |---|---|---|---|---|
 | ROAD on GROUND | 3.91 | 4.06 | 4.07 | 4.85 |
-| ROAD on GROUND_LIGHT | 2.96 * | 3.06 | 3.11 | 3.14 |
+| ROAD on GROUND_LIGHT | 3.08 * | 3.06 | 3.11 | 3.14 |
 | ROAD_EDGE on ROAD | 3.04 | 3.23 | 3.23 | 3.23 |
 | INK_LINE on ROAD | 9.79 | 9.79 | 9.79 | 9.79 |
 | INK_LINE on GROUND_LIGHT | 3.31 | 3.20 | 3.15 | 3.12 |
@@ -236,7 +239,7 @@ WCAG 2, from the script. Every graphic pair passes 3:1 and the text pair 4.5:1, 
 | TIMBER on ROAD | 4.73 | 4.73 | 4.73 | 4.73 |
 | TEXT_LIGHT on GROUND (text) | 5.67 | 5.88 | 5.91 | 7.03 |
 
-\* As above, the one place Lantern Hill is under 3:1. Its road border is also 2.99:1 for a deuteranope. That is why regions 2 to 4 use a slightly darker border, `#856143` (3.23:1, and 3.19:1 for a deuteranope). Regions 5 to 8 pass both in both views.
+\* As above: since step A3 Lantern Hill passes too. Its old road border was 2.99:1 for a deuteranope. That is why regions 2 to 4, and now Lantern Hill, use a slightly darker border, `#856143` (3.23:1, and 3.19:1 for a deuteranope). Regions 5 to 8 pass both in both views.
 
 Flyers over the ground (for comparison, as above): CREATURE_FLY is 2.69 on Millbrook, 2.70 on Willow Fen and 3.21 on Moonspire Keep, all above Lantern Hill's 2.59. Over Millbrook's ponds it is 3.34 and over the fen's peat pools 5.07, so the water never hides a flyer.
 
@@ -244,9 +247,9 @@ Flyers over the ground (for comparison, as above): CREATURE_FLY is 2.69 on Millb
 
 In the deuteranope picture, roads, borders, outlines, build spots, gates, route lines and every creature and tower still read on all 8 grounds. The grounds themselves do not all stay apart: Lantern Hill, Willow Fen and Moonspire Keep all look olive grey (4.3 to 6.2 apart), and Millbrook's teal looks slate blue, close to Starglen (6.1). There the regions differ by scenery: ponds and poplars, willows and reeds, walls and yews. That is fine because the region is never a game signal.
 
-### Proposed tokens
+### Tokens
 
-Per region: `GROUND`, `GROUND_LIGHT`, `GROUND_DARK`, `ROAD`, `ROAD_EDGE`, `ROAD_DOT`, plus the scenery colors above. Regions 2 to 4 share `ROAD` and `ROAD_DOT` with Lantern Hill and use the border `#856143`. Features: `MOUND #6c9150`, `MOUND_LIGHT #86a964`; `ICE #d3eaf6`, `ICE_EDGE #5e7fae`, `ICE_DEEP #4f6fa0`; `BARK #9a6a45`, `BARK_TOP #d9bf98`. Ours: `THATCH #d2a35a`, `SNOW_WARM #f6efe2`, `HOLLY #4f7d4c`, `CROW #4f3f46`. Theirs: one or two cool fills per new creature, all periwinkle, mint, lilac, slate, teal or blue-white. Since step A2 the cast's tokens are in `Palette`: ours as above plus `SNOW_WARM_SHADE`, theirs as `CREATURE_*` and `BOSS_*` (for example `CREATURE_MOSS`, `BOSS_TOAD`), and `DIRT #856143` for the dug mound. Each body fill is checked against its ink outline at 3:1, except `CROW`: the Crow Keeper's two crows are dark on purpose and read by shape. The region and feature tokens come in step A3.
+Per region: `GROUND`, `GROUND_LIGHT`, `GROUND_DARK`, `ROAD`, `ROAD_EDGE`, `ROAD_DOT`, plus the scenery colors above. Regions 2 to 4 share `ROAD` and `ROAD_DOT` with Lantern Hill and use the border `#856143`. Features: `MOUND #6c9150`, `MOUND_LIGHT #86a964`; `ICE #d3eaf6`, `ICE_EDGE #5e7fae`, `ICE_DEEP #4f6fa0`; `BARK #8c603e` (see the feature pairs above), `BARK_TOP #d9bf98`. Ours: `THATCH #d2a35a`, `SNOW_WARM #f6efe2`, `HOLLY #4f7d4c`, `CROW #4f3f46`. Theirs: one or two cool fills per new creature, all periwinkle, mint, lilac, slate, teal or blue-white. Since step A2 the cast's tokens are in `Palette`: ours as above plus `SNOW_WARM_SHADE`, theirs as `CREATURE_*` and `BOSS_*` (for example `CREATURE_MOSS`, `BOSS_TOAD`), and `DIRT #856143` for the dug mound. Each body fill is checked against its ink outline at 3:1, except `CROW`: the Crow Keeper's two crows are dark on purpose and read by shape. Since step A3 the region and feature tokens are in `Palette` too. Lantern Hill keeps its names (`MEADOW`, `MEADOW_LIGHT`, `MEADOW_DARK`, `ROAD`, `ROAD_EDGE`, `ROAD_DOT`). The other grounds take a prefix: `MILLBROOK_`, `FEN_`, `KEEP_`, `LANES_`, `ORCHARD_`, `FROST_`, `GLEN_` (for example `FEN_GROUND`, `FROST_ROAD`, `GLEN_STONE`). `Palette.ground_token(region, role)` gives the name for a role, so regions 2 to 4 get Lantern Hill's road. The features' tokens have no prefix: `MOUND`, `ICE`, `BARK` and so on.
 
 ## 4. Map features
 
