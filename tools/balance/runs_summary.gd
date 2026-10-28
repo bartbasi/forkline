@@ -6,6 +6,8 @@ extends SceneTree
 ##
 ##   godot --headless --path . --script res://tools/balance/runs_summary.gd -- dir=C:/path/docs/balance/raw/2026-10-24-b2
 ##   ... part=det|rates|search|length|waves|boss|maps|towers|cards|daily|risk|whatif   (default: all)
+##   ... tier=N fixture=1   (B6) the runs in the folder were played at content tier N (runs.gd tier=N), on the fixture data when fixture=1.
+##       The bosses, packs and maps counted are those of the tier and below, so every bar of RULES 14.8 and 15 reads at that tier.
 ##
 ## B4 parts: bars (every bar of RULES 14.8 and 15 with pass or fail), boss (per band 6 pack), fair (segments, stacks, packs),
 ## forced (the forced stack and pack files), cardbar (the card experiment against its bar), riskfair (the risk replay),
@@ -14,12 +16,15 @@ extends SceneTree
 ##
 ## It prints markdown to the console. It reads only files runs.gd wrote.
 
+const Fixtures: GDScript = preload("res://tools/balance/fixtures.gd")
 const BUILD_SECONDS: int = 15
 const CONFIGS: Array[String] = ["base_r0", "base_r1", "all_r0", "all_r1"]
 const CONFIG_NAMES: Dictionary = {"base_r0": "Normal, no unlocks", "base_r1": "Relaxed, no unlocks", "all_r0": "Normal, all cards", "all_r1": "Relaxed, all cards"}
 
 var _dir: String = ""
 var _game: GameData = null
+var _tier: int = 0                                # tier=N (B6): the content tier of the folder's runs; its packs, bosses and segments only
+var _fixture: bool = false                        # fixture=1 (B6): the folder was played on the test catalog and fixture tiers
 var _rates: Dictionary = {}                       # config to its rows
 var _cards: Array = []
 
@@ -31,7 +36,13 @@ func _initialize() -> void:
 			_dir = argument.trim_prefix("dir=")
 		if argument.begins_with("part="):
 			part = argument.trim_prefix("part=")
-	_game = GameData.load_from("res://data")
+		if argument.begins_with("tier="):
+			_tier = int(argument.trim_prefix("tier="))
+		if argument == "fixture=1":
+			_fixture = true
+	_game = Fixtures.game() if _fixture else GameData.load_from("res://data")
+	if _tier > 0 or _fixture:
+		print("Tier %d%s.\n" % [_tier, " (fixture data)" if _fixture else ""])
 	for config: String in CONFIGS:
 		_rates[config] = _load_rows("rates_%s_" % config)
 	if _rates["base_r0"].size() > 0:
@@ -154,7 +165,25 @@ func _where(rows: Array, test: Callable) -> Array:
 
 
 func _plan(run_seed: int) -> Dictionary:
-	return MapAssembler.plan(run_seed, _game.run)
+	return MapAssembler.plan(run_seed, _game.run, _tier)
+
+
+## The bosses of the tier and below, in enemies.json order (the four of regions 1 to 4 at tier 0).
+func _bosses() -> Array[String]:
+	var out: Array[String] = []
+	for id: StringName in _game.run.boss_ids(_tier):
+		out.append(String(id))
+	return out
+
+
+## The flags that put a job line back on this tier and data.
+func _job_flags() -> String:
+	return (" tier=%d" % _tier if _tier > 0 else "") + (" fixture=1" if _fixture else "")
+
+
+## A job line with those flags put in before its `out=`.
+func _flag_line(line: String) -> String:
+	return line.replace(" out=", _job_flags() + " out=")
 
 
 # Determinism.
@@ -441,7 +470,7 @@ func _boss_tables() -> void:
 By boss (Normal, no unlocks, the named strategies):
 ")
 	_head(["Boss", "Runs that started wave 18", "Won", "Lives when it starts (median)", "Won runs: lives lost in it (median)", "Won runs: boss reached the base", "Lost runs: boss health left at its lowest (median, of full)", "Lost runs: boss reached the base"])
-	for boss: String in ["grumblesack", "ironshell", "moon_moth", "old_tusk"]:
+	for boss: String in _bosses():
 		var rows2: Array = _where(_rates["base_r0"], func(r: Dictionary) -> bool: return r["boss"] == boss and int(r["reached"]) >= 18)
 		if rows2.is_empty():
 			continue
@@ -471,7 +500,7 @@ func _map_tables() -> void:
 	print("\n### Win rate by boss, map segment and stack (Normal, no unlocks, the named strategies)\n")
 	var rows: Array = _rates["base_r0"]
 	_head(["Boss", "Seeds", "Plays", "Won", "Mean waves cleared", "Lost by wave 6", "Lost in wave 18"])
-	for boss: String in ["grumblesack", "ironshell", "moon_moth", "old_tusk"]:
+	for boss: String in _bosses():
 		var list: Array = _where(rows, func(r: Dictionary) -> bool: return r["boss"] == boss)
 		_row(_map_row(boss, list))
 	for kind: Array in [["Top segment", 0], ["Middle segment", 1], ["Bottom segment", 2]]:
@@ -502,7 +531,7 @@ func _map_tables() -> void:
 		print("\nBand %d (waves %d to %d):\n" % [band, band * 3 - 2, band * 3])
 		_head(["Pack", "Runs that reached it", "Lost inside it", "Mean lives lost in its waves (no early calls)"])
 		var ids: Array = []
-		for p: Dictionary in _game.run.packs_of(band):
+		for p: Dictionary in _game.run.packs_of(band, &"", _tier):
 			ids.append(String(p["id"]))
 		for id: String in ids:
 			var reached: int = 0
@@ -742,7 +771,7 @@ func _daily_tables() -> void:
 	_row(["**All 16**", _rate(_won(every), every.size())])
 	print("\nBy boss:\n")
 	_head(["Boss", "Days", "Won by a named strategy", "Won by any tried", "Share of the 16 plays that won"])
-	for boss: String in ["grumblesack", "ironshell", "moon_moth", "old_tusk"]:
+	for boss: String in _bosses():
 		var list: Array = _where(days, func(d: Dictionary) -> bool: return d["boss"] == boss)
 		var any_named: int = 0
 		var any_all: int = 0
@@ -1004,7 +1033,7 @@ func _rows_of_seeds(rows: Array, first: int, last: int) -> Array:
 ## The boss pack table: pack id to {"plays", "started", "won", "boss"}.
 func _boss_pack_stats(rows: Array) -> Dictionary:
 	var out: Dictionary = {}
-	for p: Dictionary in _game.run.packs_of(6):
+	for p: Dictionary in _game.run.packs_of(6, &"", _tier):
 		out[String(p["id"])] = {"plays": 0, "started": 0, "won": 0, "boss": String(p["boss"])}
 	for r: Dictionary in rows:
 		var id: String = _boss_pack_of(r)
@@ -1035,7 +1064,7 @@ func _boss_b4() -> void:
 		_row([id, item["boss"], seeds.size(), item["plays"], item["started"], _rate(int(item["won"]), int(item["started"])), "met" if share >= 50.0 and share <= 75.0 else "NOT MET"])
 	print("\nBy boss:\n")
 	_head(["Boss", "Plays", "Started wave 18", "Won of those"])
-	for boss: String in ["grumblesack", "ironshell", "moon_moth", "old_tusk"]:
+	for boss: String in _bosses():
 		var plays: int = 0
 		var started: int = 0
 		var won: int = 0
@@ -1101,7 +1130,7 @@ func _fair_b4() -> void:
 	print("\n### Fair packs: bands 1 to 5, the share of runs that reach a pack's first wave and are lost inside it (bar: at most 10%)\n")
 	_head(["Pack", "Seeds", "Runs that reached it", "Lost inside it", "Mean lives lost inside (no early calls)", "Bar 10%"])
 	for band: int in range(1, 6):
-		for pack: Dictionary in _game.run.packs_of(band):
+		for pack: Dictionary in _game.run.packs_of(band, &"", _tier):
 			var info: Dictionary = _pack_stats(rows, band, String(pack["id"]))
 			var share2: float = 100.0 * int(info["lost"]) / maxf(float(info["reached"]), 1.0)
 			_row([pack["id"], info["seeds"], info["reached"], _pct(int(info["lost"]), int(info["reached"])), ("%.2f" % _mean(info["lives"])) if not (info["lives"] as Array).is_empty() else "-", "met" if share2 <= 10.0 else "NOT MET"])
@@ -1440,7 +1469,7 @@ func _daily_b4() -> void:
 	_row(["**All 16**", _rate(_won(every), every.size())])
 	print("\nBy boss:\n")
 	_head(["Boss", "Days", "Won by a named strategy", "Won by any tried", "Share of the 16 plays that won"])
-	for boss: String in ["grumblesack", "ironshell", "moon_moth", "old_tusk"]:
+	for boss: String in _bosses():
 		var list: Array = _where(days, func(d: Dictionary) -> bool: return d["boss"] == boss)
 		var any_named: int = 0
 		var any_all: int = 0
@@ -1532,7 +1561,7 @@ func _flags_b4() -> void:
 		if not bool(won_seed.get(i, false)):
 			search.append(str(i))
 	if not search.is_empty():
-		lines.append("mode=search list=%s n=100 pool=base relaxed=0 out=%s/search_base_r0_list.json" % [",".join(PackedStringArray(search)), out_dir])
+		lines.append(_flag_line("mode=search list=%s n=100 pool=base relaxed=0 out=%s/search_base_r0_list.json" % [",".join(PackedStringArray(search)), out_dir]))
 	# Stacks of 4 or more seeds above 10% lost by wave 6, and the two mid_merge stacks of 3.4a.
 	var stacks: Array = []
 	for r: Dictionary in rows:
@@ -1546,20 +1575,20 @@ func _flags_b4() -> void:
 			forced.append(stack)
 	for stack: String in forced:
 		for first: int in [1, 51, 101, 151]:
-			lines.append("mode=rates first=%d count=50 pool=base relaxed=0 stack=%s stop=6 out=%s/force_stack_%s_%d.json" % [first, stack.replace("|", ","), out_dir, stack.replace("|", "_"), first])
+			lines.append(_flag_line("mode=rates first=%d count=50 pool=base relaxed=0 stack=%s stop=6 out=%s/force_stack_%s_%d.json" % [first, stack.replace("|", ","), out_dir, stack.replace("|", "_"), first]))
 	# Packs of bands 1 to 5 above 10% lost inside, and band 6 packs outside 50% to 75%.
 	for band: int in range(1, 6):
-		for pack: Dictionary in _game.run.packs_of(band):
+		for pack: Dictionary in _game.run.packs_of(band, &"", _tier):
 			var info: Dictionary = _pack_stats(rows, band, String(pack["id"]))
 			if 100.0 * int(info["lost"]) / maxf(float(info["reached"]), 1.0) > 10.0:
 				for first: int in [1, 51, 101, 151]:
-					lines.append("mode=rates first=%d count=50 pool=base relaxed=0 pack=%s stop=%d out=%s/force_pack_%s_%d.json" % [first, pack["id"], band * 3, out_dir, pack["id"], first])
+					lines.append(_flag_line("mode=rates first=%d count=50 pool=base relaxed=0 pack=%s stop=%d out=%s/force_pack_%s_%d.json" % [first, pack["id"], band * 3, out_dir, pack["id"], first]))
 	var boss: Dictionary = _boss_pack_stats(rows)
 	for id: String in boss.keys():
 		var share: float = 100.0 * int(boss[id]["won"]) / maxf(float(boss[id]["started"]), 1.0)
 		if share < 50.0 or share > 75.0:
 			for first: int in [1, 51, 101, 151]:
-				lines.append("mode=rates first=%d count=50 pool=base relaxed=0 pack=%s out=%s/force_pack_%s_%d.json" % [first, id, out_dir, id, first])
+				lines.append(_flag_line("mode=rates first=%d count=50 pool=base relaxed=0 pack=%s out=%s/force_pack_%s_%d.json" % [first, id, out_dir, id, first]))
 	for line: String in lines:
 		print(line)
 
@@ -1697,7 +1726,7 @@ func _bars() -> void:
 	var pack_worst: String = ""
 	var pack_worst_v: float = -1.0
 	for band: int in range(1, 6):
-		for pack: Dictionary in _game.run.packs_of(band):
+		for pack: Dictionary in _game.run.packs_of(band, &"", _tier):
 			var info: Dictionary = _pack_stats(base, band, String(pack["id"]))
 			var share3: float = 100.0 * int(info["lost"]) / maxf(float(info["reached"]), 1.0)
 			if share3 > pack_worst_v:
@@ -1793,12 +1822,12 @@ func _bars() -> void:
 ## Phase C job lines: every stack that fits (top, a middle under it, a bottom under that), forced onto seeds 1 to 200, stopped at wave 6.
 func _allstacks_b4() -> void:
 	var data: RunData = _game.run
-	for top: Dictionary in data.segments_of(&"top"):
-		for middle: Dictionary in data.segments_under(top["id"]):
-			for bottom: Dictionary in data.segments_under(middle["id"]):
+	for top: Dictionary in data.segments_of(&"top", _tier):
+		for middle: Dictionary in data.segments_under(top["id"], _tier):
+			for bottom: Dictionary in data.segments_under(middle["id"], _tier):
 				var name: String = "%s_%s_%s" % [top["id"], middle["id"], bottom["id"]]
 				for first: int in [1, 51, 101, 151]:
-					print("mode=rates first=%d count=50 pool=base relaxed=0 stack=%s,%s,%s stop=6 out=OUTDIR/force_stack_%s_%d.json" % [first, top["id"], middle["id"], bottom["id"], name, first])
+					print(_flag_line("mode=rates first=%d count=50 pool=base relaxed=0 stack=%s,%s,%s stop=6 out=OUTDIR/force_stack_%s_%d.json" % [first, top["id"], middle["id"], bottom["id"], name, first]))
 
 
 ## The standard error of a segment's win rate (a fraction), counting each seed as one sample (its plays on that map are 16 tries

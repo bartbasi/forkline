@@ -10,12 +10,18 @@
 #    And for a Twist whose 1500 build search won nothing, two searches of 6000 builds (`..._search_twist_deep_a.json` and `_b.json`).
 # 3. The timing runs (benchmark.gd), one at a time so the other jobs do not slow them down. Run this part when nothing
 #    else of yours is running.
-# Environment: EVALS_SOLO (default 6000), SEED_SHIFT (as in run_pass.sh), SKIP_BENCH=1 (do 1 and 2 only).
+# Environment: EVALS_SOLO (default 6000), SEED_SHIFT (as in run_pass.sh), SKIP_BENCH=1 (do 1 and 2 only), FIXTURE=1 (as in run_pass.sh:
+# the fixture levels on the test catalog).
 
 DATE="${1:-2026-10-26}"
 JOBS="${2:-3}"
 shift $(( $# < 2 ? $# : 2 ))
 LEVELS="$*"
+FX=""
+if [ "$FIXTURE" = "1" ]; then FX=" fixture=1"; fi
+if [ -z "$LEVELS" ] && [ "$FIXTURE" = "1" ]; then
+  LEVELS="r5_fx1 r6_fx1 r7_fx1 r8_fx1 r8_fx2"
+fi
 if [ -z "$LEVELS" ]; then
   LEVELS=$(grep -o '"r[0-9]*_l[0-9]*"' data/levels/campaign.json | tr -d '"')
 fi
@@ -37,18 +43,18 @@ for FILE in "$OUT"/*_solo_*_a.json; do
     LEVEL=$(basename "$DRY_FILE" | sed 's/_solo_.*//')
     TOWER=$(basename "$DRY_FILE" | sed 's/.*_solo_\(.*\)_[ab].json/\1/')
     SEED=$(grep -o '"seed": [0-9]*' "$DRY_FILE" | head -1 | grep -o '[0-9]*')
-    echo "mode=search level=$LEVEL seed=$SEED evals=$EVALS_SOLO only=solo:$TOWER out=${DRY_FILE%.json}_full.json" >> "$LIST"
+    echo "mode=search level=$LEVEL seed=$SEED evals=$EVALS_SOLO only=solo:$TOWER$FX out=${DRY_FILE%.json}_full.json" >> "$LIST"
   fi
 done
 for LEVEL in $LEVELS; do
-  REGION=$(echo "$LEVEL" | sed 's/^r\([0-9]*\)_l.*/\1/')
-  NUM=$(echo "$LEVEL" | sed 's/.*_l//')
+  REGION=$(echo "$LEVEL" | sed 's/^r\([0-9]*\)_.*/\1/')
+  NUM=$(echo "$LEVEL" | sed 's/.*_l//; s/.*_fx//')
   S=$((SHIFT + (REGION * 10 + NUM) * 100))
-  echo "mode=det level=$LEVEL seed=$((750000 + S)) out=$OUT/${LEVEL}_det_again.json" >> "$LIST"
+  echo "mode=det level=$LEVEL seed=$((750000 + S))$FX out=$OUT/${LEVEL}_det_again.json" >> "$LIST"
   # A Twist whose 1500 build search won nothing: two searches of 6000 builds with different seeds (RULES 12.6).
   if [ -f "$OUT/${LEVEL}_search_twist.json" ] && tr -d '[:space:]' < "$OUT/${LEVEL}_search_twist.json" | grep -q '"wins":0[,}]'; then
-    echo "mode=search level=$LEVEL twist=1 seed=$((772000 + S)) evals=$EVALS_SOLO only=any out=$OUT/${LEVEL}_search_twist_deep_a.json" >> "$LIST"
-    echo "mode=search level=$LEVEL twist=1 seed=$((774000 + S)) evals=$EVALS_SOLO only=any out=$OUT/${LEVEL}_search_twist_deep_b.json" >> "$LIST"
+    echo "mode=search level=$LEVEL twist=1 seed=$((772000 + S)) evals=$EVALS_SOLO only=any$FX out=$OUT/${LEVEL}_search_twist_deep_a.json" >> "$LIST"
+    echo "mode=search level=$LEVEL twist=1 seed=$((774000 + S)) evals=$EVALS_SOLO only=any$FX out=$OUT/${LEVEL}_search_twist_deep_b.json" >> "$LIST"
   fi
 done
 run_one() {
@@ -62,7 +68,7 @@ cat "$LIST" | xargs -P "$JOBS" -I{} bash -c 'run_one "{}" '"$OUT"
 if [ -z "$SKIP_BENCH" ]; then
   for LEVEL in $LEVELS; do
     if [ ! -f "$OUT/${LEVEL}_bench.json" ] && mkdir "$OUT/.lock_${LEVEL}_bench.json" 2> /dev/null; then
-      timeout 3000 godot --headless --path . --script res://tools/balance/benchmark.gd -- level=$LEVEL \
+      timeout 3000 godot --headless --path . --script res://tools/balance/benchmark.gd -- level=$LEVEL$FX \
         build="$OUT/${LEVEL}_search_any.json,$OUT/${LEVEL}_spread.json" out="$OUT/${LEVEL}_bench.json" > /dev/null 2>> "$OUT/errors.txt"
     fi
   done

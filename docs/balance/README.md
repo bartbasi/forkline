@@ -179,6 +179,43 @@ The benchmark's largest wave (ARCHITECTURE 9.4, B5):
   for timings on a quiet machine.
 - `run_perf.sh` is the job list: every level and Twist, and the biggest run waves. `PREFIX=perf2 LEVEL_SEEDS=300 TARGETS=3 RUN_SEEDS=25` is the wider round.
 
+## The expansion bots (task B6)
+
+Report: `b6-trial-2026-10-28.md`. The bots now play regions 5 to 8 and the content tiers of runs and the daily. Nothing here changes a result at
+tier 0 or on regions 1 to 4: the same command lines give the same files (see "Checking the bots after a change", and the report's section 1).
+
+- **Distances by node.** `RoadMap.distances()` is indexed by node (ARCHITECTURE 14.3). `Bot.steps_left()` reads a creature's steps left to the base
+  by node, and a walker on a bridge uses the node it is heading to. No bot reads a distance by cell any more.
+- **`describe()`.** A map with a map feature (T, X, P, Q or a slide arrow) marks a gate with `*` (X is the bridge) and letters its spots A, C to F,
+  H to O, R, S, U to W, Y, Z, then a to d, which are no grid character. A map with no feature is described as before (gate `X`, spots A to X).
+- **The plain mixed recipe for regions 5 to 8** (RULES 12.6): spots ranked by road seen outside tunnels (a tunnel tile is not counted; the same count
+  ranks the spots of the run bots and the weights of the random strategies); the Scarecrow on the fifth spot (the sixth when the Bakery has the fifth);
+  attackers in turn Sling Post, Pumpkin Catapult, Longbow Loft, Bramble Cottage, Snow Fort, Firework Tower, Moth Lantern, with the Firework Tower and
+  the Moth Lantern only on a level whose waves bring flyers; tier 3 on each attacker's first path (Wild Bramble, Big Snowball, Beacon Lantern); Bells,
+  Scarecrows and Bakeries stay at tier 2.
+- **Lone searches.** `only=solo:bramble_cottage` and `only=solo:snow_fort` work like the other four. The Scarecrow is a support tower, so every lone
+  search holds it (the Bell and Bakery too), and it needs no search of its own. A tower that cannot hit flyers needs no search where flyers in the wave
+  data cost 6 lives or more; the Firework Tower and the Moth Lantern need none where walkers cost 6 lives or more (`mode=need`, unchanged: it reads
+  `hits_ground` and `hits_air`). A pulse tower takes no aim (`set_aim` refuses it), so its aim stays First in every strategy and two builds that differ
+  only in it are not counted twice.
+- **Run bots.** `opts["tier"]` (`runs.gd tier=N`) passes the content tier to `RunSession.start`, to a forced map and to `MapAssembler.plan`; the pool
+  is `pool(counters, tier)` or `card_ids(tier)`. The four new towers have bot weights of their own (`NEW_WEIGHT`), drawn from a second generator, so a
+  tier 0 run draws what it always did. The Scarecrow is support: capped at 2, built after the top two spots like the Bell, upgraded after the attackers.
+- **Reports by tier.** `runs.gd tier=N` writes the same files as before, plus `"tier": N` when N is above 0. `runs_summary.gd dir=... tier=N` reads
+  the bosses, packs and segments of that tier and below, so every bar of RULES 14.8 and 15 reads at that tier (job lines it prints carry `tier=N`).
+  `run_b6.sh RT` is the job list for tiers 1 to 4.
+- **Fixtures.** The real files hold no data for regions 5 to 8 yet. `fixture=1` (on `run.gd`, `runs.gd`, `benchmark.gd`, `perf_peak.gd`, `perf_cases.gd`,
+  `summary.gd`, `runs_summary.gd`, `run_pass.sh`, `run_pass_post.sh`) plays on `tools/balance/fixtures.gd`: the sim engineer's test catalog
+  (`tests/sim/fixtures/creature_fixtures.gd`: the real stats, the four towers and the creatures it holds) with five fixture levels, one for each map
+  feature and one with all four (`r5_fx1` tunnel, `r6_fx1` bridge, `r7_fx1` ice slide, `r8_fx1` hollow stumps, `r8_fx2` all), and run data built from
+  the real run files with four content tiers (tower cards and perks, a middle segment for each feature cut from a real one so every stack still fits,
+  packs for the tier creatures and a band 6 pack for each boss). The fixtures are not tuned. When E5.1 to E8.1 land, the same tools run on the real
+  data with no flag, and `fixtures.gd` stays only as the proof that the bots work.
+- **The most crowded wave as a saved game.** `perf_peak.gd save=DIR` as in B5; for a run, `tier=N` plays a run of that tier and the saved file
+  holds the tier (ARCHITECTURE 14.7), so the phone resumes it at the right tier.
+- `run_b6.sh`: phases T0 (tier 0 jobs of the last reports, played again), LS (forced lone searches), RT (runs and the daily at tiers 1 to 4) and PK
+  (the most crowded wave as a saved game). `run_pass.sh` has seven attacking towers and `FIXTURE=1`; its seed numbers for the first four are unchanged.
+
 ## Files
 
 - `tools/balance/bot.gd`: strategies, the generator and mutator, the plain recipe, the player.
@@ -193,6 +230,7 @@ The benchmark's largest wave (ARCHITECTURE 9.4, B5):
 - `tools/balance/run_bot.gd`, `runs.gd`, `runs_summary.gd`, `run_runs.sh`: the run and daily bots, runner, tables and job list (above).
 - `tools/balance/run_b4.sh`: the job list and seeds of the B4 run report (raw folder `raw/2026-10-25-b4/`) and of B5 (`raw/2026-10-27-b5/`).
 - `tools/balance/perf_cases.gd`, `perf_peak.gd`, `run_perf.sh`: the benchmark's largest wave (above).
+- `tools/balance/fixtures.gd`, `run_b6.sh`: the fixtures and job lists of task B6 (above).
 - `tools/balance/run_region1.sh`, `run_whatif.sh`, `run_stats.sh`: the exact job lists and seeds.
 - `tools/balance/run_pass.sh`, `run_pass_post.sh`, `run_special.sh`, `run_whatif_b3.sh`: the job lists and seeds of the 2026-10-25
   campaign pass (raw folder `raw/2026-10-25-b3/`, report `campaign-2026-10-25.md`, `SEED_SHIFT=100000`).

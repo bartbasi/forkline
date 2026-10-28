@@ -30,12 +30,18 @@ extends SceneTree
 ## mode=rates also takes stack=TOP,MIDDLE,BOTTOM (play every seed on that stack), pack=PACK_ID (every seed uses that pack
 ##   in its band) and stop=N (a play ends when N waves have started and none is on the map).
 ## Any mode takes tweak=strength_step:8,strength_start:100,start_gold:300,gates:1,tea_break:5 (RunData numbers and the lives of Tea Break, in memory only).
+## Any mode takes tier=N (B6, 0 to 4): every run and daily is of that content tier (RULES 14.9, 15). The pool, the map, the packs and the bosses
+##   are those of the tier and below. With tier 0 (the default) nothing changes, and the result has no "tier" key.
+## Any mode takes fixture=1: the test catalog with the expansion towers and the creatures the sim engineer has, and run data with four content
+##   tiers (tools/balance/fixtures.gd), because the real run data holds no tiers yet. The result then says "fixture": true.
 ## The result is one JSON object, written to `out` and printed after "RESULT ".
 
 const RunBot: GDScript = preload("res://tools/balance/run_bot.gd")
+const Fixtures: GDScript = preload("res://tools/balance/fixtures.gd")
 const DAILY_FIRST: Dictionary = {"year": 2026, "month": 10, "day": 25, "hour": 0, "minute": 0, "second": 0}
 
 var _args: Dictionary = {}
+var _tier: int = 0                                # tier=N: the content tier of every run and daily (ARCHITECTURE 14.8)
 
 
 func _initialize() -> void:
@@ -43,7 +49,16 @@ func _initialize() -> void:
 		var parts: PackedStringArray = argument.split("=", true, 1)
 		if parts.size() == 2:
 			_args[parts[0]] = parts[1]
-	var game: GameData = GameData.load_from("res://data")
+	var fixture: bool = String(_args.get("fixture", "0")) == "1"
+	var game: GameData = Fixtures.game() if fixture else GameData.load_from("res://data")
+	_tier = int(_args.get("tier", "0"))
+	if game == null:
+		quit(2)
+		return
+	if _tier < 0 or (game.run != null and _tier > game.run.tiers.size()):
+		printerr("tier=%d is outside 0 to %d" % [_tier, game.run.tiers.size()])
+		quit(2)
+		return
 	if not game.problems.is_empty() or game.run == null:
 		printerr("data problems: %s" % ", ".join(game.problems))
 		quit(2)
@@ -83,6 +98,10 @@ func _initialize() -> void:
 		quit(2)
 		return
 	result["mode"] = mode
+	if _tier > 0:
+		result["tier"] = _tier
+	if fixture:
+		result["fixture"] = true
 	result["seconds"] = (Time.get_ticks_msec() - started) / 1000.0
 	if tweak != "":
 		result["tweak"] = tweak
@@ -150,8 +169,8 @@ func _apply_tweak(game: GameData, tweak: String) -> bool:
 ## which unlock cards cost the bots win rate).
 func _pool(game: GameData, which: String) -> Array[StringName]:
 	if which == "all":
-		return game.run.card_ids()
-	var out: Array[StringName] = game.run.pool({})
+		return game.run.card_ids(_tier)
+	var out: Array[StringName] = game.run.pool({}, _tier)
 	if which.begins_with("plus:"):
 		for id: String in which.trim_prefix("plus:").split(",", false):
 			if not game.run.card(StringName(id)).is_empty() and not out.has(StringName(id)):
@@ -160,7 +179,7 @@ func _pool(game: GameData, which: String) -> Array[StringName]:
 
 
 func _stack(game: GameData, run_seed: int) -> Dictionary:
-	var plan: Dictionary = MapAssembler.plan(run_seed, game.run)
+	var plan: Dictionary = MapAssembler.plan(run_seed, game.run, _tier)
 	var packs: Array[String] = []
 	for id: StringName in plan["packs"]:
 		packs.append(String(id))
@@ -170,7 +189,7 @@ func _stack(game: GameData, run_seed: int) -> Dictionary:
 
 func _card_ids(game: GameData) -> Array:
 	var out: Array = []
-	for id: StringName in game.run.card_ids():
+	for id: StringName in game.run.card_ids(_tier):
 		out.append(String(id))
 	return out
 
@@ -193,7 +212,7 @@ func _rates(game: GameData, first: int, count: int) -> Dictionary:
 			chosen.append(strat)
 	var cards: Array = _card_ids(game)
 	var only_boss: String = String(_args.get("boss", ""))
-	var opts: Dictionary = {}
+	var opts: Dictionary = {"tier": _tier}
 	var forced_stack: PackedStringArray = String(_args.get("stack", "")).split(",", false)
 	if forced_stack.size() == 3:
 		opts["stack"] = Array(forced_stack)
@@ -259,8 +278,8 @@ func _pack_cards(row: Dictionary, cards: Array) -> void:
 
 func _det(game: GameData, first: int, count: int) -> Dictionary:
 	var strats: Array[Dictionary] = RunBot.strategies()
-	var all_cards: Array[StringName] = game.run.card_ids()
-	var base_cards: Array[StringName] = game.run.pool({})
+	var all_cards: Array[StringName] = game.run.card_ids(_tier)
+	var base_cards: Array[StringName] = game.run.pool({}, _tier)
 	var rows: Array = []
 	var chain: String = ""
 	var failures: Array = []
@@ -272,20 +291,20 @@ func _det(game: GameData, first: int, count: int) -> Dictionary:
 		var pool: Array[StringName] = all_cards if k % 2 == 0 else base_cards
 		var row: Dictionary = {"i": i, "seed": run_seed, "strategy": String(strat["id"]), "relaxed": relaxed, "pool": "all" if k % 2 == 0 else "base"}
 		# The map, the waves and the picks of the seed, built twice.
-		var plan_a: Dictionary = MapAssembler.plan(run_seed, game.run)
-		var plan_b: Dictionary = MapAssembler.plan(run_seed, game.run)
-		var level_a: LevelData = MapAssembler.assemble(run_seed, game.run, game.catalog)
-		var level_b: LevelData = MapAssembler.assemble(run_seed, game.run, game.catalog)
+		var plan_a: Dictionary = MapAssembler.plan(run_seed, game.run, _tier)
+		var plan_b: Dictionary = MapAssembler.plan(run_seed, game.run, _tier)
+		var level_a: LevelData = MapAssembler.assemble(run_seed, game.run, game.catalog, _tier)
+		var level_b: LevelData = MapAssembler.assemble(run_seed, game.run, game.catalog, _tier)
 		var text_a: String = JSON.stringify(level_a.to_data())
 		row["map_equal"] = JSON.stringify(plan_a) == JSON.stringify(plan_b) and text_a == JSON.stringify(level_b.to_data())
 		row["map_hash"] = text_a.hash()
 		# The same play twice, then with a save and load in the middle of a wave, then with a draft open.
-		var a: Dictionary = RunBot.play(game, run_seed, "", relaxed, pool, strat)
-		var b: Dictionary = RunBot.play(game, run_seed, "", relaxed, pool, strat)
+		var a: Dictionary = RunBot.play(game, run_seed, "", relaxed, pool, strat, {"tier": _tier})
+		var b: Dictionary = RunBot.play(game, run_seed, "", relaxed, pool, strat, {"tier": _tier})
 		var wave_at: int = clampi(2 + k % 12, 0, int(a["reached"]) - 1)
-		var c: Dictionary = RunBot.play(game, run_seed, "", relaxed, pool, strat, {"restore_wave": [wave_at, 60 + 40 * (k % 5)]})
+		var c: Dictionary = RunBot.play(game, run_seed, "", relaxed, pool, strat, {"tier": _tier, "restore_wave": [wave_at, 60 + 40 * (k % 5)]})
 		var draft_at: int = clampi(1 + k % 12, 0, maxi(a["picks"].size() - 1, 0))
-		var d: Dictionary = RunBot.play(game, run_seed, "", relaxed, pool, strat, {"restore_draft": draft_at})
+		var d: Dictionary = RunBot.play(game, run_seed, "", relaxed, pool, strat, {"tier": _tier, "restore_draft": draft_at})
 		row["again_equal"] = _same(a, b)
 		row["wave_restore_equal"] = _same(a, c)
 		row["wave_restored"] = int(c.get("restores", 0)) == 1
@@ -310,10 +329,10 @@ func _det(game: GameData, first: int, count: int) -> Dictionary:
 		var day: String = day_of(n)
 		var daily_seed: int = RunSeeds.daily_seed(day)
 		var strat: Dictionary = strats[n % strats.size()]
-		var a: Dictionary = RunBot.play(game, daily_seed, day, false, all_cards, strat)
-		var b: Dictionary = RunBot.play(game, daily_seed, day, false, all_cards, strat)
-		var c: Dictionary = RunBot.play(game, daily_seed, day, false, all_cards, strat, {"restore_wave": [clampi(3 + n % 10, 0, int(a["reached"]) - 1), 100]})
-		var d: Dictionary = RunBot.play(game, daily_seed, day, false, all_cards, strat, {"restore_draft": clampi(2 + n % 10, 0, maxi(a["picks"].size() - 1, 0))})
+		var a: Dictionary = RunBot.play(game, daily_seed, day, false, all_cards, strat, {"tier": _tier})
+		var b: Dictionary = RunBot.play(game, daily_seed, day, false, all_cards, strat, {"tier": _tier})
+		var c: Dictionary = RunBot.play(game, daily_seed, day, false, all_cards, strat, {"tier": _tier, "restore_wave": [clampi(3 + n % 10, 0, int(a["reached"]) - 1), 100]})
+		var d: Dictionary = RunBot.play(game, daily_seed, day, false, all_cards, strat, {"tier": _tier, "restore_draft": clampi(2 + n % 10, 0, maxi(a["picks"].size() - 1, 0))})
 		var drow: Dictionary = {"day": day, "seed": daily_seed, "strategy": String(strat["id"]),
 			"again_equal": _same(a, b), "wave_restore_equal": _same(a, c), "wave_restored": int(c.get("restores", 0)) == 1,
 			"draft_restore_equal": _same(a, d) and bool(d.get("offers_equal", false)), "draft_restored": int(d.get("restores", 0)) == 1,
@@ -344,7 +363,7 @@ func _same(a: Dictionary, b: Dictionary) -> bool:
 func _daily(game: GameData, from: int, count: int) -> Dictionary:
 	var extra: int = int(_args.get("extra", "0"))
 	var cards: Array = _card_ids(game)
-	var pool: Array[StringName] = game.run.card_ids()
+	var pool: Array[StringName] = game.run.card_ids(_tier)
 	var chosen: Array[Dictionary] = RunBot.strategies()
 	var rows: Array = []
 	for n: int in range(from, from + count):
@@ -355,7 +374,7 @@ func _daily(game: GameData, from: int, count: int) -> Dictionary:
 			continue
 		var plays: Array = []
 		for strat: Dictionary in chosen:
-			var row: Dictionary = RunBot.play(game, daily_seed, day, false, pool, strat)
+			var row: Dictionary = RunBot.play(game, daily_seed, day, false, pool, strat, {"tier": _tier})
 			if row.has("bad"):
 				return row
 			_pack_cards(row, cards)
@@ -382,7 +401,7 @@ func _extra(game: GameData, run_seed: int, day: String, relaxed: bool, pool: Arr
 	var tried: int = 0
 	for k: int in n:
 		var strat: Dictionary = RunBot.random_strategy(rng, "x%d" % k)
-		var row: Dictionary = RunBot.play(game, run_seed, day, relaxed, pool, strat)
+		var row: Dictionary = RunBot.play(game, run_seed, day, relaxed, pool, strat, {"tier": _tier})
 		tried += 1
 		if best.is_empty() or _better(row, best):
 			best = row
@@ -426,7 +445,7 @@ func _search(game: GameData, first: int, count: int) -> Dictionary:
 		var lives_sum: int = 0
 		for k: int in n:
 			var strat: Dictionary = RunBot.random_strategy(rng, "x%d" % k)
-			var row: Dictionary = RunBot.play(game, run_seed, "", relaxed, pool, strat)
+			var row: Dictionary = RunBot.play(game, run_seed, "", relaxed, pool, strat, {"tier": _tier})
 			if row.has("bad"):
 				return row
 			if bool(row["won"]):
@@ -444,7 +463,7 @@ func _search(game: GameData, first: int, count: int) -> Dictionary:
 # Days nobody won.
 
 func _deep(game: GameData) -> Dictionary:
-	var pool: Array[StringName] = game.run.card_ids()
+	var pool: Array[StringName] = game.run.card_ids(_tier)
 	var n: int = int(_args.get("n", "1000"))
 	var rows: Array = []
 	for day: String in String(_args.get("days", "")).split(","):
@@ -469,13 +488,13 @@ func _cardvalue(game: GameData, first: int, count: int) -> Dictionary:
 		var strat: Dictionary = RunBot.strategy(names[(i - first) % names.size()])
 		if strat.is_empty():
 			return {"bad": "unknown strategy"}
-		var base: Dictionary = RunBot.play(game, run_seed, "", false, pool, strat, {"draft_snapshots": true})
+		var base: Dictionary = RunBot.play(game, run_seed, "", false, pool, strat, {"tier": _tier, "draft_snapshots": true})
 		if base.has("bad"):
 			return base
 		for snap: Dictionary in base["draft_snaps"]:
 			var outcomes: Array = []
 			for card: StringName in snap["offers"]:
-				var res: Dictionary = RunBot.play(game, run_seed, "", false, pool, strat, {"resume": snap, "force": card})
+				var res: Dictionary = RunBot.play(game, run_seed, "", false, pool, strat, {"tier": _tier, "resume": snap, "force": card})
 				if res.has("bad"):
 					return res
 				outcomes.append({"card": String(card), "won": res["won"], "lives": res["lives"], "cleared": res["cleared"]})
@@ -489,7 +508,7 @@ func _risk(game: GameData, first: int, count: int) -> Dictionary:
 	var strat: Dictionary = RunBot.strategy(String(_args.get("strat", "towers_wide")))
 	if strat.is_empty():
 		return {"bad": "unknown strategy"}
-	var pool: Array[StringName] = game.run.card_ids()
+	var pool: Array[StringName] = game.run.card_ids(_tier)
 	var risk_cards: Array[Dictionary] = []
 	for card: Dictionary in game.run.cards:
 		if card["kind"] == &"risk":
@@ -498,7 +517,7 @@ func _risk(game: GameData, first: int, count: int) -> Dictionary:
 	var bases: Array = []
 	for i: int in range(first, first + count):
 		var run_seed: int = seed_of(i)
-		var base: Dictionary = RunBot.play(game, run_seed, "", false, pool, strat, {"snapshots": true})
+		var base: Dictionary = RunBot.play(game, run_seed, "", false, pool, strat, {"tier": _tier, "snapshots": true})
 		if base.has("bad"):
 			return base
 		bases.append({"i": i, "seed": run_seed, "won": base["won"], "cleared": base["cleared"], "lives": base["lives"]})
@@ -553,6 +572,8 @@ func _static(game: GameData) -> Dictionary:
 			risk.append(card)
 	var spawn: Array = []
 	for pack: Dictionary in data.packs:
+		if int(pack["tier"]) > _tier:
+			continue
 		for w: int in 3:
 			var groups: Array = pack["waves"][w]["groups"]
 			var line: Dictionary = {"pack": String(pack["id"]), "band": pack["band"], "boss": String(pack["boss"]), "wave": (int(pack["band"]) - 1) * 3 + w + 1,
@@ -564,14 +585,14 @@ func _static(game: GameData) -> Dictionary:
 			spawn.append(line)
 	# Every stack that fits, with the chance a seed picks it: tops evenly, then the middles that fit, then the bottoms.
 	var stacks: Array = []
-	var tops: Array[Dictionary] = data.segments_of(&"top")
+	var tops: Array[Dictionary] = data.segments_of(&"top", _tier)
 	var first_packs: Array[StringName] = []
 	for band: int in range(1, RunData.BANDS + 1):
-		first_packs.append(data.packs_of(band, data.boss_ids()[0] if band == RunData.BANDS else &"")[0]["id"])
+		first_packs.append(data.packs_of(band, data.boss_ids(_tier)[0] if band == RunData.BANDS else &"", _tier)[0]["id"])
 	for top: Dictionary in tops:
-		var middles: Array[Dictionary] = data.segments_under(top["id"])
+		var middles: Array[Dictionary] = data.segments_under(top["id"], _tier)
 		for middle: Dictionary in middles:
-			var bottoms: Array[Dictionary] = data.segments_under(middle["id"])
+			var bottoms: Array[Dictionary] = data.segments_under(middle["id"], _tier)
 			for bottom: Dictionary in bottoms:
 				var level: LevelData = MapAssembler.build(data, game.catalog, top["id"], middle["id"], bottom["id"], first_packs)
 				var chance: float = 1.0 / tops.size() / middles.size() / bottoms.size()
@@ -580,8 +601,8 @@ func _static(game: GameData) -> Dictionary:
 					"entrances": level.entrances.size() if level != null else -1, "chance": chance})
 	var packs_per_band: Array = []
 	for band: int in range(1, RunData.BANDS + 1):
-		packs_per_band.append(data.packs_of(band).size())
-	return {"spawn": spawn, "stacks": stacks, "packs_per_band": packs_per_band, "bosses": _names(data.boss_ids())}
+		packs_per_band.append(data.packs_of(band, &"", _tier).size())
+	return {"spawn": spawn, "stacks": stacks, "packs_per_band": packs_per_band, "bosses": _names(data.boss_ids(_tier))}
 
 
 func _names(ids: Array[StringName]) -> Array:

@@ -26,6 +26,38 @@ const STYLES: Array[StringName] = [&"casual", &"typical", &"skilled"]
 const LIVE_CHOICES: Array[int] = [0, 3, 8, 15, 40, 999]
 
 
+## The road tiles that count as "road seen" (RULES 12.6 step 1): every road tile except tunnel tiles.
+static func seen_road_cells(level: LevelData) -> Array[Vector2i]:
+	var road: Array[Vector2i] = []
+	for r: int in level.rows:
+		for c: int in Sim.MAP_COLUMNS:
+			var cell: Vector2i = Vector2i(c, r)
+			if level.is_road(cell) and level.feature_at(cell) != LevelData.Feature.TUNNEL:
+				road.append(cell)
+	return road
+
+
+## Road steps a creature has left to the base on `dist`, which is per node (docs/ARCHITECTURE.md 14.3), or -1 off the road.
+## A walker on a bridge cell uses the node it is heading to, so it is read on the right road of the deck.
+static func steps_left(b: Battle, dist: PackedInt32Array, enemy: EnemyState) -> int:
+	var cell: Vector2i = Vector2i(enemy.pos.x / Sim.UNIT, enemy.pos.y / Sim.UNIT)
+	var node: int = b.map.node_of(cell)
+	if node < 0:
+		return -1
+	if not enemy.flying:
+		var heading: int = b.map.arrival(enemy.from_cell, enemy.to_cell)
+		if heading >= 0 and b.map.node_cell(heading) == cell:
+			node = heading
+	return dist[node]
+
+
+## True for a tower that takes no aim, a pulse tower (RULES 5.12). Its aim stays First, so two builds that differ only in the
+## aim of such a tower are not counted as two builds.
+static func no_aim(ctx: Dictionary, type: StringName) -> bool:
+	var catalog: Catalog = ctx["catalog"]
+	return catalog.tower(type).stats(1, -1).pulse
+
+
 ## Level facts the generator needs, worked out once. With `twist`, the level's Twist is played
 ## (docs/ARCHITECTURE.md 2.8): its tower bans, gate count and fixed gates are in the facts below.
 ## "bad" is set when the sim refuses the Twist, which is a bug in the data.
@@ -38,11 +70,8 @@ static func context(game: GameData, level_id: StringName, twist: bool = false) -
 	if probe == null:
 		return {"bad": "the sim refuses the Twist of %s" % level_id}
 	var map: RoadMap = RoadMap.new(level)
-	var road: Array[Vector2i] = []
-	for r: int in level.rows:
-		for c: int in Sim.MAP_COLUMNS:
-			if level.is_road(Vector2i(c, r)):
-				road.append(Vector2i(c, r))
+	# Road seen is counted outside tunnels: a walker inside one is out of reach (RULES 12.6 step 1, 3.6).
+	var road: Array[Vector2i] = seen_road_cells(level)
 	# How many road cells a tier 1 Sling Post at each spot reaches: a rough "good spot" weight.
 	# The plain recipe ranks by the same count (RULES 12.6), without the floor of 1.
 	var reach: int = game.catalog.tower(&"sling_post").stats(1, -1).reach
@@ -139,6 +168,8 @@ static func random_strategy(ctx: Dictionary, rng: RandomNumberGenerator, style: 
 		var aim: int = TowerState.Aim.FIRST
 		if style != &"casual" and rng.randf() < (0.15 if style == &"typical" else 0.4):
 			aim = rng.randi_range(0, 2)
+		if no_aim(ctx, type):
+			aim = TowerState.Aim.FIRST
 		towers.append({"cell": spots[i], "type": type, "depth": depth, "spec": spec, "aim": aim})
 		depths.append(depth)
 	# A random order of the purchases. `breadth` is how likely the next move is a new tower.
@@ -291,6 +322,8 @@ static func _edit(ctx: Dictionary, s: Dictionary, rng: RandomNumberGenerator, al
 			if not towers.is_empty() and allowed.size() > 1:
 				var t: Dictionary = towers[rng.randi_range(0, towers.size() - 1)]
 				t["type"] = allowed[rng.randi_range(0, allowed.size() - 1)]
+				if no_aim(ctx, t["type"]):
+					t["aim"] = TowerState.Aim.FIRST
 		4:                                                  # one more upgrade
 			if not towers.is_empty():
 				var i: int = rng.randi_range(0, towers.size() - 1)
@@ -348,6 +381,8 @@ static func _edit(ctx: Dictionary, s: Dictionary, rng: RandomNumberGenerator, al
 			if not towers.is_empty():
 				var t: Dictionary = towers[rng.randi_range(0, towers.size() - 1)]
 				t["aim"] = rng.randi_range(0, 2) if rng.randf() < 0.5 else TowerState.Aim.FIRST
+				if no_aim(ctx, t["type"]):
+					t["aim"] = TowerState.Aim.FIRST
 		12:                                                 # change the gates
 			var options: Array[Vector2i] = ctx["gate_options"]
 			if int(ctx["gate_count"]) > 0 and not options.is_empty():
@@ -476,8 +511,8 @@ static func play(ctx: Dictionary, strat: Dictionary, relaxed: bool, timing: bool
 				for enemy: EnemyState in b.enemies:
 					if ctx["catalog"].enemy(enemy.type).boss:
 						boss_hp = enemy.health if boss_hp == 0 else mini(boss_hp, enemy.health)
-						var steps_left: int = boss_dist[(enemy.pos.y / Sim.UNIT) * Sim.MAP_COLUMNS + enemy.pos.x / Sim.UNIT]
-						boss_steps = steps_left if boss_steps < 0 else mini(boss_steps, steps_left)
+						var left: int = steps_left(b, boss_dist, enemy)
+						boss_steps = left if boss_steps < 0 else mini(boss_steps, left)
 		wave_ticks[wave_index] = b.tick - first_tick
 	var out: Dictionary = b.result()
 	out["lives"] = out["lives_left"]
@@ -518,10 +553,16 @@ static func play(ctx: Dictionary, strat: Dictionary, relaxed: bool, timing: bool
 	return out
 
 
+## The events of the creature rules of regions 5 to 8 (ARCHITECTURE 14.6). A watched play counts them under `rule_events`.
+const RULE_EVENTS: Array[StringName] = [&"napped", &"woke", &"burrowed", &"surfaced", &"blinked", &"yawned"]
+
+
 ## What a watched play records each tick. `watch["leaks"]`: lives lost, by creature type, and
 ## `watch["leaks_wave"]`: the same by the wave (1 based) the creature came from. `watch["kills"]`: creatures
 ## defeated, by type. `watch["bosses"]`: for each flying boss, its health when it was a quarter, a half and
-## three quarters of the way along its line (-1 before), and where and how it ended.
+## three quarters of the way along its line (-1 before), and where and how it ended. B6 adds `watch["shots"]` and
+## `watch["hits"]` (shots fired and creatures hit, by tower id) and `watch["rule_events"]` (how often each creature rule of
+## regions 5 to 8 fired: nap, wake, dig, surface, blink, yawn). `replay` reports them only where they say something new.
 static func _watch_tick(b: Battle, ctx: Dictionary, watch: Dictionary) -> void:
 	if not watch.has("leaks"):
 		watch["leaks"] = {}
@@ -529,6 +570,9 @@ static func _watch_tick(b: Battle, ctx: Dictionary, watch: Dictionary) -> void:
 		watch["kills"] = {}
 		watch["bosses"] = {}
 		watch["wave_of"] = {}
+		watch["shots"] = {}
+		watch["hits"] = {}
+		watch["rule_events"] = {}
 	var catalog: Catalog = ctx["catalog"]
 	var wave_of: Dictionary = watch["wave_of"]
 	for enemy: EnemyState in b.enemies:
@@ -563,6 +607,12 @@ static func _watch_tick(b: Battle, ctx: Dictionary, watch: Dictionary) -> void:
 			by_wave[wave_key][type_key] = int(by_wave[wave_key].get(type_key, 0)) + lost
 			if watch["bosses"].has(event["id"]):
 				watch["bosses"][event["id"]]["fate"] = "reached the base"
+		elif kind == &"fired":
+			var tower_key: String = String(event["tower"])
+			watch["shots"][tower_key] = int(watch["shots"].get(tower_key, 0)) + 1
+			watch["hits"][tower_key] = int(watch["hits"].get(tower_key, 0)) + (event["targets"] as Array).size()
+		elif RULE_EVENTS.has(kind):
+			watch["rule_events"][String(kind)] = int(watch["rule_events"].get(String(kind), 0)) + 1
 		elif kind == &"defeated":
 			var kill_key: String = String(event["enemy"])
 			watch["kills"][kill_key] = int(watch["kills"].get(kill_key, 0)) + 1
@@ -597,8 +647,14 @@ static func _buy(b: Battle, seq: Array, towers: Array, steps: Array[int], cursor
 
 # The plain mixed recipe (RULES 12.6).
 
-## The order the recipe takes the attacking towers in, one per spot (RULES 12.6 step 4).
-const ATTACK_ORDER: Array[StringName] = [&"sling_post", &"pumpkin_catapult", &"longbow_loft", &"firework_tower"]
+## The order the recipe takes the attacking towers in, one per spot (RULES 12.6 step 4). The Firework Tower and the Moth Lantern
+## are in the turn only on a level whose waves bring flyers.
+const ATTACK_ORDER: Array[StringName] = [&"sling_post", &"pumpkin_catapult", &"longbow_loft", &"bramble_cottage", &"snow_fort",
+	&"firework_tower", &"moth_lantern"]
+## The four towers of regions 5 to 8.
+const EXPANSION_TOWERS: Array[StringName] = [&"bramble_cottage", &"scarecrow", &"snow_fort", &"moth_lantern"]
+## Towers that can only hit flyers, and so join the turn only on a level with flyers.
+const FLYER_ONLY: Array[StringName] = [&"firework_tower", &"moth_lantern"]
 
 
 ## The plain mixed recipe as a strategy with no gates, no early calls and no buying during waves.
@@ -634,10 +690,16 @@ static func plain_recipe(ctx: Dictionary) -> Dictionary:
 		var want: int = 3 if bakery_at == 2 else 2
 		if want < ranked.size():
 			bell_at = want
+	# 3. The Scarecrow: the fifth spot, or the sixth when the Bakery has the fifth.
+	var scarecrow_at: int = -1
+	if offered.has(&"scarecrow"):
+		var scare_want: int = 5 if bakery_at == 4 else 4
+		if scare_want < ranked.size():
+			scarecrow_at = scare_want
 	# 4. The other spots take the attacking towers in turn.
 	var attackers: Array[StringName] = []
 	for id: StringName in ATTACK_ORDER:
-		if offered.has(id) and (id != &"firework_tower" or bool(ctx["flyers"])):
+		if offered.has(id) and (not FLYER_ONLY.has(id) or bool(ctx["flyers"])):
 			attackers.append(id)
 	if attackers.is_empty():
 		for id: StringName in offered:
@@ -653,6 +715,8 @@ static func plain_recipe(ctx: Dictionary) -> Dictionary:
 			type = &"bakery"
 		elif r == bell_at:
 			type = &"lullaby_bell"
+		elif r == scarecrow_at:
+			type = &"scarecrow"
 		else:
 			type = attackers[turn % attackers.size()]
 			turn += 1
@@ -818,11 +882,32 @@ static func inventory(ctx: Dictionary, strat: Dictionary) -> Dictionary:
 	return out
 
 
+## True when the level's grid holds a map feature character (T, X, P, Q or a slide arrow).
+static func has_features(level: LevelData) -> bool:
+	for line: String in level.grid:
+		for ch: String in "TX^v<>PQ":
+			if line.contains(ch):
+				return true
+	return false
+
+
+## The letters that mark the spots in a description, and the mark for a gate. On a map with no feature they are the old ones, A to X
+## and X. A map with features uses letters that are no grid character (A, C to F, H to O, R, S, U to W, Y, Z, then a to d), and
+## `*` for a gate, because X is a bridge there.
+static func spot_letters(level: LevelData) -> String:
+	return "ACDEFHIJKLMNORSUVWYZabcd" if has_features(level) else "ABCDEFGHIJKLMNOPQRSTUVWX"
+
+
+static func gate_mark(level: LevelData) -> String:
+	return "*" if has_features(level) else "X"
+
+
 ## Plain text for a report: a map with the spots lettered, then the buying order.
 static func describe(ctx: Dictionary, strat: Dictionary) -> String:
 	var level: LevelData = ctx["level"]
 	var catalog: Catalog = ctx["catalog"]
-	var letters: String = "ABCDEFGHIJKLMNOPQRSTUVWX"
+	var letters: String = spot_letters(level)
+	var mark: String = gate_mark(level)
 	var lines: PackedStringArray = PackedStringArray()
 	var gates: Array = strat["gates"]
 	for r: int in level.rows:
@@ -833,19 +918,19 @@ static func describe(ctx: Dictionary, strat: Dictionary) -> String:
 			if level.kind_at(cell) == LevelData.Kind.SPOT:
 				ch = letters[level.spots.find(cell)]
 			elif gates.has(cell):
-				ch = "X"
+				ch = mark
 			row += ch
 		lines.append(row)
 	var text: String = "\n".join(lines) + "\n"
 	if gates.is_empty():
 		text += "Gate: none\n"
 	elif gates.size() == 1:
-		text += "Gate: socket (%d,%d) shown as X\n" % [gates[0].x, gates[0].y]
+		text += "Gate: socket (%d,%d) shown as %s\n" % [gates[0].x, gates[0].y, mark]
 	else:
 		var cells: PackedStringArray = PackedStringArray()
 		for gate: Vector2i in gates:
 			cells.append("(%d,%d)" % [gate.x, gate.y])
-		text += "Gates: sockets %s shown as X\n" % ", ".join(cells)
+		text += "Gates: sockets %s shown as %s\n" % [", ".join(cells), mark]
 	var steps: Array[int] = []
 	steps.resize(strat["towers"].size())
 	steps.fill(0)

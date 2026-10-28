@@ -14,18 +14,22 @@ extends SceneTree
 ## It prints markdown to the console. It reads only files this tool wrote.
 
 const LEVELS: Array[String] = ["r1_l1", "r1_l2", "r1_l3", "r1_l4", "r1_l5", "r1_l6"]
-## The levels of the balance pass (pass=1).
-const PASS_LEVELS: Array[String] = ["r1_l1", "r1_l2", "r1_l3", "r1_l4", "r1_l5", "r1_l6", "r2_l1", "r2_l2", "r2_l3", "r2_l4", "r2_l5", "r2_l6",
-	"r3_l1", "r3_l2", "r3_l3", "r3_l4", "r3_l5", "r3_l6", "r4_l1", "r4_l2", "r4_l3", "r4_l4", "r4_l5", "r4_l6"]
-const ATTACKERS: Array[String] = ["sling_post", "pumpkin_catapult", "longbow_loft", "firework_tower"]
+const Fixtures: GDScript = preload("res://tools/balance/fixtures.gd")
 const BUILD_SECONDS: int = 15
 
 var _dir: String = ""
+## B6: the levels of the balance pass (pass=1) are every level of campaign.json, in order, or the ids of `levels=a,b`; the attacking
+## towers are those of the catalog (seven since the expansion); fixture=1 reads the test catalog and the fixture levels.
+var _game: GameData = null
+var _pass_levels: Array[String] = []
+var _attackers: Array[String] = []
 
 
 func _initialize() -> void:
 	var whatif: bool = false
 	var pass_mode: bool = false
+	var fixture: bool = false
+	var chosen: PackedStringArray = PackedStringArray()
 	for argument: String in OS.get_cmdline_user_args():
 		if argument.begins_with("dir="):
 			_dir = argument.trim_prefix("dir=")
@@ -33,6 +37,26 @@ func _initialize() -> void:
 			whatif = true
 		if argument == "pass=1":
 			pass_mode = true
+		if argument == "fixture=1":
+			fixture = true
+		if argument.begins_with("levels="):
+			chosen = argument.trim_prefix("levels=").split(",", false)
+	_game = Fixtures.game() if fixture else GameData.load_from("res://data")
+	if _game == null:
+		quit(2)
+		return
+	if chosen.is_empty() and fixture:
+		for level_id: StringName in Fixtures.LEVEL_IDS:
+			_pass_levels.append(String(level_id))
+	elif chosen.is_empty():
+		for region: Dictionary in _game.campaign:
+			for level_id: StringName in region["levels"]:
+				_pass_levels.append(String(level_id))
+	else:
+		_pass_levels.assign(chosen)
+	for tower_id: StringName in _game.catalog.tower_ids():
+		if _game.catalog.tower(tower_id).kind == &"attack":
+			_attackers.append(String(tower_id))
 	if pass_mode:
 		_pass_tables()
 		quit(0)
@@ -68,7 +92,7 @@ func _initialize() -> void:
 func _waves_table() -> void:
 	print("\n### Wave sizes (creatures in each wave, from the level files)\n")
 	_head(["Level", "Waves", "Creatures per wave", "Largest wave", "Creatures in all", "Starting gold"])
-	var game: GameData = GameData.load_from("res://data")
+	var game: GameData = _game
 	for id: String in LEVELS:
 		var level: LevelData = game.levels[StringName(id)]
 		var sizes: Array[String] = []
@@ -163,7 +187,7 @@ func _head(cells: Array) -> void:
 
 ## RULES 12.5: a wave's health against the gold a player could have by then (the guide says 0.8).
 func _economy_table() -> void:
-	var game: GameData = GameData.load_from("res://data")
+	var game: GameData = _game
 	print("
 ### Wave health against gold available (RULES 12.5 guide: about 0.8)
 ")
@@ -351,7 +375,7 @@ func _length_table() -> void:
 ### Length at 1x with no early calls: wave time plus 15 s for each build phase (one before each wave)
 ")
 	_head(["Level", "Waves", "Best build with early calls off: result", "Wave time", "Total", "Casual wins, mean wave time", "Total", "Typical wins, mean wave time", "Total"])
-	var game: GameData = GameData.load_from("res://data")
+	var game: GameData = _game
 	for id: String in LEVELS:
 		var bench: Dictionary = _read(id + "_bench.json")
 		var sp: Dictionary = _read(id + "_spread.json")
@@ -467,7 +491,7 @@ func _whatif_tables() -> void:
 ### What-if: every group's count scaled (Normal). Search = builds found by the seeded search, 800 tries each
 ")
 	_head(["Level", "Count", "Typical random: won", "Typical random: 3 stars", "Any tower: 3-star builds found", "Sling Post only: 3-star builds found", "Catapult only: 3-star builds found", "Best lives left, any tower", "Length of typical wins, min"])
-	var game: GameData = GameData.load_from("res://data")
+	var game: GameData = _game
 	for id: String in LEVELS:
 		for c: int in [150, 200, 250, 300, 400]:
 			var base: String = "%s_count%d" % [id, c]
@@ -764,7 +788,7 @@ func _cell_of(res: Dictionary, waves: int) -> String:
 
 ## The ids of a level: region number and level number.
 func _num(id: String) -> int:
-	return int(id.get_slice("_l", 1))
+	return int(id.get_slice("_", 1).trim_prefix("l").trim_prefix("fx"))
 
 
 func _region(id: String) -> int:
@@ -772,13 +796,15 @@ func _region(id: String) -> int:
 
 
 func _label(id: String) -> String:
+	if id.contains("_fx"):
+		return id                                           # a fixture level (tools/balance/fixtures.gd), not a campaign level
 	return "%d-%d" % [_region(id), _num(id)]
 
 
 func _pass_waves() -> void:
 	print("\n### Wave sizes (creatures in each wave, a Puffball counts as itself and its 3 Puffs)\n")
 	_head(["Level", "Waves", "Creatures per wave", "Largest wave"])
-	for id: String in PASS_LEVELS:
+	for id: String in _pass_levels:
 		var d: Dictionary = _read(id + "_plain.json")
 		if d.is_empty():
 			continue
@@ -791,7 +817,7 @@ func _pass_waves() -> void:
 func _pass_plain_normal() -> void:
 	print("\n### Plain mixed recipe on Normal (best placement = most lives, stars break ties; none = no gates)\n")
 	_head(["Level", "Placements tried", "Wins", "Best placement", "Best result", "No gates", "Worst placement", "Worst result", "Bar", "Bar met"])
-	for id: String in PASS_LEVELS:
+	for id: String in _pass_levels:
 		var d: Dictionary = _read(id + "_plain.json")
 		if d.is_empty():
 			continue
@@ -808,7 +834,7 @@ func _pass_plain_normal() -> void:
 func _pass_plain_relaxed() -> void:
 	print("\n### Plain mixed recipe on Relaxed (bar: wins with no gates and with the best placement)\n")
 	_head(["Level", "Placements tried", "Wins", "No gates", "Best placement", "Best result", "Worst result", "Bar met"])
-	for id: String in PASS_LEVELS:
+	for id: String in _pass_levels:
 		var d: Dictionary = _read(id + "_plain.json")
 		if d.is_empty():
 			continue
@@ -822,7 +848,7 @@ func _pass_plain_relaxed() -> void:
 func _pass_three_stars() -> void:
 	print("\n### All three stars: search with every tower the level offers (Normal)\n")
 	_head(["Level", "Seed", "Builds tried", "Wins", "Wins that met the star 3 rule", "Three-star wins", "Tried before the first three-star win", "Most lives left in a three-star win", "Found"])
-	for id: String in PASS_LEVELS:
+	for id: String in _pass_levels:
 		var d: Dictionary = _read(id + "_search_any.json")
 		if d.is_empty():
 			continue
@@ -845,8 +871,8 @@ func _pass_solo() -> void:
 	print("\n### No super tower: one attacking tower plus the level's Bells and Bakeries, two seeds (Normal)\n")
 	print("Outcomes are the number of builds that lost, won with 1 star, with 2 stars, with 3 stars. Best is the best result the search found. A search that won no game in its first 2500 builds may stop there when its partner did the same (RULES 12.6).\n")
 	_head(["Level", "Attacker", "Seed", "Builds tried", "Outcomes (lost / 1 / 2 / 3 stars)", "Wins that met the star 3 rule", "Most lives left in such a win (15 needed)", "Three-star wins", "Best result found"])
-	for id: String in PASS_LEVELS:
-		for only: String in ATTACKERS:
+	for id: String in _pass_levels:
+		for only: String in _attackers:
 			for suffix: String in ["a", "b"]:
 				var d: Dictionary = _solo_file(id, only, suffix)
 				if d.is_empty():
@@ -860,13 +886,13 @@ func _pass_solo() -> void:
 					d["rule3_wins"], "-" if int(d["rule3_best_lives"]) < 0 else d["rule3_best_lives"], d["three_star_found"], best])
 	print("\nVerdict per level (no three-star win in any search is a pass):\n")
 	_head(["Level", "Attackers searched", "Searches", "Builds in all", "Wins in all", "Three-star wins found", "Verdict"])
-	for id: String in PASS_LEVELS:
+	for id: String in _pass_levels:
 		var attackers: int = 0
 		var threes: int = 0
 		var runs: int = 0
 		var builds: int = 0
 		var wins: int = 0
-		for only: String in ATTACKERS:
+		for only: String in _attackers:
 			var seen: bool = false
 			for suffix: String in ["a", "b"]:
 				var d: Dictionary = _solo_file(id, only, suffix)
@@ -887,7 +913,7 @@ func _pass_solo() -> void:
 			_row([_label(id), attackers, runs, builds, wins, threes, "pass" if threes == 0 else "**FAIL**"])
 	print("\nAttackers with no search, by the rule of RULES 12.6 (the flyers or walkers in the wave data cost 6 lives or more, so the tower can never keep 15 lives):\n")
 	_head(["Level", "Flyers cost", "Walkers cost", "Attacker", "Why no search"])
-	for id: String in PASS_LEVELS:
+	for id: String in _pass_levels:
 		var need: Dictionary = _read(id + "_need.json")
 		if need.is_empty():
 			continue
@@ -900,7 +926,7 @@ func _pass_solo() -> void:
 func _pass_random() -> void:
 	print("\n### Random play (250 per style, 750 plays per difficulty). Bar: three stars in under 10%\n")
 	_head(["Level", "Seed", "Normal: won", "Normal: keep 15 lives", "Normal: three stars", "Casual / typical / skilled three stars", "Relaxed: won", "Bar met"])
-	for id: String in PASS_LEVELS:
+	for id: String in _pass_levels:
 		var d: Dictionary = _read(id + "_spread.json")
 		if d.is_empty():
 			continue
@@ -924,7 +950,7 @@ func _pass_length() -> void:
 	print("\n### Length at 1x with no early calls: wave time plus 15 s for each build phase (bar: 5 to 10 minutes)\n")
 	print("Plain: its best placement on Normal (a loss ends early, so only a win gives a length). Search build: the best win of the any-tower search, played again with early calls off.\n")
 	_head(["Level", "Waves", "Plain: wave time", "Plain: total", "Search build, early calls off", "Wave time", "Total", "Plain in 5 to 10 min"])
-	for id: String in PASS_LEVELS:
+	for id: String in _pass_levels:
 		var p: Dictionary = _read(id + "_plain.json")
 		var b: Dictionary = _read(id + "_bench.json")
 		if p.is_empty():
@@ -955,7 +981,7 @@ func _pass_length() -> void:
 func _pass_size() -> void:
 	print("\n### Size and speed: largest wave, most creatures on the map at once, microseconds per tick (this PC, headless)\n")
 	_head(["Level", "Largest wave", "Peak: plain best play", "Peak: random plays", "Peak: search plays", "Benchmark build", "Peak", "Mean", "99th pct", "Max", "Mean with 50+ creatures", "99th pct with 50+"])
-	for id: String in PASS_LEVELS:
+	for id: String in _pass_levels:
 		var p: Dictionary = _read(id + "_plain.json")
 		var sp: Dictionary = _read(id + "_spread.json")
 		var se: Dictionary = _read(id + "_search_any.json")
@@ -977,8 +1003,8 @@ func _pass_twists() -> void:
 	print("\n### Twists: some strategy wins on Normal\n")
 	print("Plain: the plain recipe with the Twist, over every placement the Twist leaves. Search: 1500 builds with every tower the Twist leaves.\n")
 	_head(["Level", "Twist", "Plain: placements", "Plain: wins", "Plain: best result", "Plain: no gates", "Search seed", "Search: builds", "Search: wins", "Search: best win", "Random play under the Twist: won on Normal", "Normal win found"])
-	var game: GameData = GameData.load_from("res://data")
-	for id: String in PASS_LEVELS:
+	var game: GameData = _game
+	for id: String in _pass_levels:
 		var p: Dictionary = _read(id + "_plain_twist.json")
 		var s: Dictionary = _read(id + "_search_twist.json")
 		if p.is_empty() and s.is_empty():
@@ -1026,16 +1052,29 @@ func _spread_twist_text(id: String) -> String:
 	return "%d of %d (%s)" % [won, n, _pct(won, n)]
 
 
+## Every tower and tier 3 path of the catalog: each tower and then its two paths, the attacking towers first (in catalog order), then the others.
+func _tower_keys() -> Array[String]:
+	var out: Array[String] = []
+	for support: bool in [false, true]:
+		for tower_id: StringName in _game.catalog.tower_ids():
+			var type: TowerType = _game.catalog.tower(tower_id)
+			if (type.kind != &"attack") != support:
+				continue
+			out.append(String(tower_id))
+			for spec: int in 2:
+				out.append(String(type.specs[spec]))
+	return out
+
+
 func _pass_coverage() -> void:
 	print("\n### Towers and paths in the three-star wins found (any-tower search, Normal): builds using each\n")
-	var keys: Array[String] = ["sling_post", "quickshot", "stone_sling", "pumpkin_catapult", "prize_pumpkin", "jam_pot", "longbow_loft", "giant_bow", "triple_bow",
-		"firework_tower", "star_bloom", "skyrocket", "lullaby_bell", "hush_bell", "night_bell", "bakery", "grand_oven", "spice_kitchen"]
+	var keys: Array[String] = _tower_keys()
 	var head: Array = ["Level", "Three-star wins"]
 	head.append_array(keys)
 	_head(head)
 	var totals: Dictionary = {}
 	var total_wins: int = 0
-	for id: String in PASS_LEVELS:
+	for id: String in _pass_levels:
 		var use: Dictionary = {}
 		var wins: int = 0
 		var files: Array[String] = [id + "_search_any.json"]
@@ -1068,7 +1107,7 @@ func _pass_det() -> void:
 	print("\n### Determinism: same inputs, same result\n")
 	print("Each job plays 24 strategies twice and once from saved strategy data, replays them with a save and load mid-wave at 3 points, and repeats a 60 build search. The last column is the same job run again in a new process.\n")
 	_head(["Level", "Seed", "Plays repeated", "Identical", "Save and load mid-wave", "Identical", "Search repeated identical", "Chain hash", "New process: same chain hash"])
-	for id: String in PASS_LEVELS:
+	for id: String in _pass_levels:
 		for variant: String in ["det", "det_twist"]:
 			var d: Dictionary = _read("%s_%s.json" % [id, variant])
 			if d.is_empty():
@@ -1084,14 +1123,14 @@ func _pass_det() -> void:
 ## The plain recipe of each level written out, and the simplest three-star build the any-tower search found.
 func _pass_builds() -> void:
 	print("\n### Plain recipe, written out\n")
-	for id: String in PASS_LEVELS:
+	for id: String in _pass_levels:
 		var p: Dictionary = _read(id + "_plain.json")
 		if p.is_empty():
 			continue
 		print("**%s**, as played at its best placement (%s):\n" % [_label(id), p["summary"]["normal"]["best"]["gate"]])
 		print("```\n" + String(p["recipe_text"]) + "```\n")
 	print("\n### Three-star builds, written out (simplest found by the any-tower search)\n")
-	for id: String in PASS_LEVELS:
+	for id: String in _pass_levels:
 		var d: Dictionary = _read(id + "_search_any.json")
 		if d.is_empty():
 			continue
@@ -1150,7 +1189,7 @@ func _pass_whatif() -> void:
 		var rows: Array = []
 		if not any.is_empty():
 			rows.append(["any tower", any])
-		for only: String in ATTACKERS:
+		for only: String in _attackers:
 			var d: Dictionary = _read("%s_solo_%s.json" % [key, only])
 			if d.is_empty():
 				continue
@@ -1174,7 +1213,7 @@ func _pass_whatif() -> void:
 		_head(["Search", "Seed", "Builds tried", "Wins", "Wins that met the rule", "Most lives left in such a win", "Three-star wins", "Verdict"])
 		var flit_rows: Array = [["any tower", flit_any]]
 		var flit_threes: int = 0
-		for only2: String in ATTACKERS:
+		for only2: String in _attackers:
 			var d3: Dictionary = _read("%s_solo_%s.json" % [variant[0], only2])
 			if not d3.is_empty():
 				flit_rows.append([only2 + " + support", d3])
@@ -1261,7 +1300,7 @@ func _pass_special() -> void:
 		return
 	print("\n### Who costs the lives: the plain recipe at its best placement on Normal, lives lost by creature type\n")
 	_head(["Level", "Best placement", "Result", "Lives lost, by creature"])
-	for id: String in PASS_LEVELS:
+	for id: String in _pass_levels:
 		var d: Dictionary = _read("special/%s_replay_plain.json" % id)
 		if d.is_empty():
 			continue
@@ -1271,8 +1310,6 @@ func _pass_special() -> void:
 	_pass_moon_moth()
 	_pass_dusk_moths()
 
-
-var _game: GameData = null
 
 
 func _wave_count(id: String) -> int:
@@ -1456,7 +1493,7 @@ func _pass_scoreboard() -> void:
 	print("\n## Scoreboard\n")
 	print("Bars from RULES 12.6. Plain: the plain mixed recipe, best placement. Three stars: builds found (tried before the first one). No super tower: the verdict over every search the rule asks for (a three-star build found by a lone attacker is a FAIL).\n")
 	_head(["Level", "Plain, Normal: best (placements won of tried)", "Plain, Relaxed: no gates / best", "Three stars found (first at build)", "No super tower", "Random three stars", "Length, min", "Largest wave / peak creatures / 99th pct us per tick", "Twist: search wins"])
-	for id: String in PASS_LEVELS:
+	for id: String in _pass_levels:
 		var p: Dictionary = _read(id + "_plain.json")
 		var se: Dictionary = _read(id + "_search_any.json")
 		var sp: Dictionary = _read(id + "_spread.json")
@@ -1468,7 +1505,7 @@ func _pass_scoreboard() -> void:
 		var n: Dictionary = p["summary"]["normal"]
 		var r: Dictionary = p["summary"]["relaxed"]
 		var threes: int = 0
-		for only: String in ATTACKERS:
+		for only: String in _attackers:
 			for suffix: String in ["a", "b"]:
 				var d: Dictionary = _solo_file(id, only, suffix)
 				if not d.is_empty():

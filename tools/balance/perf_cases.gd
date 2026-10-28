@@ -5,7 +5,10 @@ extends SceneTree
 ## with no play at all. Campaign levels and their Twists (the Twist's own counts included), and every run pack wave with
 ## each risk card (RunPacks.spawn_total, a Puffball counts as itself and its 3 Puffs, as RULES 14.3 counts).
 ##
-##   godot --headless --path . --script res://tools/balance/perf_cases.gd -- out=PATH [jobs=N]
+##   godot --headless --path . --script res://tools/balance/perf_cases.gd -- out=PATH [jobs=N] [tier=N] [fixture=1]
+##
+## B6: tier=N counts only the packs of that tier and below (RULES 14.9), and fixture=1 reads the test catalog, the fixture levels and the
+## fixture run tiers (tools/balance/fixtures.gd). With neither, it is the survey it was.
 ##
 ## jobs=N also prints the perf_peak.gd job lines (OUTDIR for the folder) for the N biggest run waves with a risk card and
 ## the N biggest pairs (a risk card wave and the next wave).
@@ -14,12 +17,20 @@ extends SceneTree
 ## waves may overlap) and writes the rows as JSON.
 
 const Bot: GDScript = preload("res://tools/balance/bot.gd")
+const Fixtures: GDScript = preload("res://tools/balance/fixtures.gd")
 const TOP: int = 12
 
 
 func _initialize() -> void:
-	var game: GameData = GameData.load_from("res://data")
-	if not game.problems.is_empty() or game.run == null:
+	var tier: int = 0
+	var fixture: bool = false
+	for argument: String in OS.get_cmdline_user_args():
+		if argument.begins_with("tier="):
+			tier = int(argument.trim_prefix("tier="))
+		if argument == "fixture=1":
+			fixture = true
+	var game: GameData = Fixtures.game() if fixture else GameData.load_from("res://data")
+	if game == null or not game.problems.is_empty() or game.run == null or tier < 0 or tier > game.run.tiers.size():
 		printerr("data problems")
 		quit(2)
 		return
@@ -43,6 +54,8 @@ func _initialize() -> void:
 		if card["kind"] == &"risk":
 			risk_cards.append(card)
 	for pack: Dictionary in game.run.packs:
+		if int(pack["tier"]) > tier:
+			continue
 		var sizes_by: Dictionary = {}
 		var names: Array[String] = ["none"]
 		for card: Dictionary in risk_cards:

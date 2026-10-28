@@ -8,6 +8,11 @@ extends SceneTree
 ##   run=PACK wave=N card=ID [first=1 seeds=5] [strategy=ID] out=PATH [save=DIR]   a run pack's wave N with a risk card (every card in the pool)
 ##
 ##   godot --headless --path . --script res://tools/balance/perf_peak.gd -- level=r3_l3 seeds=60 out=PATH
+##   godot --headless --path . --script res://tools/balance/perf_peak.gd -- fixture=1 level=r8_fx2 seeds=20 out=PATH save=DIR
+##   godot --headless --path . --script res://tools/balance/perf_peak.gd -- fixture=1 tier=2 run=b6_grumble_hill wave=16 card=crowded_night out=PATH
+##
+## B6: fixture=1 plays the test catalog and the fixture levels and run tiers (tools/balance/fixtures.gd). tier=N (run=) plays a run of that
+## content tier (RULES 14.9): its pool and its saved game carry the tier. A tier 0 run is the run it always was.
 ##   godot --headless --path . --script res://tools/balance/perf_peak.gd -- run=b6_grumble_hill wave=16 card=crowded_night out=PATH
 ##
 ## A bot plays to the build phase just before the target wave (for a run: with the risk card already taken for it). Then the
@@ -23,6 +28,7 @@ extends SceneTree
 
 const Bot: GDScript = preload("res://tools/balance/bot.gd")
 const RunBot: GDScript = preload("res://tools/balance/run_bot.gd")
+const Fixtures: GDScript = preload("res://tools/balance/fixtures.gd")
 const STYLES: Array[StringName] = [&"casual", &"typical", &"typical"]
 const REPEATS: int = 5
 const BUSY: int = 50
@@ -31,6 +37,7 @@ const SAVE_ROOT: String = "user://tests/perf_saves/"
 
 var _args: Dictionary = {}
 var _game: GameData = null
+var _tier: int = 0
 
 
 func _initialize() -> void:
@@ -38,8 +45,9 @@ func _initialize() -> void:
 		var parts: PackedStringArray = argument.split("=", true, 1)
 		if parts.size() == 2:
 			_args[parts[0]] = parts[1]
-	var game: GameData = GameData.load_from("res://data")
-	if not game.problems.is_empty() or game.run == null:
+	var game: GameData = Fixtures.game() if String(_args.get("fixture", "0")) == "1" else GameData.load_from("res://data")
+	_tier = int(_args.get("tier", "0"))
+	if game == null or not game.problems.is_empty() or game.run == null or _tier < 0 or _tier > game.run.tiers.size():
 		printerr("data problems")
 		quit(2)
 		return
@@ -174,7 +182,7 @@ func _run_case(game: GameData) -> Dictionary:
 			found_pack = true
 	if not found_pack or wave < 2 or wave > 17 or game.run.card(card).is_empty():
 		return {"bad": "need run=PACK wave=2..17 card=ID"}
-	var pool: Array[StringName] = game.run.card_ids()
+	var pool: Array[StringName] = game.run.card_ids(_tier)
 	var first: int = int(_args.get("first", "1"))
 	var seeds: int = int(_args.get("seeds", "5"))
 	var best: Dictionary = {"peak": -1}
@@ -187,7 +195,7 @@ func _run_case(game: GameData) -> Dictionary:
 				continue
 			played += 1
 			var res: Dictionary = RunBot.play(game, run_seed, "", false, pool, strat,
-				{"pack": pack_id, "stop_before": wave, "force_risk": {"card": String(card), "k": wave - 2}, "return_state": true})
+				{"pack": pack_id, "stop_before": wave, "force_risk": {"card": String(card), "k": wave - 2}, "return_state": true, "tier": _tier})
 			if res.has("bad") or not bool(res.get("stopped", false)) or not bool(res.get("forced_done", false)):
 				continue
 			reached += 1

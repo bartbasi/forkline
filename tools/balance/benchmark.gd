@@ -4,7 +4,7 @@ extends SceneTree
 ## Time per sim tick and peak live creatures for one level, on this PC (docs/ARCHITECTURE.md 9.4).
 ##
 ##   godot --headless --path . --script res://tools/balance/benchmark.gd -- level=r1_l1 build=PATH out=PATH
-##   (twist=1 plays the level with its Twist)
+##   (twist=1 plays the level with its Twist; fixture=1 plays a fixture level on the test catalog, tools/balance/fixtures.gd)
 ##
 ## `build` is a JSON file from run.gd: a search result (its best_win.strategy is played) or a
 ## spread result (its peak_strategy is played). Several builds can be given as build=A,B.
@@ -13,6 +13,7 @@ extends SceneTree
 ## Fold5 decides (ARCHITECTURE 9.2).
 
 const Bot: GDScript = preload("res://tools/balance/bot.gd")
+const Fixtures: GDScript = preload("res://tools/balance/fixtures.gd")
 const REPEATS: int = 5
 ## Ticks with at least this many creatures on the map count as "busy".
 const BUSY: int = 50
@@ -25,7 +26,10 @@ func _initialize() -> void:
 		var parts: PackedStringArray = argument.split("=", true, 1)
 		if parts.size() == 2:
 			_args[parts[0]] = parts[1]
-	var game: GameData = GameData.load_from("res://data")
+	var game: GameData = Fixtures.game() if String(_args.get("fixture", "0")) == "1" else GameData.load_from("res://data")
+	if game == null:
+		quit(2)
+		return
 	var level_id: StringName = StringName(String(_args.get("level", "r1_l1")))
 	if not game.problems.is_empty() or not game.levels.has(level_id):
 		printerr("bad data or level")

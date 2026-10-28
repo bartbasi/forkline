@@ -44,11 +44,15 @@ extends SceneTree
 ##   Paths are res:// or plain file paths. The usual checks still apply. Data files are never touched.
 ## Any mode also takes stat=pumpkin_catapult.splash:+25 (a what-if on tower numbers; see _apply_stat).
 ## Any mode also takes tweak=gold:300,count_pct:120 (a what-if; see _apply_tweak).
+## Any mode takes fixture=1 (B6): the game is the test catalog with the four expansion towers and the creatures the sim engineer has,
+##   plus the fixture levels r5_fx1, r6_fx1, r7_fx1, r8_fx1 and r8_fx2 (tools/balance/fixtures.gd), one for each map feature and one with
+##   all four. The result then says "fixture": true. Without it nothing changes.
 ## The result is one JSON object, written to `out` when given and always printed after "RESULT ".
 ## Every random draw comes from a generator seeded with `seed` plus a fixed offset, so the same
 ## command line always gives the same output.
 
 const Bot: GDScript = preload("res://tools/balance/bot.gd")
+const Fixtures: GDScript = preload("res://tools/balance/fixtures.gd")
 
 var _args: Dictionary = {}
 var _waves: int = 0
@@ -59,7 +63,11 @@ func _initialize() -> void:
 		var parts: PackedStringArray = argument.split("=", true, 1)
 		if parts.size() == 2:
 			_args[parts[0]] = parts[1]
-	var game: GameData = GameData.load_from("res://data")
+	var fixture: bool = String(_args.get("fixture", "0")) == "1"
+	var game: GameData = Fixtures.game() if fixture else GameData.load_from("res://data")
+	if game == null:
+		quit(2)
+		return
 	if not game.problems.is_empty():
 		printerr("data problems: %s" % ", ".join(game.problems))
 		quit(2)
@@ -115,6 +123,8 @@ func _initialize() -> void:
 	result["seed"] = seed_value
 	if ctx["twist_on"]:
 		result["twist"] = true
+	if fixture:
+		result["fixture"] = true
 	result["seconds"] = (Time.get_ticks_msec() - started) / 1000.0
 	var text: String = JSON.stringify(result)
 	print("RESULT " + text)
@@ -760,6 +770,16 @@ func _replay(ctx: Dictionary) -> Dictionary:
 			"bosses": watch.get("bosses", {}).values(), "relaxed": relaxed}
 		if not saved.is_empty():
 			row["saved"] = {"won": saved["won"], "stars": saved["stars"], "lives": saved["lives"], "cleared": saved["cleared"]}
+		# B6: what the expansion's towers and creature rules did. Only where it is new: a level that offers an expansion tower, and
+		# a creature rule that fired. Regions 1 to 4 give rows exactly as before.
+		var expansion: bool = false
+		for tower_id: StringName in ctx["offered"]:
+			expansion = expansion or Bot.EXPANSION_TOWERS.has(tower_id)
+		if expansion:
+			row["shots"] = watch.get("shots", {})
+			row["hits"] = watch.get("hits", {})
+		if not (watch.get("rule_events", {}) as Dictionary).is_empty():
+			row["rule_events"] = watch["rule_events"]
 		rows.append(row)
 	return {"rows": rows, "pick": pick}
 

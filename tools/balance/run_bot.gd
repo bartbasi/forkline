@@ -28,7 +28,13 @@ extends RefCounted
 ## `play` also takes opts "stack" (top, middle, bottom ids), "pack" (a pack id replacing the seed's pack of that band) and
 ## "stop_after" (stop once that many waves have started and none is on the map), for forced stacks and packs.
 ##
+## B6 changes (docs/ARCHITECTURE.md 14.8). `play` takes opts "tier" (default 0): the run's content tier, passed to RunSession.start and to
+## a forced map. The four expansion towers have bot weights of their own (NEW_WEIGHT); their tastes are drawn from a second generator,
+## so a tier 0 run draws exactly what it did before. The Scarecrow is support, like the Bell. Road seen leaves out tunnel tiles.
+##
 ## Run state ("st") is plain data and holds no Battle, so a restored battle can carry on with the same bot.
+
+const Bot: GDScript = preload("res://tools/balance/bot.gd")
 
 const TICK_CAP: int = 72000                       # 60 minutes of wave time: far past a run. A play that hits it is "stuck".
 const BUILD_SECONDS: int = 15                     # a build phase counts 15 s in a run's length (RULES 12.5)
@@ -72,7 +78,11 @@ const BASE_WEIGHT: Dictionary = {
 	&"sling_post": 1.5, &"pumpkin_catapult": 1.0, &"longbow_loft": 1.0, &"firework_tower": 0.7,
 	&"lullaby_bell": 0.8, &"bakery": 0.8,
 }
-const CAPS: Dictionary = {&"lullaby_bell": 2, &"bakery": 1}
+## The expansion towers (B6). Their weights and tier 3 paths are drawn from a second generator (new_state).
+const NEW_WEIGHT: Dictionary = {
+	&"bramble_cottage": 1.0, &"scarecrow": 0.8, &"snow_fort": 1.0, &"moth_lantern": 0.7,
+}
+const CAPS: Dictionary = {&"lullaby_bell": 2, &"bakery": 1, &"scarecrow": 2}
 const PRIORITY: Dictionary = {
 	&"towers": [&"tower", &"perk", &"gate", &"economy", &"risk"],
 	&"economy": [&"economy", &"tower", &"perk", &"gate", &"risk"],
@@ -124,12 +134,14 @@ static func new_state(session: RunSession, strat: Dictionary, run_seed: int) -> 
 	for id: StringName in BASE_WEIGHT.keys():
 		weight[id] = float(BASE_WEIGHT[id]) * rng.randf_range(0.7, 1.3)
 		spec_of[id] = rng.randi_range(0, 1)
-	# Spots ranked by the road they see, most first, ties in cell order (as RULES 12.6 step 1).
-	var road: Array[Vector2i] = []
-	for r: int in level.rows:
-		for c: int in Sim.MAP_COLUMNS:
-			if level.is_road(Vector2i(c, r)):
-				road.append(Vector2i(c, r))
+	# The expansion towers' tastes, from a generator of their own (B6).
+	var rng2: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng2.seed = ("%d:%s:bot2" % [run_seed, String(strat["id"])]).hash()
+	for id: StringName in NEW_WEIGHT.keys():
+		weight[id] = float(NEW_WEIGHT[id]) * rng2.randf_range(0.7, 1.3)
+		spec_of[id] = rng2.randi_range(0, 1)
+	# Spots ranked by the road they see, most first, ties in cell order (as RULES 12.6 step 1). Tunnel tiles do not count.
+	var road: Array[Vector2i] = Bot.seen_road_cells(level)
 	var keyed: Array = []
 	for i: int in level.spots.size():
 		var seen: int = 0
@@ -415,7 +427,7 @@ static func _spot_for(type: StringName, free: Array[Vector2i], ranked: Array[Vec
 				most = near
 				best = spot
 		return best
-	if type == &"lullaby_bell":
+	if type == &"lullaby_bell" or type == &"scarecrow":
 		for spot: Vector2i in free:
 			if ranked.find(spot) >= 2:
 				return spot
@@ -475,9 +487,9 @@ static func play(game: GameData, run_seed: int, day: String, relaxed: bool, pool
 		var forced_stack: Array = opts.get("stack", [])
 		var forced_pack: String = String(opts.get("pack", ""))
 		if forced_stack.is_empty() and forced_pack == "":
-			session = RunSession.start(run_seed, day, relaxed, pool, game.run, game.catalog)
+			session = RunSession.start(run_seed, day, relaxed, pool, game.run, game.catalog, int(opts.get("tier", 0)))
 		else:
-			session = forced_session(game, run_seed, relaxed, pool, forced_stack, forced_pack)
+			session = forced_session(game, run_seed, relaxed, pool, forced_stack, forced_pack, int(opts.get("tier", 0)))
 		if session == null:
 			return {"bad": "RunSession.start gave null for seed %d" % run_seed}
 		st = new_state(session, strat, run_seed)
@@ -618,7 +630,7 @@ static func play(game: GameData, run_seed: int, day: String, relaxed: bool, pool
 					if game.catalog.enemy(enemy.type).boss:
 						boss_seen = true
 						boss_min = mini(boss_min, enemy.health * 1000 / maxi(enemy.max_health, 1))
-						var left: int = boss_dist[(enemy.pos.y / Sim.UNIT) * Sim.MAP_COLUMNS + enemy.pos.x / Sim.UNIT]
+						var left: int = Bot.steps_left(b, boss_dist, enemy)
 						boss_steps = left if boss_steps < 0 else mini(boss_steps, left)
 		wave_ticks[index] = b.tick - first_tick
 	var res: Dictionary = session.result()
@@ -692,8 +704,8 @@ static func _roundtrip(game: GameData, session: RunSession) -> Dictionary:
 
 ## A run on a forced stack and/or pack. The seed's own plan fills what is not forced. The session is made the public way:
 ## the level from MapAssembler.build, a Battle around it, and RunSession.from_data with no picks (a new run's save).
-static func forced_session(game: GameData, run_seed: int, relaxed: bool, pool: Array[StringName], stack: Array, pack: String) -> RunSession:
-	var plan: Dictionary = MapAssembler.plan(run_seed, game.run)
+static func forced_session(game: GameData, run_seed: int, relaxed: bool, pool: Array[StringName], stack: Array, pack: String, tier: int = 0) -> RunSession:
+	var plan: Dictionary = MapAssembler.plan(run_seed, game.run, tier)
 	if plan.is_empty():
 		return null
 	var top: StringName = plan["top"]
@@ -719,7 +731,10 @@ static func forced_session(game: GameData, run_seed: int, relaxed: bool, pool: A
 	var ids: Array[String] = []
 	for id: StringName in pool:
 		ids.append(String(id))
-	return RunSession.from_data({"format": RunSession.FORMAT, "seed": run_seed, "day": "", "pool": ids, "picks": []}, made, game.run)
+	var saved: Dictionary = {"format": RunSession.FORMAT, "seed": run_seed, "day": "", "pool": ids, "picks": []}
+	if tier > 0:
+		saved["tier"] = tier
+	return RunSession.from_data(saved, made, game.run)
 
 
 static func _tier_sum(b: Battle) -> int:

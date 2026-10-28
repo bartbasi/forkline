@@ -31,6 +31,12 @@
 # Phase C    every one of the 42 stacks forced onto seeds 1 to 200 (natural seeds miss walls: TUNING_RUNS 3.5)
 # Phase D    perk_fit=2 (every sidegrade perk passed) with every card, seeds 1 to 100
 
+# B6: TIER=N plays the runs and dailies at content tier N (RULES 14.9), FIXTURE=1 on the fixture data (tools/balance/fixtures.gd). Use a
+# folder of its own for each tier (OUT=.../tier4). Phases B, C and D read their job files, which runs_summary.gd prints with the flags (tier=N fixture=1).
+TF=""
+if [ -n "$TIER" ] && [ "$TIER" != "0" ]; then TF="$TF tier=$TIER"; fi
+if [ "$FIXTURE" = "1" ]; then TF="$TF fixture=1"; fi
+
 PHASE="${1:-A}"
 JOBS="${2:-3}"
 OUT="${OUT:-docs/balance/raw/2026-10-25-b4}"
@@ -39,25 +45,25 @@ LIST="$OUT/jobs_$PHASE.txt"
 : > "$LIST"
 if [ "$PHASE" = "A" ]; then
   for FIRST in 1 51 101 151; do
-    echo "mode=rates first=$FIRST count=50 pool=base relaxed=0 out=$OUT/rates_base_r0_$FIRST.json" >> "$LIST"
+    echo "mode=rates first=$FIRST count=50 pool=base relaxed=0$TF out=$OUT/rates_base_r0_$FIRST.json" >> "$LIST"
   done
   for FIRST in 1 51 101 151; do
-    echo "mode=rates first=$FIRST count=50 pool=base relaxed=1 out=$OUT/rates_base_r1_$FIRST.json" >> "$LIST"
+    echo "mode=rates first=$FIRST count=50 pool=base relaxed=1$TF out=$OUT/rates_base_r1_$FIRST.json" >> "$LIST"
   done
-  echo "mode=static out=$OUT/static.json" >> "$LIST"
-  echo "mode=det first=1 count=50 out=$OUT/det.json" >> "$LIST"
-  echo "mode=det first=51 count=150 days=100 day_from=50 out=$OUT/det_more.json" >> "$LIST"
+  echo "mode=static$TF out=$OUT/static.json" >> "$LIST"
+  echo "mode=det first=1 count=50$TF out=$OUT/det.json" >> "$LIST"
+  echo "mode=det first=51 count=150 days=100 day_from=50$TF out=$OUT/det_more.json" >> "$LIST"
   for FIRST in 1 51 101 151; do
-    echo "mode=rates first=$FIRST count=50 pool=all relaxed=0 out=$OUT/rates_all_r0_$FIRST.json" >> "$LIST"
-    echo "mode=rates first=$FIRST count=50 pool=all relaxed=1 out=$OUT/rates_all_r1_$FIRST.json" >> "$LIST"
+    echo "mode=rates first=$FIRST count=50 pool=all relaxed=0$TF out=$OUT/rates_all_r0_$FIRST.json" >> "$LIST"
+    echo "mode=rates first=$FIRST count=50 pool=all relaxed=1$TF out=$OUT/rates_all_r1_$FIRST.json" >> "$LIST"
   done
-  echo "mode=risk first=1 count=30 strat=economy_wide out=$OUT/risk_economy_wide.json" >> "$LIST"
+  echo "mode=risk first=1 count=30 strat=economy_wide$TF out=$OUT/risk_economy_wide.json" >> "$LIST"
   for FROM in 0 50 100 150 200 250 300 350; do
-    echo "mode=daily from=$FROM count=50 extra=400 out=$OUT/daily_$FROM.json" >> "$LIST"
+    echo "mode=daily from=$FROM count=50 extra=400$TF out=$OUT/daily_$FROM.json" >> "$LIST"
   done
   for FIRST in 1 51 101 151; do
     for POOL in base all; do
-      echo "mode=cardvalue first=$FIRST count=50 pool=$POOL out=$OUT/cardvalue_${POOL}_$FIRST.json" >> "$LIST"
+      echo "mode=cardvalue first=$FIRST count=50 pool=$POOL$TF out=$OUT/cardvalue_${POOL}_$FIRST.json" >> "$LIST"
     done
   done
 else
@@ -77,6 +83,6 @@ export -f run_one
 cat "$LIST" | xargs -P "$JOBS" -I{} bash -c 'run_one "{}" '"$OUT"
 if [ "$PHASE" = "A" ] && [ ! -f "$OUT/det_again.json" ]; then
   # The same-seed checks again in a new process: the chain hash must match the first.
-  timeout 7200 godot --headless --path . --script res://tools/balance/runs.gd -- mode=det first=1 count=50 out="$OUT/det_again.json" > /dev/null 2>> "$OUT/errors.txt"
+  timeout 7200 godot --headless --path . --script res://tools/balance/runs.gd -- mode=det first=1 count=50$TF out="$OUT/det_again.json" > /dev/null 2>> "$OUT/errors.txt"
 fi
 echo "done: $(ls "$OUT" | wc -l) files in $OUT"
