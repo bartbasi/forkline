@@ -19,19 +19,32 @@ powershell -ExecutionPolicy Bypass -File scripts\build.ps1
 The script:
 
 1. Checks that Godot is version 4.7.2.stable. It uses `godot` on PATH, or the GODOT environment variable.
-2. Imports the project. The first import of a fresh project can crash or stop early, so the script reruns it (up to 3 tries) until `.godot/global_script_class_cache.cfg` exists. You do not run the import yourself.
-3. Exports `build/forkline-debug.apk` with a private temp folder (`build/tmp.*`, removed afterwards). It retries a failed export up to 3 times.
-4. Counts the build as good only when Godot exited 0 and the APK is new, over 1 MB and a valid zip.
+2. Checks that the working tree is clean (see "Build from a clean tree" below) and prints the commit it builds.
+3. Imports the project. The first import of a fresh project can crash or stop early, so the script reruns it (up to 3 tries) until `.godot/global_script_class_cache.cfg` exists. You do not run the import yourself.
+4. Exports `build/forkline-debug.apk` with a private temp folder (`build/tmp.*`, removed afterwards). It retries a failed export up to 3 times.
+5. Counts the build as good only when Godot exited 0 and the APK is new, over 1 MB and a valid zip.
 
 On any failure it prints `BUILD FAILED: ...` and exits 1. It never reports success without an APK. If you pipe the output (for example to `tail`), check the exit code too: use `set -o pipefail`, or look for the `Built` line.
 
 Each Godot import and export is limited by a timeout (300 s and 600 s).
+
+## Build from a clean tree
+
+`build.sh`, `build.ps1` and `build_release.sh` export the files in the folder they are in. If that folder holds uncommitted work, the APK would contain code that no commit has, and `check_apk.sh` would still pass it, because it compares the APK with the same folder. So the scripts refuse to build when `git status --porcelain` shows a changed tracked file or an untracked file that git does not ignore (`build/`, `.godot/` and `android/` are ignored). The message says to commit, or to build from a clean clone. The commit being built is printed at the start, for the release notes. `bash scripts/check_clean.sh` runs just this check.
+
+- Local test on your own phone: `bash scripts/build.sh --allow-dirty` (PowerShell: `-AllowDirty`). It prints a warning. Never publish such a build.
+- `build_release.sh` has no such option and rejects every option. It also refuses a folder that has no `.git`, because it cannot check one.
+- `build.sh` accepts a folder with no `.git`, such as a copy made with `git archive`, and says so. That copy holds only what the commit holds.
+
+`bash scripts/test_check_clean.sh` tests all of this in a scratch git repo with a stand in for Godot. It never touches the real repo.
 
 ## Why the private temp folder
 
 Godot writes its temporary export files to the shared temp folder, named with the clock in whole seconds (`tmpexport-unaligned.<unix seconds>.apk`). Two exports that start in the same second overwrite each other, and one fails with "Could not unzip temporary unaligned APK". Other Godot projects on this machine, or two builds of Forkline at once, can hit this. Pointing TEMP and TMP at a folder inside `build/` for the export step avoids it. The retry covers any other one-off failure.
 
 ## Build in a fresh worktree
+
+This is the way to build while other work is uncommitted in the main folder.
 
 ```bash
 git worktree add --detach "$TEMP/fl_try" HEAD
@@ -84,6 +97,8 @@ The script does what `build.sh` does (version check, import with retries, a priv
 | build/forkline-release.aab | The app bundle that Play Console takes. Signed with the upload key. |
 | build/forkline-release.apk | A release APK for checking the release build on a phone. Same key, native code compressed. It is not attached to GitHub test builds (see below). |
 
+Publish only a build made from a clean checkout of the tagged commit. A clean clone is the simplest way: `git clone <repo> <folder>`, `git checkout <tag or sha>`, then run the script there. The script prints the commit.
+
 Both have package `io.github.bartbasi.forkline`, version code and name from `export_presets.cfg` (now 1 and 0.1), arm64-v8a only, no permissions, and the same immersive and portrait settings as the debug APK. The bundle keeps the game files in an install time asset pack (`assetPackInstallTime/assets/`), which is how Godot lays out a Gradle bundle.
 
 Raise `version/code` in all three presets of `export_presets.cfg` for every upload. Play refuses a code it has seen. The version name is what players read.
@@ -106,7 +121,7 @@ The key is not in the repo and never goes in it.
 
 The fingerprint is public. Play Console shows it after the first upload, and it must be the same. `check_aab.sh` and `check_apk.sh --release` print the fingerprint of the signed file, and `check_aab.sh` fails if it differs from the key in the folder.
 
-`build_release.sh` hands the key to Godot through the environment variables `GODOT_ANDROID_KEYSTORE_RELEASE_PATH`, `GODOT_ANDROID_KEYSTORE_RELEASE_USER` and `GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD`, only for the export commands. It never prints the password. `export_presets.cfg` holds no keystore path, user or password for release. `scripts/check_secrets.sh` fails if a tracked file (or a file git would add) has one, a key file name, or the real password. The build script runs it first. Godot's own editor can write credentials to `.godot/export_credentials.cfg`, which git ignores. Do not type the release key into the export dialog.
+`build_release.sh` hands the key to Godot through the environment variables `GODOT_ANDROID_KEYSTORE_RELEASE_PATH`, `GODOT_ANDROID_KEYSTORE_RELEASE_USER` and `GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD`, only for the export commands. It never prints the password. `export_presets.cfg` holds no keystore path, user or password for release. Godot 4.7.2 gives the password to its Gradle process on the Gradle command line, so for the minutes of a release export it can be read by other programs the same Windows user runs. So: never run the release export with `--verbose` (`build_release.sh` does not, and must not get that flag), do not share build logs, and run no process listing or screen recording during it. The password is never printed or written anywhere by the script. `scripts/check_secrets.sh` fails if a tracked file (or a file git would add) has one, a key file name, or the real password. The build script runs it first. Godot's own editor can write credentials to `.godot/export_credentials.cfg`, which git ignores. Do not type the release key into the export dialog.
 
 ### What Bart must back up
 
@@ -236,7 +251,7 @@ Bart approved the policy on Pages on 2026-10-26. Agents never run these steps.
 
 Each verified milestone gets a public pre-release with the APK attached. The full suite must pass on a clean copy and `bash scripts/check_apk.sh` must pass first. Agents never run these steps.
 
-1. Build with `bash scripts/build.sh`, then write the checksum next to the APK:
+1. Build from a clean clone of the tagged commit (`git clone`, then `git checkout <the commit>`), never from the main working tree, which other work uses. `bash scripts/build.sh` refuses a dirty tree. Do not use `--allow-dirty` here. Then write the checksum next to the APK:
 
    ```bash
    cd build

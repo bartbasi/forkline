@@ -216,6 +216,14 @@ tier 0 or on regions 1 to 4: the same command lines give the same files (see "Ch
 - `run_b6.sh`: phases T0 (tier 0 jobs of the last reports, played again), LS (forced lone searches), RT (runs and the daily at tiers 1 to 4) and PK
   (the most crowded wave as a saved game). `run_pass.sh` has seven attacking towers and `FIXTURE=1`; its seed numbers for the first four are unchanged.
 
+## The region 5 pass (task E5.2)
+
+Report: `region5-2026-10-28.md`. Raw numbers: `raw/2026-10-28-e52/` and `raw/2026-10-28-e52-b4b/`. Job lists: `run_pass.sh` and `run_pass_post.sh` (`SEED_SHIFT=100000`, the seeds of the 2026-10-25 pass), `run_b4.sh A` with `TIER=1` or no `TIER` for the runs and the daily, `run_e52.sh` (`BR`: forced lone Bramble Cottage searches; `PK`: the most crowded new wave as a saved game, with `jobs_e52_PK_extra.txt` for tier 1 run packs) and `run_whatif_e52.sh` (star 3 rule what-ifs for the levels where the lone Sling Post earns three stars).
+
+What-if options added to `runs.gd` (nothing changes unless one is set): `pool=minus:id,id` (the base cards without those), `towers=PATH` and `enemies=PATH` (other stat files), `data=DIR` (another copy of the whole data folder: packs, segments, levels, run files), `bramble_fit=1` (a bot puts a Bramble Cottage on the spot with the most road in the cottage's own reach), `bramble_cap=N` (a bot builds at most N cottages). The row's `bots` field records the last two. A tier 0 file made with the new tools equals the file made before (29 of 29 compared).
+
+A `tweak=strength:N` on `run.gd` sets every wave of the level to strength N percent (waves are 100 to 135 in the levels), so it is not the level's `strength` number; do not use it to make a level a little harder.
+
 ## Files
 
 - `tools/balance/bot.gd`: strategies, the generator and mutator, the plain recipe, the player.

@@ -13,6 +13,8 @@
 # to the full path of the Godot exe. The Android SDK, the JDK and the debug
 # keystore come from Godot's Editor Settings, never from this repo.
 
+param([switch]$AllowDirty)
+
 $ErrorActionPreference = 'Stop'
 
 $Root = Split-Path -Parent $PSScriptRoot
@@ -51,6 +53,29 @@ if (-not $Version.StartsWith($WantVersion)) {
     Stop-Build "This project needs Godot $WantVersion, but '$Godot' is version '$Version'."
 }
 Write-Host "Godot $Version"
+
+# Build only from a commit. A folder without .git (a copy made with git archive)
+# cannot be checked and is clean by construction.
+if (Test-Path (Join-Path $Root '.git')) {
+    $Changes = @(& git -C $Root status --porcelain 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+        Stop-Build 'git status failed, so the tree cannot be checked.'
+    }
+    if ($Changes.Count -gt 0) {
+        Write-Host "The working tree has $($Changes.Count) uncommitted change(s):"
+        $Changes | Select-Object -First 15 | ForEach-Object { Write-Host $_ }
+        if ($Changes.Count -gt 15) { Write-Host "... and $($Changes.Count - 15) more." }
+        if ($AllowDirty) {
+            Write-Host 'WARNING: building from a dirty tree (-AllowDirty). Do not publish this build.'
+        } else {
+            Stop-Build 'the working tree is not clean. Commit first, build from a clean clone, or add -AllowDirty for a local test build.'
+        }
+    } else {
+        Write-Host "Working tree is clean. Commit: $((& git -C $Root rev-parse HEAD) | Out-String)".Trim()
+    }
+} else {
+    Write-Host 'Not a git checkout: taken to be a clean copy of a commit.'
+}
 
 # Import until Godot has written its class cache. The first import of a fresh
 # project can crash or stop early, and a rerun finishes the job.

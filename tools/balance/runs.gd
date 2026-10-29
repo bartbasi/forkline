@@ -12,6 +12,7 @@ extends SceneTree
 ##
 ## mode=rates: every strategy (or strats=id,id) plays run seeds seed_of(first) to seed_of(first + count - 1).
 ##   pool=base is the pool with no unlocks, pool=all every card, pool=plus:id,id the base cards and those cards. relaxed=1 plays Relaxed.
+##   pool=minus:id,id is the base cards without those (E5.2). bramble_fit=1 puts a Bramble Cottage on the spot with the most road in its own reach. bramble_cap=N builds at most N. towers=PATH and enemies=PATH play other stat files, and data=DIR plays another copy of the data folder (levels, stats, run files, segments and packs): what-ifs; the real data is not touched.
 ## mode=det: the same-seed checks (docs/balance/README.md "Runs"). days=N day_from=K play N dailies from day offset K
 ##   (default the first min(count, 50) days). A save that a load refuses is recorded in the row (wave_refused, draft_refused).
 ## mode=daily: day offsets from to from + count - 1, counted from 2026-10-25 (offset 0). Always Normal and every card.
@@ -50,7 +51,7 @@ func _initialize() -> void:
 		if parts.size() == 2:
 			_args[parts[0]] = parts[1]
 	var fixture: bool = String(_args.get("fixture", "0")) == "1"
-	var game: GameData = Fixtures.game() if fixture else GameData.load_from("res://data")
+	var game: GameData = Fixtures.game() if fixture else GameData.load_from(String(_args.get("data", "res://data")))
 	_tier = int(_args.get("tier", "0"))
 	if game == null:
 		quit(2)
@@ -63,8 +64,12 @@ func _initialize() -> void:
 		printerr("data problems: %s" % ", ".join(game.problems))
 		quit(2)
 		return
+	if not _apply_files(game):
+		return
 	RunBot.set_bakery_min(int(_args.get("bakery_min", "2")))
 	RunBot.set_options(int(_args.get("bakery_from", "9")), int(_args.get("boss_aim", "0")), int(_args.get("perk_fit", "1")))
+	RunBot.set_bramble_fit(int(_args.get("bramble_fit", "0")))
+	RunBot.set_bramble_cap(int(_args.get("bramble_cap", "0")))
 	var tweak: String = String(_args.get("tweak", ""))
 	if tweak != "" and not _apply_tweak(game, tweak):
 		return
@@ -108,6 +113,10 @@ func _initialize() -> void:
 	if RunBot.get_bakery_min() != 2:
 		result["tweak"] = (String(result.get("tweak", "")) + " bakery_min:%d" % RunBot.get_bakery_min()).strip_edges()
 	result["bots"] = {"bakery_from": RunBot.bakery_from, "boss_aim": RunBot.boss_aim, "perk_fit": RunBot.perk_fit}
+	if RunBot.bramble_fit != 0:
+		result["bots"]["bramble_fit"] = RunBot.bramble_fit
+	if RunBot.bramble_cap != 0:
+		result["bots"]["bramble_cap"] = RunBot.bramble_cap
 	for key: String in ["stack", "pack", "stop"]:
 		if _args.has(key):
 			result[key] = String(_args[key])
@@ -123,6 +132,39 @@ func _initialize() -> void:
 		file.store_string(text)
 		file.close()
 	quit(0)
+
+
+## towers=PATH and enemies=PATH (E5.2): play other stat files than data/stats/towers.json and enemies.json, as a what-if. A missing or
+## bad file stops the run with exit code 2. Nothing in data/ is touched. With neither argument this changes nothing.
+func _apply_files(game: GameData) -> bool:
+	var towers_path: String = String(_args.get("towers", ""))
+	var enemies_path: String = String(_args.get("enemies", ""))
+	if towers_path == "" and enemies_path == "":
+		return true
+	var towers: Variant = _read_json(towers_path if towers_path != "" else "res://data/stats/towers.json")
+	var enemies: Variant = _read_json(enemies_path if enemies_path != "" else "res://data/stats/enemies.json")
+	var rules: Variant = _read_json("res://data/stats/rules.json")
+	if towers == null or enemies == null or rules == null:
+		quit(2)
+		return false
+	var catalog: Catalog = Catalog.from_data(towers, enemies, rules)
+	if catalog == null:
+		printerr("stat files are refused: %s" % ", ".join(Catalog.check(towers, enemies, rules)))
+		quit(2)
+		return false
+	game.catalog = catalog
+	return true
+
+
+func _read_json(path: String) -> Variant:
+	if not FileAccess.file_exists(path):
+		printerr("cannot read %s" % path)
+		return null
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if not parsed is Dictionary:
+		printerr("%s is not a JSON object" % path)
+		return null
+	return parsed
 
 
 ## The i-th run seed: i times 2654435761, modulo 2^32. A spread of seeds like the ones a phone draws.
@@ -165,8 +207,8 @@ func _apply_tweak(game: GameData, tweak: String) -> bool:
 	return true
 
 
-## pool=base (no unlocks), pool=all (every card), or pool=plus:id,id (the base cards and those unlock cards: what-ifs that find
-## which unlock cards cost the bots win rate).
+## pool=base (no unlocks), pool=all (every card), pool=plus:id,id (the base cards and those unlock cards: what-ifs that find
+## which unlock cards cost the bots win rate) or pool=minus:id,id (the base cards without those, E5.2).
 func _pool(game: GameData, which: String) -> Array[StringName]:
 	if which == "all":
 		return game.run.card_ids(_tier)
@@ -175,6 +217,10 @@ func _pool(game: GameData, which: String) -> Array[StringName]:
 		for id: String in which.trim_prefix("plus:").split(",", false):
 			if not game.run.card(StringName(id)).is_empty() and not out.has(StringName(id)):
 				out.append(StringName(id))
+	if which.begins_with("minus:"):
+		# E5.2: the base cards without these (what-if: does one card, such as the Bramble Cottage's, cost the bots win rate).
+		for id: String in which.trim_prefix("minus:").split(",", false):
+			out.erase(StringName(id))
 	return out
 
 

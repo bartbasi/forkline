@@ -20,6 +20,9 @@
 # tooling only. Godot 4.7.2 must be on PATH as "godot", or set GODOT. The Android
 # SDK and the JDK come from Godot's Editor Settings, never from this repo.
 #
+# It builds only from a clean git checkout and has no way to skip that. Use a
+# clean clone of the tagged commit (docs/release.md). Never run it with --verbose.
+#
 # Any failure prints "BUILD FAILED: ..." and exits 1.
 
 set -euo pipefail
@@ -39,6 +42,8 @@ fail() {
 	exit 1
 }
 
+[ "$#" -eq 0 ] || fail "this script takes no options. A release is always built from a clean commit."
+
 for tool in timeout unzip cygpath; do
 	command -v "$tool" > /dev/null 2>&1 || fail "'$tool' was not found. Run this script in Git Bash."
 done
@@ -49,6 +54,10 @@ case "$version" in
 	"$want_version"*) echo "Godot $version" ;;
 	*) fail "This project needs Godot $want_version, but '$godot' is version '$version'." ;;
 esac
+
+# A release is built only from a commit, never from a dirty tree and never from
+# a folder that git cannot check. There is no option to skip this.
+bash "$root/scripts/check_clean.sh" || fail "the release must be built from a clean git checkout. Commit first, or build from a clean clone of the tagged commit."
 
 # The upload key. Read it here, hand it to Godot only for the export commands.
 key_dir="${FORKLINE_RELEASE_DIR:-}"

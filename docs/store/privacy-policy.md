@@ -12,7 +12,7 @@ Nothing. Forkline has no accounts, no ads, no analytics and no tracking. It does
 
 Forkline saves a few things so you can pick up where you left off:
 
-- Your settings: whether sound is on.
+- Your settings: whether sound effects are on and whether music is on.
 - Your progress: the stars you have earned on each campaign level, which Twists you have cleared, which towers, creatures and levels you have already met, and a few counters that unlock cards in roguelite runs.
 - The daily challenge: your best result for the day and your streak. Forkline reads your phone's date to pick the day's challenge and to count the streak.
 - Games in progress: one campaign level, one roguelite run and one daily run, each saved at the exact moment you left it.

@@ -1592,7 +1592,7 @@ Bart chose the exact moment (hard stop A).
 
 - Leaving the app always saves: focus loss and app pause come first, even when the app is later swiped away or killed in the background (3.6, step 4).
 - After a forced stop with the app still in front, which brings no focus loss or app pause, the game resumes from its last save (5.1), by design, as Bart was told on 2026-10-26. During a wave that save is the start of the wave that was running, or a later early call or pause, so the wave comes back with the build it started with, never in the build phase before it. In a build phase it is that build phase, without the changes made since its last save. So a crash or an out of memory kill cannot replay a wave with a different build, but it can lose the seconds played since the last save, at most since that wave began (QA 2026-10-26 q1, 2026-10-27 m1).
-- The saved game holds the whole battle: creatures, timers, towers, gates, gold, lives and effects (5.6). Killing the app cannot dodge a run loss or retry a daily: it can only lose the play since the last save point.
+- The saved game holds the whole battle: creatures, timers, towers, gates, gold, lives and effects (5.6). Killing the app cannot undo a loss the game has recorded or start a daily over. It can only go back to the last save point, at most to the start of the current wave, with the same build (security review 2026-10-29, N16).
 - On launch the App loads every saved game. The Continue card resumes the most recent one; each mode's own way in resumes that mode's game (3.6, step 2). A resumed game opens paused, on the Pause menu.
 - tests/sim/ proves it: snapshot at many ticks on levels with every creature, tower and effect, restore, play on, and compare with an uninterrupted run (section 10).
 

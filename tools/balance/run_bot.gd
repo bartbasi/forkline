@@ -72,6 +72,25 @@ static func get_bakery_min() -> int:
 	return bakery_min
 
 
+## E5.2. 1 = a bot puts a pulse tower (the Bramble Cottage) on the free spot with the most road tiles within the tower's own reach, outside
+## tunnels, as a player who has read its card would. 0 (the default, and the report's bars) = it takes the best free spot by road within
+## 2.5 tiles like any attacker, which is the plain recipe's rule (RULES 12.6).
+static var bramble_fit: int = 0
+
+
+static func set_bramble_fit(n: int) -> void:
+	bramble_fit = n
+
+
+## E5.2. A cap on the Bramble Cottages a bot builds (0 = no cap, the default, and the report's bars). A what-if: a player builds one or two
+## at the road, not a quarter of the towers.
+static var bramble_cap: int = 0
+
+
+static func set_bramble_cap(n: int) -> void:
+	bramble_cap = n
+
+
 const PICKS: Array[StringName] = [&"towers", &"economy", &"risk", &"random"]
 const BUILDS: Array[StringName] = [&"wide", &"tall"]
 const BASE_WEIGHT: Dictionary = {
@@ -165,8 +184,21 @@ static func new_state(session: RunSession, strat: Dictionary, run_seed: int) -> 
 			if dx * dx + dy * dy <= REACH * REACH:
 				n += 1
 		cover[cell] = n
+	# E5.2: for each spot, the road tiles within a Bramble Cottage's own reach (used only when bramble_fit is 1).
+	var near_pulse: Dictionary = {}
+	var cottage: TowerType = b.catalog.tower(&"bramble_cottage") if b.catalog.has_tower(&"bramble_cottage") else null
+	if cottage != null:
+		var pulse_reach: int = cottage.stats(1, -1).reach
+		for spot: Vector2i in level.spots:
+			var n_near: int = 0
+			for cell: Vector2i in road:
+				var ddx: int = (cell.x - spot.x) * 100
+				var ddy: int = (cell.y - spot.y) * 100
+				if ddx * ddx + ddy * ddy <= pulse_reach * pulse_reach:
+					n_near += 1
+			near_pulse[spot] = n_near
 	return {"strat": strat, "rng": rng, "weight": weight, "spec_of": spec_of, "ranked": ranked, "cover": cover,
-		"dead": {}, "gate_dead": {}, "swapped": {}}
+		"dead": {}, "gate_dead": {}, "swapped": {}, "near_pulse": near_pulse}
 
 
 # Cards.
@@ -339,7 +371,7 @@ static func _next_step(st: Dictionary, session: RunSession) -> Dictionary:
 			continue
 		if id == &"bakery" and bakery_wait:
 			continue
-		var cell: Vector2i = _spot_for(id, free, ranked)
+		var cell: Vector2i = _spot_for(id, free, ranked, st)
 		if cell != Vector2i(-1, -1):
 			var made: String = "b:%d,%d:%s" % [cell.x, cell.y, id]
 			if dead.has(made):
@@ -347,7 +379,7 @@ static func _next_step(st: Dictionary, session: RunSession) -> Dictionary:
 				continue
 			return {"do": "build", "cell": cell, "type": id, "spec": -1, "key": made}
 		if id == &"bakery":
-			var any: Vector2i = _spot_for(id, ranked, ranked)
+			var any: Vector2i = _spot_for(id, ranked, ranked, st)
 			if any == Vector2i(-1, -1):
 				dead["t:" + String(id)] = true
 				continue
@@ -363,7 +395,7 @@ static func _next_step(st: Dictionary, session: RunSession) -> Dictionary:
 		pickable.erase(&"bakery")
 	var type: StringName = _deficit(pickable, count, weight, dead)
 	if not free.is_empty() and type != &"" and (b.towers.size() < want or upgrade.is_empty()):
-		var cell2: Vector2i = _spot_for(type, free, ranked)
+		var cell2: Vector2i = _spot_for(type, free, ranked, st)
 		if cell2 != Vector2i(-1, -1):
 			var key: String = "b:%d,%d:%s" % [cell2.x, cell2.y, type]
 			if not dead.has(key):
@@ -403,6 +435,8 @@ static func _deficit(available: Array[StringName], count: Dictionary, weight: Di
 	for id: StringName in available:
 		if (CAPS.has(id) and int(count[id]) >= int(CAPS[id])) or dead.has("t:" + String(id)):
 			continue
+		if bramble_cap > 0 and id == &"bramble_cottage" and int(count[id]) >= bramble_cap:
+			continue
 		var score: float = float(count[id]) / float(weight[id])
 		if best == &"" or score < best_score:
 			best = id
@@ -412,9 +446,18 @@ static func _deficit(available: Array[StringName], count: Dictionary, weight: Di
 
 ## Where a tower of this type goes: attackers on the best free spot, a Bell on the best free spot
 ## after the top two, a Bakery on the free spot with the most neighboring spots (at least 2).
-static func _spot_for(type: StringName, free: Array[Vector2i], ranked: Array[Vector2i]) -> Vector2i:
+static func _spot_for(type: StringName, free: Array[Vector2i], ranked: Array[Vector2i], st: Dictionary) -> Vector2i:
 	if free.is_empty():
 		return Vector2i(-1, -1)
+	if bramble_fit == 1 and type == &"bramble_cottage" and not (st["near_pulse"] as Dictionary).is_empty():
+		var pick: Vector2i = free[0]
+		var most_near: int = -1
+		for spot: Vector2i in free:
+			var n: int = int(st["near_pulse"].get(spot, 0))
+			if n > most_near:
+				most_near = n
+				pick = spot
+		return pick
 	if type == &"bakery":
 		var best: Vector2i = Vector2i(-1, -1)
 		var most: int = bakery_min - 1

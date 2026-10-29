@@ -10,6 +10,10 @@
 # Run from any folder, in Git Bash:
 #   scripts/build.sh
 #
+# It refuses to build when the working tree has uncommitted changes, so a build
+# is always one commit. For a quick test on your own phone, --allow-dirty skips
+# that check. Such a build is not for publishing.
+#
 # Godot 4.7.2 must be on PATH as "godot", or set the GODOT environment variable
 # to the full path of the Godot exe. The Android SDK, the JDK and the debug
 # keystore come from Godot's Editor Settings, never from this repo.
@@ -23,11 +27,19 @@ class_cache="$root/.godot/global_script_class_cache.cfg"
 want_version="4.7.2.stable"
 attempts=3
 started="$(date +%s)"
+allow_dirty=0
 
 fail() {
 	echo "BUILD FAILED: $1"
 	exit 1
 }
+
+for arg in "$@"; do
+	case "$arg" in
+		--allow-dirty) allow_dirty=1 ;;
+		*) fail "unknown option '$arg'. The only option is --allow-dirty." ;;
+	esac
+done
 
 for tool in timeout unzip; do
 	command -v "$tool" > /dev/null 2>&1 || fail "'$tool' was not found. Run this script in Git Bash."
@@ -38,6 +50,22 @@ version="$("$godot" --version | tr -d '\r' | tail -n 1)"
 case "$version" in
 	"$want_version"*) echo "Godot $version" ;;
 	*) fail "This project needs Godot $want_version, but '$godot' is version '$version'." ;;
+esac
+
+# Build only from a commit. Exit code 2 means there is no .git (a copy made with
+# git archive), which cannot be checked and is clean by construction.
+code=0
+bash "$root/scripts/check_clean.sh" || code=$?
+case "$code" in
+	0) ;;
+	2) echo "Continuing: a copy without .git is taken to be a clean copy of a commit." ;;
+	*)
+		if [ "$allow_dirty" -eq 1 ]; then
+			echo "WARNING: building from a dirty tree (--allow-dirty). Do not publish this build."
+		else
+			fail "the working tree is not clean. Commit first, build from a clean clone, or add --allow-dirty for a local test build."
+		fi
+		;;
 esac
 
 # Import until Godot has written its class cache. The first import of a fresh
