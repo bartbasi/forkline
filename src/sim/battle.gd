@@ -132,6 +132,7 @@ var _wave_mods: Dictionary = {}                        # running wave index to i
 var _releases: Array[Release] = []                     # in the order they began
 var _summoners: Array[EnemyState] = []                 # creatures with a summon, in id order
 var _next_id: int = 0
+var _crowd_most: int = 0                               # at least the crowd of _crowd(); never saved, load works it out
 var _gates_added: int = 0                              # gates gained from cards (add_gates)
 var _events: Array[Dictionary] = []
 var _dist: PackedInt32Array = PackedInt32Array()       # walker distances per node for the closed set now
@@ -271,9 +272,16 @@ func _setup(level_data: LevelData, stats: Catalog) -> void:
 	_refund_pct = stats.rules.refund_pct
 
 
-## One tick (8.1). Does nothing unless phase is WAVE.
+## One tick (8.1). Does nothing unless phase is WAVE. A battle at the tick ceiling (BIG,
+## the most a save holds) is lost instead of passing it (contract 5.6): only a tampered
+## save gets there, since a real battle would need years of play.
 func step() -> void:
 	if phase != Phase.WAVE:
+		return
+	if tick >= BIG:
+		lives = 0
+		phase = Phase.LOST
+		_emit({"kind": &"lost"})
 		return
 	_spawn_step()
 	_timer_step()
@@ -460,7 +468,7 @@ func start_next_wave() -> StringName:
 		_gates_whole = false
 	# 4.6: from now on, this build phase's purchases refund at the refund percent.
 	for tower: TowerState in towers:
-		tower.spent_before += tower.spent_now
+		tower.spent_before = mini(tower.spent_before + tower.spent_now, BIG)
 		tower.spent_now = 0
 	var index: int = waves_started
 	# A waiting risk card changes this wave only (14.4, contract 2.8).
@@ -761,6 +769,12 @@ func loses_star3(action: StringName, tower: StringName = &"", tier: int = 0) -> 
 # The tick.
 
 ## Step 1: group spawns in wave data order, waves in start order, then releases (8.1).
+## Two load ceilings of contract 5.6 hold in play too, so a save made after any tick
+## loads. Once the next id reaches ID_CEILING no creature appears: a group's creature or
+## a release's is left out, and the release goes on. An id is never used twice, since
+## events, render and the save's id order each take an id to name one creature. A
+## group's creature or a boss summon that would take the crowd past MAX_ENEMIES is left
+## out too (_crowd_room). Only a tampered save comes near either ceiling.
 func _spawn_step() -> void:
 	for w: int in running:
 		var elapsed: int = tick - _wave_start[w]
@@ -768,6 +782,8 @@ func _spawn_step() -> void:
 		for group: WaveGroup in mods.groups:
 			var since: int = elapsed - group.at_tick
 			if since < 0 or since % group.every_ticks != 0 or since / group.every_ticks >= group.count:
+				continue
+			if _next_id >= ID_CEILING or not _crowd_room(group.enemy, 1):
 				continue
 			var enemy: EnemyState = _new_enemy(group.enemy, w)
 			var cell: Vector2i = level.entrances[group.entrance]
@@ -795,7 +811,8 @@ func _spawn_step() -> void:
 			if boss.summon_at > tick:
 				continue
 			var summon: Dictionary = catalog.enemy(boss.type).summon
-			_begin_release(boss, summon["enemy"], summon["count"], summon["gap_ms"] / Sim.MS_PER_TICK, tick)
+			if _crowd_room(summon["enemy"], summon["count"]):
+				_begin_release(boss, summon["enemy"], summon["count"], summon["gap_ms"] / Sim.MS_PER_TICK, tick)
 			boss.summon_at += summon["every_ms"] / Sim.MS_PER_TICK
 		_summoners = alive
 	# Releases that are due. A begun release always finishes (6.2).
@@ -805,16 +822,17 @@ func _spawn_step() -> void:
 		if release.next > tick:
 			r += 1
 			continue
-		var enemy: EnemyState = _new_enemy(release.enemy, release.wave)
-		if enemy.flying:
-			_launch(enemy, release.pos)
-		else:
-			enemy.from_cell = release.from_cell
-			enemy.to_cell = release.to_cell
-			enemy.to_node = release.to_node
-			enemy.progress = release.progress
-			enemy.step_dir = release.to_cell - release.from_cell
-		_add_enemy(enemy)
+		if _next_id < ID_CEILING:
+			var enemy: EnemyState = _new_enemy(release.enemy, release.wave)
+			if enemy.flying:
+				_launch(enemy, release.pos)
+			else:
+				enemy.from_cell = release.from_cell
+				enemy.to_cell = release.to_cell
+				enemy.to_node = release.to_node
+				enemy.progress = release.progress
+				enemy.step_dir = release.to_cell - release.from_cell
+			_add_enemy(enemy)
 		release.left -= 1
 		release.next += release.gap
 		if release.left <= 0:
@@ -824,7 +842,11 @@ func _spawn_step() -> void:
 
 
 ## A release of `count` creatures at the source's spot, the first on tick `first` (6.2).
+## With MAX_RELEASES under way, the most a save holds, it is left out (contract 5.6).
+## Only a tampered save's crowd can get there: a real wave has a few at once.
 func _begin_release(source: EnemyState, type: StringName, count: int, gap: int, first: int) -> void:
+	if _releases.size() >= MAX_RELEASES:
+		return
 	var release: Release = Release.new()
 	release.enemy = type
 	release.wave = source.wave
@@ -2027,11 +2049,12 @@ func _offered_list() -> Array[StringName]:
 	return out
 
 
+## Spent gold is held at most BIG, the most a save holds, as gold is (contract 5.6).
 func _pay(tower: TowerState, price: int) -> void:
 	if phase == Phase.BUILD:
-		tower.spent_now += price
+		tower.spent_now = mini(tower.spent_now + price, BIG)
 	else:
-		tower.spent_before += price
+		tower.spent_before = mini(tower.spent_before + price, BIG)
 
 
 ## A tower's kind, stats with card effects and reach cells.
@@ -2959,6 +2982,7 @@ func _check_crowd(chk: DataCheck) -> void:
 	var crowd: int = 0
 	for tally: Array[int] in tallies:
 		crowd += tally[0]
+	_crowd_most = crowd
 	if crowd > MAX_ENEMIES:
 		chk.fail("releases", "live creatures and creatures still to come pass %d" % MAX_ENEMIES)
 	for w: int in running:
@@ -2974,6 +2998,35 @@ func _check_crowd(chk: DataCheck) -> void:
 		chk.fail("enemies", "more than %d creatures that summon can be on the map at once" % MAX_SUMMONERS)
 	if _at_once(tallies, 3) > MAX_WAKERS:
 		chk.fail("enemies", "more than %d creatures that wake others can be on the map at once" % MAX_WAKERS)
+
+
+## True when `count` more creatures of `type` to come keep the crowd at most MAX_ENEMIES,
+## and then counts them. Only group spawns and boss summons make the crowd grow: a
+## release's creature appearing keeps it, and a defeat, a leak or a release beginning
+## lowers it or keeps it. So _crowd_most, set at load and raised here, never drops below
+## the crowd, and the crowd is counted again only when _crowd_most would pass the
+## ceiling. The answer is always what an exact count gives, so play stays deterministic
+## and a battle played on after a save and load goes the same way.
+func _crowd_room(type: StringName, count: int) -> bool:
+	var tally: Array[int] = [0, 0, 0, 0]
+	_tally(tally, type, count, true)
+	if _crowd_most + tally[0] > MAX_ENEMIES:
+		_crowd_most = _crowd()
+		if _crowd_most + tally[0] > MAX_ENEMIES:
+			return false
+	_crowd_most += tally[0]
+	return true
+
+
+## The live creatures and the creatures still to come from releases, each with what it
+## can still let out, as _check_crowd counts them.
+func _crowd() -> int:
+	var tally: Array[int] = [0, 0, 0, 0]
+	for enemy: EnemyState in enemies:
+		_tally(tally, enemy.type, 1, not enemy.released)
+	for release: Release in _releases:
+		_tally(tally, release.enemy, release.left, true)
+	return tally[0]
 
 
 ## The most of tally entry `k` that the waves on the map at once can hold: the sum of the
