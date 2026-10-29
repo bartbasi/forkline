@@ -52,8 +52,10 @@ signal settings_requested()
 signal modal_requested(modal: Modal)
 
 const NO_CELL: Vector2i = Vector2i(-1, -1)
+## The landscape side column is always this wide. The HUD needs 728 px (its second row, plus
+## the margins) and a scroll bar takes 28 more, so a narrower column would clip the HUD. A
+## fixed width also means the map never changes size or place when a panel opens.
 const SIDE_WIDTH: float = 760.0
-const SIDE_MIN: float = 560.0
 ## Panels keep this far from the screen edge. The map itself runs edge to edge.
 const EDGE: float = 16.0
 const GAP: float = 12.0
@@ -101,6 +103,10 @@ var _dock_wrap: MarginContainer
 var _dock: VBoxContainer
 ## Over the map, above the dock: where the hint floats in portrait.
 var _hint_layer: Control
+## Holds `_side` and sets the column's width. It is a plain Control, so what the column shows
+## can never make it wider: a ScrollContainer adds its scroll bar to its content's width,
+## which used to widen the column and shrink the map whenever a tall panel opened.
+var _side_slot: Control
 var _side: ScrollContainer
 var _side_wrap: MarginContainer
 var _side_box: VBoxContainer
@@ -232,7 +238,11 @@ func _build_containers() -> void:
 	_side = ScrollContainer.new()
 	_side.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_side.scroll_deadzone = int(TapButton.DEADZONE)
+	_side.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_side.add_child(_side_wrap)
+	_side_slot = Control.new()
+	_side_slot.custom_minimum_size.x = SIDE_WIDTH
+	_side_slot.add_child(_side)
 
 
 func _wrap(inner: Control, top: float, bottom: float) -> MarginContainer:
@@ -494,11 +504,10 @@ func _relayout() -> void:
 		for panel: BattlePanel in [pause_strip, hint_banner, preview]:
 			panel.set_tight(true, DOCK_MARGIN)
 	gate_tray.set_chip(not landscape)
-	_side.custom_minimum_size.x = clampf(safe.size.x * 0.4, SIDE_MIN, SIDE_WIDTH)
 	# The cards wrap to the room in the side column, scroll bar included. A panel wider than
 	# that would widen the column and push the map aside.
 	var bar: float = _side.get_v_scroll_bar().get_combined_minimum_size().x
-	build_panel.set_width_limit(_side.custom_minimum_size.x - 2.0 * EDGE - bar if landscape else 0.0)
+	build_panel.set_width_limit(SIDE_WIDTH - 2.0 * EDGE - bar if landscape else 0.0)
 	_place_context()
 	_sheet.visible = _context != null and not landscape
 	_sync_dock()
@@ -519,7 +528,7 @@ func _arrange() -> void:
 	if mode == _arranged:
 		return
 	_arranged = mode
-	for node: Control in [hud, hud.feedback_box, gate_tray, gate_tray.feedback_box, pause_strip, hint_banner, preview, build_panel, tower_panel, enemy_panel, draft_panel, map_area, _top_wrap, _side]:
+	for node: Control in [hud, hud.feedback_box, gate_tray, gate_tray.feedback_box, pause_strip, hint_banner, preview, build_panel, tower_panel, enemy_panel, draft_panel, map_area, _top_wrap, _side_slot]:
 		var parent: Node = node.get_parent()
 		if parent != null:
 			parent.remove_child(node)
@@ -527,7 +536,7 @@ func _arrange() -> void:
 	if landscape:
 		hud.set_gate_slot(null)
 		_flow.add_child(map_area)
-		_flow.add_child(_side)
+		_flow.add_child(_side_slot)
 		for node: Control in [hud, gate_tray, pause_strip, hint_banner, preview]:
 			_side_box.add_child(node)
 		hud.column.add_child(hud.feedback_box)
@@ -1452,7 +1461,7 @@ func _notification(what: int) -> void:
 		# Parts that are not in the tree when the screen goes (the other layout's, the
 		# closed panels) are freed here so nothing leaks.
 		# One may hold another (the HUD holds its message box), so each is checked as it comes.
-		for part: Variant in [hud, hud.feedback_box, gate_tray, gate_tray.feedback_box, pause_strip, hint_banner, preview, build_panel, tower_panel, enemy_panel, draft_panel, map_area, _top_wrap, _side, ghost, _sheet]:
+		for part: Variant in [hud, hud.feedback_box, gate_tray, gate_tray.feedback_box, pause_strip, hint_banner, preview, build_panel, tower_panel, enemy_panel, draft_panel, map_area, _top_wrap, _side_slot, ghost, _sheet]:
 			if is_instance_valid(part) and (part as Control).get_parent() == null:
 				(part as Control).free()
 		for modal: Modal in _modals + _modals_gone:

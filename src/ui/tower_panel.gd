@@ -279,6 +279,9 @@ func _aim_row(tower: TowerState) -> Control:
 	row.add_theme_constant_override(&"separation", 12)
 	for aim: int in BattleText.AIM_NAMES.size():
 		var b: TapButton = UiKit.button(BattleText.aim_name(aim))
+		if not wide:
+			# The side column has no width to spare: with its scroll bar, 664 px for the row.
+			b.add_theme_font_size_override(&"font_size", UiTheme.FONT_BODY)
 		mark_chosen(b, tower.aim == aim)
 		b.tapped.connect(set_aim.bind(aim))
 		aim_buttons.append(b)
