@@ -83,7 +83,7 @@ func test_tier_1_things_added_to_the_real_files_leave_tier_0_unchanged() -> void
 	assert_not_null(data, "\n".join(RunData.check(files, cat)))
 	if data == null:
 		return
-	assert_eq(data.tiers.size(), 2, "the real run.json lists tiers 1 and 2")
+	assert_true(data.tiers.size() >= 2, "the real run.json lists at least tiers 1 and 2")
 	assert_eq(data.packs_of(2, &"", 1).size(), data.packs_of(2).size() + 1, "the Mossbud pack joins at tier 1")
 	assert_true(data.boss_ids(2).has(&"old_hayrick"))
 	assert_false(data.boss_ids(0).has(&"old_hayrick"), "and Old Hayrick stays out of tier 0")

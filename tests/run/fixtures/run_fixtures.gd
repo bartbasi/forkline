@@ -33,14 +33,19 @@ static func read(path: String) -> Variant:
 	return got["data"]
 
 
-## The real stats of regions 1 to 4, which these hand-made cards and packs cover. The real files
-## hold regions 5 to 8 too from E5.1 on, and a run with no tiers has none of them.
+## The towers and creatures of regions 1 to 4, which these hand-made cards and packs cover. The
+## real files hold regions 5 to 8 too from E5.1 on, and a run with no tiers has none of them.
+## Listed by id, so a region added later never leaks into the fixtures.
+const REGIONS_1_TO_4: Array[String] = [
+	"sling_post", "pumpkin_catapult", "lullaby_bell", "longbow_loft", "firework_tower", "bakery",
+	"scamp", "pip", "skitter", "flitter", "shellback", "bubbler", "puffball", "puff", "mender",
+	"gatecrasher", "dusk_moth", "grumblesack", "ironshell", "moon_moth", "old_tusk",
+]
+
+
+## The real stats of regions 1 to 4 only.
 static func catalog() -> Catalog:
-	var regions_1_to_4: Array = [
-		"sling_post", "pumpkin_catapult", "lullaby_bell", "longbow_loft", "firework_tower", "bakery",
-		"scamp", "pip", "skitter", "flitter", "shellback", "bubbler", "puffball", "puff", "mender",
-		"gatecrasher", "dusk_moth", "grumblesack", "ironshell", "moon_moth", "old_tusk",
-	]
+	var regions_1_to_4: Array[String] = REGIONS_1_TO_4
 	var towers: Dictionary = read(STATS_DIR + "towers.json")
 	var enemies: Dictionary = read(STATS_DIR + "enemies.json")
 	towers["towers"] = (towers["towers"] as Array).filter(func(item: Dictionary) -> bool: return regions_1_to_4.has(item["id"]))

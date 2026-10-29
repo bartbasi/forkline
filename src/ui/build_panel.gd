@@ -22,6 +22,11 @@ const CARD_GAP: int = 14
 const SIDE_GAP: int = 8
 ## Most cards in one row. Ten towers make two rows of five in the roomy portrait sheet.
 const MAX_COLUMNS: int = 5
+## Most cards in one row in the landscape side column: 4 x 160 + 3 x 8 = 664 px, which is all
+## the room the column leaves (760 less the margins, the panel's padding and the scroll bar).
+## A fixed cap, not read from the panel's width: a panel that starts with no width must not
+## ask for five columns, grow to fit them and then think it has the room.
+const SIDE_COLUMNS: int = 4
 
 var cell: Vector2i = NO_CELL
 var selected: StringName = &""
@@ -37,10 +42,6 @@ var star_warning_label: Label = null
 
 var _signature: Array = []
 var _open: bool = false
-## The most width the cards may use, margins included, set by the screen for the landscape
-## side column (0 means no limit). Without it ten towers ask for five columns, the panel gets
-## wider than the column, and the column grows and pushes the map aside.
-var _width_limit: float = 0.0
 
 
 func _init() -> void:
@@ -64,15 +65,6 @@ func show_spot(new_cell: Vector2i) -> void:
 
 func is_open() -> bool:
 	return _open
-
-
-## Sets the widest the panel may ask for, so the cards wrap to the room there is. The side
-## column passes its width less the margins around the panel; the portrait sheet passes 0.
-func set_width_limit(px: float) -> void:
-	if not is_equal_approx(px, _width_limit):
-		_width_limit = px
-		_signature = []
-		refresh()
 
 
 ## Cards in one row or a grid, and the numbers in two columns when wide.
@@ -244,12 +236,12 @@ func _rows(rows: Array[PackedStringArray]) -> Control:
 ## Cards per row for `count` towers when the panel is `room` px wide inside its margins
 ## (0 when it has no width yet). Two rows is the aim, and a card is never narrower than
 ## MIN_TOUCH, so a narrow side panel gets fewer columns and more rows.
-static func columns_for(count: int, room: float, gap: int = CARD_GAP) -> int:
+static func columns_for(count: int, room: float, gap: int = CARD_GAP, most: int = MAX_COLUMNS) -> int:
 	var wanted: int = maxi(1, count)
 	if count == 4:
 		wanted = 2
 	elif count > 3:
-		wanted = mini(MAX_COLUMNS, ceili(float(count) / 2.0))
+		wanted = mini(most, ceili(float(count) / 2.0))
 	if room <= 0.0:
 		return wanted
 	var fit: int = maxi(1, int((room + float(gap)) / (Layout.MIN_TOUCH + float(gap))))
@@ -257,7 +249,7 @@ static func columns_for(count: int, room: float, gap: int = CARD_GAP) -> int:
 
 
 func _columns(count: int) -> int:
-	return columns_for(count, _room(), _gap())
+	return columns_for(count, _room(), _gap(), MAX_COLUMNS if wide else SIDE_COLUMNS)
 
 
 ## Portrait keeps the roomy gap; the side column has no width to spare.
@@ -265,17 +257,12 @@ func _gap() -> int:
 	return CARD_GAP if wide else SIDE_GAP
 
 
-## The width the cards have, inside the panel's margins. 0 before the panel has been laid out
-## and when nothing limits it. A limit is used from the first layout, so the panel never asks
-## for more than it may have.
+## The width the cards have, inside the panel's margins. 0 before the panel has been laid out.
 func _room() -> float:
-	var width: float = size.x
-	if _width_limit > 0.0:
-		width = minf(width, _width_limit) if width > 0.0 else _width_limit
-	if width <= 0.0:
+	if size.x <= 0.0:
 		return 0.0
 	var box: StyleBox = get_theme_stylebox(&"panel")
-	return width - box.get_margin(SIDE_LEFT) - box.get_margin(SIDE_RIGHT)
+	return size.x - box.get_margin(SIDE_LEFT) - box.get_margin(SIDE_RIGHT)
 
 
 ## The panel got its width or changed it: the cards may need another number of columns.

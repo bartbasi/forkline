@@ -21,6 +21,9 @@
   {"id": "tower_scarecrow", "kind": "tower", "tower": "scarecrow", "name": "Scarecrow",
    "text": "You can build Scarecrows for the rest of the run.",
    "once": true, "unlock": {}, "effects": [{"type": "add_tower", "tower": "scarecrow"}]},
+  {"id": "tower_snow_fort", "kind": "tower", "tower": "snow_fort", "name": "Snow Fort",
+   "text": "You can build Snow Forts for the rest of the run.",
+   "once": true, "unlock": {}, "effects": [{"type": "add_tower", "tower": "snow_fort"}]},
 
   {"id": "sharp_pebbles", "kind": "perk", "tower": "sling_post", "name": "Sharp Pebbles",
    "text": "Sling Posts deal 1 more damage per hit.",
@@ -46,6 +49,9 @@
   {"id": "big_hat", "kind": "perk", "tower": "scarecrow", "name": "Big Hat",
    "text": "Scarecrows reach 0.5 tiles further.",
    "once": true, "unlock": {}, "effects": [{"type": "tower_add", "tower": "scarecrow", "stat": "reach", "amount": 50}]},
+  {"id": "packed_snow", "kind": "perk", "tower": "snow_fort", "name": "Packed Snow",
+   "text": "Snow Forts deal 6 more damage per hit.",
+   "once": true, "unlock": {}, "effects": [{"type": "tower_add", "tower": "snow_fort", "stat": "damage", "amount": 6}]},
 
   {"id": "spare_gate", "kind": "gate", "name": "Spare Gate", "text": "Gain 1 gate, up to 3.",
    "once": false, "unlock": {}, "effects": [{"type": "add_gates", "count": 1}]},

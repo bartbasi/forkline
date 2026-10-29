@@ -21,7 +21,7 @@
   "gates": 2,
   "strength": 245,
   "towers": ["sling_post", "pumpkin_catapult", "lullaby_bell", "longbow_loft", "firework_tower", "bakery", "bramble_cottage"],
-  "star3": {"kind": "gates_at_most", "value": 1},
+  "star3": {"kind": "tier_at_most", "value": 2},
   "hint": {"text": "At a bridge one road crosses over another. Walkers go straight across.", "cell": [5, 5]},
   "waves": [
     {"strength": 100, "groups": [{"enemy": "scamp", "count": 14, "entrance": 1, "at_ms": 0, "every_ms": 1200}]},

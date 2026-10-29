@@ -21,7 +21,7 @@
   "strength": 270,
   "towers": ["sling_post", "pumpkin_catapult", "lullaby_bell", "longbow_loft", "firework_tower", "bakery", "bramble_cottage", "scarecrow"],
   "star3": {"kind": "no_lives_lost"},
-  "hint": {"text": "Old Hayrick draws every shot and gets up once. Splash its escort.", "cell": [4, 3]},
+  "hint": {"text": "Old Hayrick draws every shot and gets up once. Frighten it with a Scarecrow.", "cell": [4, 3]},
   "waves": [
     {"strength": 105, "groups": [{"enemy": "scamp", "count": 14, "entrance": 1, "at_ms": 0, "every_ms": 1200}, {"enemy": "scamp", "count": 8, "entrance": 1, "at_ms": 6000, "every_ms": 1000}]},
     {"strength": 105, "groups": [{"enemy": "pip", "count": 36, "entrance": 2, "at_ms": 0, "every_ms": 50}, {"enemy": "mossbud", "count": 5, "entrance": 2, "at_ms": 3000, "every_ms": 1200}]},

@@ -119,10 +119,16 @@ func _repeat(pct: int, n: int) -> Array:
 	return out
 
 
-func _most_health() -> int:
+## The largest max health the battle judges under these health effects (docs/ARCHITECTURE.md
+## 14.7): every creature of the catalog, scaled by them, and a grower at its growth cap. _level()
+## is at strength 100.
+func _ceiling_health(pcts: Array) -> int:
+	var effects: Array[Dictionary] = _typed("health_pct", pcts)
 	var most: int = 1
 	for id: StringName in catalog.enemy_ids():
-		most = maxi(most, catalog.enemy(id).health)
+		var type: EnemyType = catalog.enemy(id)
+		var start: int = maxi(1, Modifiers.scale_all(effects, "health_pct", type.health))
+		most = maxi(most, start * type.grow_cap_pct / 100 if type.grow_pct > 0 else start)
 	return most
 
 
@@ -158,18 +164,17 @@ func test_speed_past_the_ceiling_is_refused_at_load_and_by_add_effects() -> void
 	assert_null(Battle.from_data(running, catalog), "a running wave's 8 speed effects at 1,000 percent")
 
 
-## The catalog's largest health at strength 100: five 1,000 percent effects keep it under
-## BIG for real data; one more effect finds the edge.
+## The catalog's largest max health at strength 100, a grower at its cap: five 1,000 percent
+## effects keep it under BIG for real data; one more effect finds the edge.
 func test_max_health_past_big_is_refused_at_load_and_by_add_effects() -> void:
-	var most: int = _most_health()
 	var base: Array = _repeat(1000, 5)
-	var below: int = Modifiers.scale_all(_typed("health_pct", base), "health_pct", most)
+	var below: int = _ceiling_health(base)
 	assert_true(below <= Battle.BIG, "the base stays under BIG: %d" % below)
 	var fits: int = mini(Battle.BIG * 100 / below, 1000)
-	while fits > 1 and Modifiers.scale_all(_typed("health_pct", base + [fits]), "health_pct", most) > Battle.BIG:
+	while fits > 1 and _ceiling_health(base + [fits]) > Battle.BIG:
 		fits -= 1
 	var over: int = fits + 1
-	while over <= 1000 and Modifiers.scale_all(_typed("health_pct", base + [over]), "health_pct", most) <= Battle.BIG:
+	while over <= 1000 and _ceiling_health(base + [over]) <= Battle.BIG:
 		over += 1
 	assert_true(over <= 1000, "the edge is within one effect: %d" % over)
 	var b: Battle = Battle.create(_level(), catalog, false, [])

@@ -42,8 +42,8 @@ func test_the_real_stat_files_load() -> void:
 	assert_eq(problems.size(), 0, "problems: %s" % "; ".join(problems))
 	var catalog: Catalog = Catalog.from_data(files[0], files[1], files[2])
 	assert_not_null(catalog)
-	assert_eq(catalog.tower_ids(), [&"sling_post", &"pumpkin_catapult", &"lullaby_bell", &"longbow_loft", &"firework_tower", &"bakery", &"bramble_cottage", &"scarecrow"])
-	assert_eq(catalog.enemy_ids().size(), 21)
+	assert_eq(catalog.tower_ids(), [&"sling_post", &"pumpkin_catapult", &"lullaby_bell", &"longbow_loft", &"firework_tower", &"bakery", &"bramble_cottage", &"scarecrow", &"snow_fort"])
+	assert_eq(catalog.enemy_ids().size(), 24)
 	assert_null(catalog.tower(&"nope"))
 	assert_null(catalog.enemy(&"nope"))
 

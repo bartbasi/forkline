@@ -66,6 +66,9 @@ func _run() -> void:
 	for pair: Array in [[COVER, COVER_SAFE, "cover"], [INNER, INNER_SAFE, "inner"]]:
 		for count: int in [8, 9, 10]:
 			await _case(pair[0], pair[1], "%s, %d towers" % [pair[2], count], count)
+	for count: int in [8, 9, 10]:
+		await _bare(count, true)
+		await _bare(count, false)
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -121,5 +124,48 @@ func _case(size: Vector2, safe: Rect2, where: String, count: int) -> void:
 	var build: Rect2 = panel.build_button.get_global_rect()
 	check(safe.grow(1.0).encloses(build), "%s: the Build button is inside the safe area (%s)" % [where, build])
 	print("INFO %s: scale %s to %s, map at %s to %s, side %.0f, %d rows, panel %s" % [where, scale_before, scale_after, pos_before, pos_after, screen._side.size.x, tops.size(), panel.get_global_rect()])
+	vp.queue_free()
+	await _frames(2)
+
+
+## The panel on its own in a 760 px column, as tests/ui/real_tree_checks.gd hosts it: no
+## BattleScreen, so nothing tells it how much room there is. It starts with no width, and it
+## must not ask for five columns, grow to fit them and then keep them. `wide_first` sets the
+## landscape look before the panel is in the tree; otherwise after.
+func _bare(count: int, wide_first: bool) -> void:
+	var where: String = "bare side panel, %d towers, look set %s" % [count, "first" if wide_first else "after"]
+	var b: Battle = battle(count)
+	var vp: SubViewport = SubViewport.new()
+	vp.size = Vector2i(INNER)
+	root.add_child(vp)
+	var holder: Control = Control.new()
+	holder.set_anchors_preset(Control.PRESET_FULL_RECT)
+	holder.theme = UiTheme.build()
+	vp.add_child(holder)
+	var column: VBoxContainer = VBoxContainer.new()
+	column.position = Vector2(INNER.x - 36.0 - 760.0, 36.0)
+	column.custom_minimum_size = Vector2(760.0, 0.0)
+	column.size = Vector2(760.0, 100.0)
+	holder.add_child(column)
+	var panel: BuildPanel = BuildPanel.new()
+	panel.setup(b)
+	if wide_first:
+		panel.set_wide(false)
+	panel.show_spot(b.level.spots[0])
+	column.add_child(panel)
+	if not wide_first:
+		panel.set_wide(false)
+	await _frames(10)
+	check(panel.size.x <= 760.5, "%s: the panel is no wider than its column (%.0f)" % [where, panel.size.x])
+	var grid: GridContainer = null
+	for node: Node in panel.find_children("*", "GridContainer", true, false):
+		if (node as GridContainer).columns >= 3:
+			grid = node as GridContainer
+			break
+	check(grid != null and grid.columns == 4, "%s: four columns (%s)" % [where, grid.columns if grid != null else -1])
+	for type: StringName in panel.card_buttons:
+		var r: Rect2 = (panel.card_buttons[type] as TapButton).get_global_rect()
+		check(Rect2(Vector2.ZERO, INNER).encloses(r) and r.end.x <= column.get_global_rect().end.x + 0.5, "%s: card %s is inside the column and the screen (%s)" % [where, type, r])
+	check(panel.build_button.get_global_rect().end.x <= column.get_global_rect().end.x + 0.5, "%s: the Build button is inside the column" % where)
 	vp.queue_free()
 	await _frames(2)

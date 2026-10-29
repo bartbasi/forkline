@@ -11,7 +11,7 @@ const Rules: GDScript = preload("res://tests/levels/fixtures/map_rules.gd")
 ## gates, sockets, waves, strength, Normal starting gold, star 3 kind and value,
 ## and the kind of cell the hint highlights ("none" for a level with no hint).
 ## Region 3's third stars changed on 2026-10-25 (TUNING_CAMPAIGN.md).
-## 2-2's star 3 is "Use no gates" (TUNING_R2.md, 2026-10-24).
+## 2-2's star 3 is "Use no gates" (TUNING_R2.md, 2026-10-24). 6-1's is "No tower above tier 2." (RULES 12.4, 2026-10-28).
 const PLAN: Dictionary = {
 	"r1_l1": {"gates": 0, "sockets": 0, "waves": 8, "strength": 100, "gold": 200, "star3": ["tier_at_most", 1], "highlight": "spot"},
 	"r1_l2": {"gates": 1, "sockets": 2, "waves": 8, "strength": 100, "gold": 250, "star3": ["tier_at_most", 1], "highlight": "socket"},
@@ -43,12 +43,18 @@ const PLAN: Dictionary = {
 	"r5_l4": {"gates": 3, "sockets": 6, "waves": 12, "strength": 245, "gold": 800, "star3": ["towers_at_most", 7], "highlight": "spot"},
 	"r5_l5": {"gates": 3, "sockets": 6, "waves": 12, "strength": 250, "gold": 800, "star3": ["kinds_at_most", 3], "highlight": "none"},
 	"r5_l6": {"gates": 3, "sockets": 6, "waves": 12, "strength": 255, "gold": 850, "star3": ["towers_at_most", 8], "highlight": "spot"},
-	"r6_l1": {"gates": 2, "sockets": 5, "waves": 12, "strength": 245, "gold": 750, "star3": ["gates_at_most", 1], "highlight": "socket"},
+	"r6_l1": {"gates": 2, "sockets": 5, "waves": 12, "strength": 245, "gold": 750, "star3": ["tier_at_most", 2], "highlight": "socket"},
 	"r6_l2": {"gates": 2, "sockets": 5, "waves": 12, "strength": 250, "gold": 800, "star3": ["towers_at_most", 6], "highlight": "spot"},
 	"r6_l3": {"gates": 3, "sockets": 6, "waves": 12, "strength": 255, "gold": 800, "star3": ["tower_ban", "longbow_loft"], "highlight": "spot"},
 	"r6_l4": {"gates": 3, "sockets": 6, "waves": 12, "strength": 260, "gold": 850, "star3": ["tier_at_most", 2], "highlight": "spot"},
 	"r6_l5": {"gates": 3, "sockets": 6, "waves": 12, "strength": 265, "gold": 850, "star3": ["early_calls_at_least", 6], "highlight": "none"},
 	"r6_l6": {"gates": 3, "sockets": 6, "waves": 12, "strength": 270, "gold": 900, "star3": ["no_lives_lost", 0], "highlight": "spot"},
+	"r7_l1": {"gates": 2, "sockets": 5, "waves": 12, "strength": 255, "gold": 800, "star3": ["towers_at_most", 6], "highlight": "socket"},
+	"r7_l2": {"gates": 2, "sockets": 5, "waves": 12, "strength": 260, "gold": 850, "star3": ["tower_ban", "pumpkin_catapult"], "highlight": "spot"},
+	"r7_l3": {"gates": 3, "sockets": 6, "waves": 12, "strength": 265, "gold": 850, "star3": ["gates_at_most", 0], "highlight": "spot"},
+	"r7_l4": {"gates": 3, "sockets": 6, "waves": 12, "strength": 270, "gold": 900, "star3": ["towers_at_most", 7], "highlight": "spot"},
+	"r7_l5": {"gates": 3, "sockets": 7, "waves": 12, "strength": 275, "gold": 900, "star3": ["tier_at_most", 2], "highlight": "none"},
+	"r7_l6": {"gates": 3, "sockets": 7, "waves": 12, "strength": 280, "gold": 950, "star3": ["kinds_at_most", 3], "highlight": "spot"},
 }
 
 ## docs/ARCHITECTURE.md 2.8 and RULES 13: each level's Twist as effects. The level designer picks
@@ -91,6 +97,12 @@ const TWISTS: Dictionary = {
 	"r6_l4": [{"type": "no_selling"}],
 	"r6_l5": [{"type": "start_gold_pct", "pct": 50}],
 	"r6_l6": [{"type": "count_pct", "pct": 200, "flyers": false, "last_wave": true}],
+	"r7_l1": [{"type": "set_gates", "count": 0}],
+	"r7_l2": [{"type": "ban_tower", "tower": "longbow_loft"}],
+	"r7_l3": [{"type": "speed_pct", "pct": 120}],
+	"r7_l4": [{"type": "armor_add", "amount": 2}],
+	"r7_l5": [{"type": "all_bubbles"}],
+	"r7_l6": [{"type": "count_pct", "pct": 200, "flyers": false, "last_wave": true}],
 }
 
 ## RULES 12.2: the towers each level brings.
@@ -102,6 +114,7 @@ const NEW_TOWERS: Dictionary = {
 	"r4_l1": ["bakery"],
 	"r5_l2": ["bramble_cottage"],
 	"r6_l2": ["scarecrow"],
+	"r7_l2": ["snow_fort"],
 }
 
 ## RULES 12.2 and 12.3: the creature each level brings and its first wave, 1 based.
@@ -126,23 +139,33 @@ const NEW_CREATURES: Dictionary = {
 	"r6_l3": ["gleamer", 2],
 	"r6_l4": ["sleepyhead", 3],
 	"r6_l6": ["old_hayrick", 12],
+	"r7_l3": ["snowroller", 2],
+	"r7_l4": ["yawner", 3],
+	"r7_l6": ["snowsnore", 12],
 }
 
-## RULES 3.5 and 12.1: the map feature each region brings, as grid characters. Regions 1 to 4 have none.
-const REGION_FEATURES: Dictionary = {"lantern_hill": "", "millbrook": "", "willow_fen": "", "moonspire_keep": "", "hollow_lanes": "T", "russet_orchards": "X"}
+## RULES 3.5 and 12.1: the kind of map feature each region brings (map_rules.gd FEATURE_KINDS). Regions 1 to 4 have none.
+const REGION_FEATURES: Dictionary = {"lantern_hill": "", "millbrook": "", "willow_fen": "", "moonspire_keep": "", "hollow_lanes": "tunnel",
+	"russet_orchards": "bridge", "frostpine_ridge": "slide"}
+## RULES 3.5 and 12.3: levels 5 and 6 of regions 6 to 8 may add one earlier feature, never two. 7-5 adds tunnels.
+const EXTRA_FEATURES: Dictionary = {"r7_l5": "tunnel"}
 ## RULES 12.2: the level where each feature first appears, as that region's first level.
-const NEW_FEATURES: Dictionary = {"T": "r5_l1", "X": "r6_l1"}
+const NEW_FEATURES: Dictionary = {"tunnel": "r5_l1", "bridge": "r6_l1", "slide": "r7_l1"}
 ## RULES 12.5: at most 6 of each of these creatures in one wave, with the level's Twist, boss summons not counted.
 const CAPPED_CREATURES: Array[StringName] = [&"mistwisp", &"hootling"]
 const CAPPED_MOST: int = 6
 
 ## RULES 3.1 and 3.4: map rows and build spots per region, and entrances per region (12.3).
-const REGION_ROWS: Dictionary = {"lantern_hill": [8, 11], "millbrook": [10, 13], "willow_fen": [10, 13], "moonspire_keep": [10, 13], "hollow_lanes": [10, 13], "russet_orchards": [10, 13]}
-const REGION_SPOTS: Dictionary = {"lantern_hill": [5, 7], "millbrook": [7, 9], "willow_fen": [8, 10], "moonspire_keep": [9, 11], "hollow_lanes": [9, 11], "russet_orchards": [10, 12]}
-const REGION_ENTRANCES: Dictionary = {"lantern_hill": [1, 1], "millbrook": [1, 2], "willow_fen": [1, 2], "moonspire_keep": [2, 3], "hollow_lanes": [1, 2], "russet_orchards": [1, 2]}
-## RULES 12.3: region 5 has one entrance, then two from 5-5. Region 6 has one on its first level, then two.
+const REGION_ROWS: Dictionary = {"lantern_hill": [8, 11], "millbrook": [10, 13], "willow_fen": [10, 13], "moonspire_keep": [10, 13], "hollow_lanes": [10, 13], "russet_orchards": [10, 13],
+	"frostpine_ridge": [10, 13]}
+const REGION_SPOTS: Dictionary = {"lantern_hill": [5, 7], "millbrook": [7, 9], "willow_fen": [8, 10], "moonspire_keep": [9, 11], "hollow_lanes": [9, 11], "russet_orchards": [10, 12],
+	"frostpine_ridge": [10, 12]}
+const REGION_ENTRANCES: Dictionary = {"lantern_hill": [1, 1], "millbrook": [1, 2], "willow_fen": [1, 2], "moonspire_keep": [2, 3], "hollow_lanes": [1, 2], "russet_orchards": [1, 2],
+	"frostpine_ridge": [1, 2]}
+## RULES 12.3: region 5 has one entrance, then two from 5-5. Regions 6 and 7 have one on their first level, then two.
 const LEVEL_ENTRANCES: Dictionary = {"r5_l1": 1, "r5_l2": 1, "r5_l3": 1, "r5_l4": 1, "r5_l5": 2, "r5_l6": 2,
-	"r6_l1": 1, "r6_l2": 2, "r6_l3": 2, "r6_l4": 2, "r6_l5": 2, "r6_l6": 2}
+	"r6_l1": 1, "r6_l2": 2, "r6_l3": 2, "r6_l4": 2, "r6_l5": 2, "r6_l6": 2,
+	"r7_l1": 1, "r7_l2": 2, "r7_l3": 2, "r7_l4": 2, "r7_l5": 2, "r7_l6": 2}
 
 ## RULES 12.5: a new creature's first wave holds 3 to 5 of it. A boss comes alone.
 const FIRST_WAVE_COUNT: Array[int] = [3, 5]
@@ -493,10 +516,17 @@ func test_a_highlighted_cell_sits_above_the_paused_strip() -> void:
 		assert_true(level.hint_cell.y <= HIGHLIGHT_LAST_ROW, "%s: the highlighted cell %s is in rows 0 to %d" % [id, level.hint_cell, HIGHLIGHT_LAST_ROW])
 
 
+## RULES 12.4: on 7-4 the highlighted spot is set back from the road, out of a Yawner's yawn reach from every
+## road tile, so a tower there stays awake. A tower whose tier 1 reach is no more than that yawn reach never
+## touches the road from such a spot, which is the point of the hint.
+const SET_BACK_HIGHLIGHT: Dictionary = {"r7_l4": &"yawner"}
+
+
 ## RULES 9.6: a first tower built on a highlighted spot touches the road the creatures walk
 ## with no gate placed. Every tower that attacks or slows reaches, at tier 1, some cell of an
 ## entrance's open route outside the tunnels, where a walker can be hit (RULES 3.6). (Level 2-2
-## once glowed on a spot that saw road only with a gate on.)
+## once glowed on a spot that saw road only with a gate on.) On a set-back highlight the towers
+## that cannot reach past the yawn are left out (SET_BACK_HIGHLIGHT).
 func test_a_highlighted_spot_sees_the_open_route() -> void:
 	for id: String in order:
 		var level: LevelData = _level(id)
@@ -508,11 +538,16 @@ func test_a_highlighted_spot_sees_the_open_route() -> void:
 		var walked: Array[Vector2i] = []
 		for entrance: Vector2i in level.entrances:
 			walked.append_array(map.route(entrance, dist))
+		var short_reach: int = 0
+		if SET_BACK_HIGHLIGHT.has(id) and catalog.enemy(SET_BACK_HIGHLIGHT[id]) != null:
+			short_reach = catalog.enemy(SET_BACK_HIGHLIGHT[id]).yawn_reach
 		for tower: StringName in level.towers:
 			var type: TowerType = catalog.tower(tower)
 			if type == null or type.kind == &"boost":
 				continue
 			var reach: int = type.stats(1, -1).reach
+			if reach <= short_reach:
+				continue
 			var seen: bool = false
 			for cell: Vector2i in walked:
 				if level.feature_at(cell) == LevelData.Feature.TUNNEL:
@@ -739,7 +774,7 @@ func test_entrances_per_level() -> void:
 
 
 ## RULES 3.5 and docs/ARCHITECTURE.md 14.13: each region's levels use its own map feature and no
-## other. Levels 5 and 6 of regions 6 to 8 may add one earlier feature; this table grows with them.
+## other. Levels 5 and 6 of regions 6 to 8 may add one earlier feature (EXTRA_FEATURES), never two.
 func test_each_region_uses_its_own_feature() -> void:
 	var regions: Dictionary = Files.region_of()
 	for id: String in order:
@@ -748,8 +783,16 @@ func test_each_region_uses_its_own_feature() -> void:
 		if level == null or not REGION_FEATURES.has(region):
 			fail("%s: region %s has no planned feature" % [id, region])
 			continue
-		var wanted: String = REGION_FEATURES[region]
-		var held: String = Rules.feature_chars(level.grid)
+		var wanted: PackedStringArray = PackedStringArray()
+		if REGION_FEATURES[region] != "":
+			wanted.append(REGION_FEATURES[region])
+		if EXTRA_FEATURES.has(id):
+			assert_true(id.ends_with("_l5") or id.ends_with("_l6"), "%s: only levels 5 and 6 add an earlier feature" % id)
+			assert_true(REGION_FEATURES.values().has(EXTRA_FEATURES[id]) and REGION_FEATURES[region] != EXTRA_FEATURES[id], "%s adds an earlier region's feature" % id)
+			wanted.append(EXTRA_FEATURES[id])
+		wanted.sort()
+		var held: PackedStringArray = Rules.feature_kinds(level.grid)
+		held.sort()
 		assert_eq(held, wanted, "%s holds the features %s, its region brings %s" % [id, held, wanted])
 
 
@@ -761,13 +804,12 @@ func test_a_feature_comes_alone_on_its_regions_first_level() -> void:
 		var level: LevelData = _level(id)
 		if level == null:
 			continue
-		var held: String = Rules.feature_chars(level.grid)
-		for i: int in held.length():
-			if not met.has(held[i]):
-				met[held[i]] = id
-	for ch: String in NEW_FEATURES:
-		var id: String = NEW_FEATURES[ch]
-		assert_eq(met.get(ch, ""), id, "%s first appears on %s" % [ch, id])
+		for kind: String in Rules.feature_kinds(level.grid):
+			if not met.has(kind):
+				met[kind] = id
+	for kind: String in NEW_FEATURES:
+		var id: String = NEW_FEATURES[kind]
+		assert_eq(met.get(kind, ""), id, "%s first appears on %s" % [kind, id])
 		var level: LevelData = _level(id)
 		if level == null:
 			continue
@@ -880,7 +922,7 @@ func test_every_bridge_lies_on_some_route() -> void:
 ## bridges, a gate on the highlighted socket alone sends the walkers over the bridge and back under it, while
 ## with no gate they cross it once.
 func test_the_first_bridge_level_highlights_the_loop() -> void:
-	var id: String = NEW_FEATURES["X"]
+	var id: String = NEW_FEATURES["bridge"]
 	var level: LevelData = _level(id)
 	assert_not_null(level, "%s loads" % id)
 	if level == null:
@@ -893,3 +935,164 @@ func test_the_first_bridge_level_highlights_the_loop() -> void:
 	var gated_route: Array[Vector2i] = map.route(level.entrances[0], map.distances(closed))
 	assert_eq(Rules.crossings(level, open_route), PackedStringArray(["over"]), "%s: with no gate the walkers cross the bridge once" % id)
 	assert_eq(Rules.crossings(level, gated_route), PackedStringArray(["over", "under"]), "%s: the highlighted socket sends them over the bridge and back under it" % id)
+
+
+## RULES 3.8: slides are straight runs of 2 or more tiles with every arrow along the run, each arrow points at
+## road, and with no gates no slide is a dead end.
+func test_slides_follow_rules_3_8() -> void:
+	var with_slides: int = 0
+	for id: String in order:
+		var level: LevelData = _level(id)
+		if level == null:
+			continue
+		if not Rules.slide_tiles(level).is_empty():
+			with_slides += 1
+		var found: PackedStringArray = Rules.slide_problems(level)
+		assert_eq(found, PackedStringArray(), "%s: %s" % [id, "; ".join(found)])
+	assert_true(with_slides >= 6, "the region 7 levels have slides, so the rules are exercised")
+
+
+## RULES 3.8, as for bridges (3.7): every slide tile lies on the shortest route of some placement of the
+## level's gates, so it always matters.
+func test_every_slide_lies_on_some_route() -> void:
+	for id: String in order:
+		var level: LevelData = _level(id)
+		if level == null:
+			continue
+		var off: Array[Vector2i] = Rules.slides_off_every_route(level, level.gates)
+		assert_true(off.is_empty(), "%s: the slides %s lie on no route of any gate placement" % [id, off])
+
+
+## The slide lesson (RULES 12.3 and 12.4, 7-1: "A gate can send walkers around a loop."): on the level that
+## brings slides, with no gate the walkers take no slide, and a gate on the highlighted socket alone sends them
+## down two runs of slides or more, the long way round.
+func test_the_first_slide_level_highlights_the_loop() -> void:
+	var id: String = NEW_FEATURES["slide"]
+	var level: LevelData = _level(id)
+	assert_not_null(level, "%s loads" % id)
+	if level == null:
+		return
+	assert_eq(level.kind_at(level.hint_cell), LevelData.Kind.SOCKET, "%s highlights a socket" % id)
+	var map: RoadMap = RoadMap.new(level)
+	var none: Array[Vector2i] = []
+	var closed: Array[Vector2i] = [level.hint_cell]
+	assert_false(map.seals(closed), "%s: the highlighted socket seals nothing" % id)
+	var open_route: Array[Vector2i] = map.route(level.entrances[0], map.distances(none))
+	var gated_route: Array[Vector2i] = map.route(level.entrances[0], map.distances(closed))
+	assert_eq(Rules.slides_walked(level, open_route), 0, "%s: with no gate the walkers take no slide" % id)
+	var runs: int = 0
+	for run: Array in Rules.slide_runs(level):
+		for cell: Vector2i in run:
+			if gated_route.has(cell):
+				runs += 1
+				break
+	assert_true(runs >= 2, "%s: the highlighted socket sends the walkers down %d slide runs" % [id, runs])
+	assert_true(gated_route.size() > open_route.size(), "%s: the loop is the long way round" % id)
+
+
+## RULES 12.4, 7-2: "A spot at the end of a long straight road." The highlighted spot of the Snow Fort level
+## lines up with the open route: the tiles in one straight line from it, out to a tier 1 Snow Fort's reach, are
+## all on an entrance's route with no gates, so its first snowball rolls down the road.
+const LINE_HIGHLIGHT: Dictionary = {"r7_l2": &"snow_fort"}
+
+
+func test_the_snow_fort_highlight_looks_down_a_straight_road() -> void:
+	for id: String in LINE_HIGHLIGHT:
+		var level: LevelData = _level(id)
+		assert_not_null(level, "%s loads" % id)
+		if level == null:
+			continue
+		var type: TowerType = catalog.tower(LINE_HIGHLIGHT[id])
+		assert_true(type != null and level.towers.has(StringName(LINE_HIGHLIGHT[id])), "%s offers the %s" % [id, LINE_HIGHLIGHT[id]])
+		if type == null:
+			continue
+		var tiles: int = type.stats(1, -1).reach / 100
+		var map: RoadMap = RoadMap.new(level)
+		var none: Array[Vector2i] = []
+		var dist: PackedInt32Array = map.distances(none)
+		var walked: Array[Vector2i] = []
+		for entrance: Vector2i in level.entrances:
+			walked.append_array(map.route(entrance, dist))
+		var lined: bool = false
+		for way: Vector2i in Rules.SIDES:
+			var all_on: bool = true
+			for step: int in range(1, tiles + 1):
+				if not walked.has(level.hint_cell + way * step):
+					all_on = false
+			if all_on:
+				lined = true
+		assert_true(lined, "%s: the highlighted spot %s looks %d tiles straight down the open route" % [id, level.hint_cell, tiles])
+
+
+## RULES 12.4: the highlighted spot of the Yawner level is set back, more than a Yawner's yawn reach from
+## every road tile, so a tower there stays awake (SET_BACK_HIGHLIGHT).
+func test_the_set_back_highlight_is_out_of_yawn_reach() -> void:
+	for id: String in SET_BACK_HIGHLIGHT:
+		var level: LevelData = _level(id)
+		var yawner: EnemyType = catalog.enemy(SET_BACK_HIGHLIGHT[id])
+		assert_true(level != null and yawner != null and yawner.yawn_reach > 0, "%s and the %s load" % [id, SET_BACK_HIGHLIGHT[id]])
+		if level == null or yawner == null:
+			continue
+		assert_eq(level.kind_at(level.hint_cell), LevelData.Kind.SPOT, "%s highlights a spot" % id)
+		for r: int in level.rows:
+			for c: int in Sim.MAP_COLUMNS:
+				var cell: Vector2i = Vector2i(c, r)
+				if not level.is_road(cell):
+					continue
+				var dx: int = (c - level.hint_cell.x) * 100
+				var dy: int = (r - level.hint_cell.y) * 100
+				assert_true(dx * dx + dy * dy > yawner.yawn_reach * yawner.yawn_reach, "%s: road %s is within a yawn of the highlighted spot" % [id, cell])
+
+
+## RULES 12.4, 7-3 and 7-6: "A spot near the entrance." The highlighted spot is within a tier 1 Sling Post's
+## reach of an entrance, where Snowrollers and Snowsnore are still small.
+const NEAR_ENTRANCE_HIGHLIGHT: Array[String] = ["r7_l3", "r7_l6"]
+
+
+func test_the_near_entrance_highlights_are_near_an_entrance() -> void:
+	var reach: int = catalog.tower(&"sling_post").stats(1, -1).reach
+	for id: String in NEAR_ENTRANCE_HIGHLIGHT:
+		var level: LevelData = _level(id)
+		assert_not_null(level, "%s loads" % id)
+		if level == null:
+			continue
+		assert_eq(level.kind_at(level.hint_cell), LevelData.Kind.SPOT, "%s highlights a spot" % id)
+		var near: bool = false
+		for entrance: Vector2i in level.entrances:
+			var dx: int = (entrance.x - level.hint_cell.x) * 100
+			var dy: int = (entrance.y - level.hint_cell.y) * 100
+			if dx * dx + dy * dy <= reach * reach:
+				near = true
+		assert_true(near, "%s: the highlighted spot %s is within %d hundredths of a tile of an entrance" % [id, level.hint_cell, reach])
+
+
+## RULES 12.4, 7-3: "Use no gates." asks the player to win on the short road. With no gates every entrance's
+## route is as short as any gate placement makes it, and some placement makes a route longer.
+const SHORT_OPEN_ROAD: Array[String] = ["r7_l3"]
+
+
+func test_the_open_road_is_the_short_one() -> void:
+	for id: String in SHORT_OPEN_ROAD:
+		var level: LevelData = _level(id)
+		assert_not_null(level, "%s loads" % id)
+		if level == null:
+			continue
+		var map: RoadMap = RoadMap.new(level)
+		var none: Array[Vector2i] = []
+		var open_dist: PackedInt32Array = map.distances(none)
+		var longer: bool = false
+		var sets: Array[Array] = []
+		Rules.gate_sets(level.sockets, level.gates, 0, [], sets)
+		for placed: Array in sets:
+			var closed: Array[Vector2i] = []
+			closed.assign(placed)
+			if map.seals(closed):
+				continue
+			var dist: PackedInt32Array = map.distances(closed)
+			for entrance: Vector2i in level.entrances:
+				var open_steps: int = map.route(entrance, open_dist).size()
+				var steps: int = map.route(entrance, dist).size()
+				assert_true(steps >= open_steps, "%s: gates %s make the road from %s shorter" % [id, placed, entrance])
+				if steps > open_steps:
+					longer = true
+		assert_true(longer, "%s: some gate placement makes a road longer" % id)

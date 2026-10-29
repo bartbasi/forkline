@@ -504,10 +504,6 @@ func _relayout() -> void:
 		for panel: BattlePanel in [pause_strip, hint_banner, preview]:
 			panel.set_tight(true, DOCK_MARGIN)
 	gate_tray.set_chip(not landscape)
-	# The cards wrap to the room in the side column, scroll bar included. A panel wider than
-	# that would widen the column and push the map aside.
-	var bar: float = _side.get_v_scroll_bar().get_combined_minimum_size().x
-	build_panel.set_width_limit(SIDE_WIDTH - 2.0 * EDGE - bar if landscape else 0.0)
 	_place_context()
 	_sheet.visible = _context != null and not landscape
 	_sync_dock()

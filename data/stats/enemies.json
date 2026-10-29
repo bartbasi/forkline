@@ -72,5 +72,17 @@
   {"id": "old_hayrick", "name": "Old Hayrick",
    "info": "Every tower aims at it. Popped once, it naps 3 seconds and gets up again.",
    "health": 2600, "armor": 0, "speed": 40, "lives": 20, "bounty": 300, "boss": true,
-   "dazzle": true, "nap_ms": 3000}
+   "dazzle": true, "nap_ms": 3000},
+  {"id": "snowroller", "name": "Snowroller",
+   "info": "Grows with every tile it walks, up to 3 times its health. Pop it early.",
+   "health": 40, "armor": 0, "speed": 100, "lives": 1, "bounty": 8,
+   "grow_pct": 10, "grow_cap_pct": 300},
+  {"id": "yawner", "name": "Yawner",
+   "info": "Every 4 seconds it yawns, and towers right beside it doze for 2 seconds.",
+   "health": 110, "armor": 2, "speed": 70, "lives": 2, "bounty": 15,
+   "yawn_ms": 4000, "yawn_reach": 150, "doze_ms": 2000},
+  {"id": "snowsnore", "name": "Snowsnore",
+   "info": "Grows as it walks. Every 6 seconds it yawns and towers near it doze.",
+   "health": 3400, "armor": 3, "speed": 35, "lives": 20, "bounty": 350, "boss": true,
+   "grow_pct": 2, "grow_cap_pct": 150, "yawn_ms": 6000, "yawn_reach": 200, "doze_ms": 3000}
 ]}

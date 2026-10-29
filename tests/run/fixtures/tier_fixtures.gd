@@ -1,19 +1,22 @@
 # Forkline. Copyright 2026 Play, Inc.
 # Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.
 extends RefCounted
-## Fixtures for the content tiers (docs/ARCHITECTURE.md 14.8). The real regions 5 to 8 are not
-## in the data yet, so these add stand-ins to the real stats and to the run fixtures:
-## clones of real towers and creatures under new ids, run.json tiers that list them, cards,
-## segments with the map features T and X, and packs that use them. Every fixture here is
-## valid. A test copies one with duplicate(true) and breaks one thing.
+## Fixtures for the content tiers (docs/ARCHITECTURE.md 14.8). These build their own tiers on
+## the stats of regions 1 to 4 only (Fx.REGIONS_1_TO_4): clones of real towers and creatures
+## under the ids the real tiers use, run.json tiers that list them, cards, segments with the
+## map features T, X and the slide arrows, and packs that use them. A real region added later
+## never reaches these, so they stay as they are. Every fixture here is valid. A test copies
+## one with duplicate(true) and breaks one thing.
 ##
 ## Tier 1: tower bramble_cottage, creatures mossbud and mistwisp, boss burrowbelly, feature T.
 ## Tier 2: tower scarecrow, creature gleamer, boss old_hayrick, feature X.
+## Tier 3: tower snow_fort, creatures snowroller and yawner, boss snowsnore, features ^v<>.
 
 const Fx: GDScript = preload("res://tests/run/fixtures/run_fixtures.gd")
 
 const TIER_1_TOWER: String = "bramble_cottage"
 const TIER_2_TOWER: String = "scarecrow"
+const TIER_3_TOWER: String = "snow_fort"
 
 
 static func _clone(item: Dictionary, id: String, name: String) -> Dictionary:
@@ -29,15 +32,15 @@ static func catalog(mutate: Callable = Callable()) -> Catalog:
 	var towers: Dictionary = Fx.read(Fx.STATS_DIR + "towers.json")
 	var enemies: Dictionary = Fx.read(Fx.STATS_DIR + "enemies.json")
 	var rules: Dictionary = Fx.read(Fx.STATS_DIR + "rules.json")
-	# The stand-ins take the place of real entries with the same ids (the real data has them from E5.1 on).
-	var stand_ins: Array = [TIER_1_TOWER, TIER_2_TOWER, "mossbud", "mistwisp", "gleamer", "burrowbelly", "old_hayrick"]
-	towers["towers"] = (towers["towers"] as Array).filter(func(item: Dictionary) -> bool: return not stand_ins.has(item["id"]))
-	enemies["enemies"] = (enemies["enemies"] as Array).filter(func(item: Dictionary) -> bool: return not stand_ins.has(item["id"]))
+	# Only regions 1 to 4 are kept. The stand-ins below take the ids the real tiers use.
+	var kept: Array[String] = Fx.REGIONS_1_TO_4
+	towers["towers"] = (towers["towers"] as Array).filter(func(item: Dictionary) -> bool: return kept.has(item["id"]))
+	enemies["enemies"] = (enemies["enemies"] as Array).filter(func(item: Dictionary) -> bool: return kept.has(item["id"]))
 	var sling: Dictionary = {}
 	for item: Dictionary in towers["towers"]:
 		if item["id"] == "sling_post":
 			sling = item
-	for pair: Array in [[TIER_1_TOWER, "Bramble Cottage", "bc"], [TIER_2_TOWER, "Scarecrow", "sc"]]:
+	for pair: Array in [[TIER_1_TOWER, "Bramble Cottage", "bc"], [TIER_2_TOWER, "Scarecrow", "sc"], [TIER_3_TOWER, "Snow Fort", "sf"]]:
 		var copy: Dictionary = _clone(sling, pair[0], pair[1])
 		copy["plural"] = pair[1] + "s"
 		for i: int in 2:
@@ -52,6 +55,9 @@ static func catalog(mutate: Callable = Callable()) -> Catalog:
 		_clone(by_id["pip"], "gleamer", "Gleamer"),
 		_clone(by_id["grumblesack"], "burrowbelly", "Burrowbelly"),
 		_clone(by_id["ironshell"], "old_hayrick", "Old Hayrick"),
+		_clone(by_id["scamp"], "snowroller", "Snowroller"),
+		_clone(by_id["pip"], "yawner", "Yawner"),
+		_clone(by_id["ironshell"], "snowsnore", "Snowsnore"),
 	]
 	extra[3]["summon"]["enemy"] = "mistwisp"
 	for item: Dictionary in extra:
@@ -69,6 +75,7 @@ static func tiers() -> Array:
 	return [
 		{"level": "r5_l6", "towers": [TIER_1_TOWER], "creatures": ["mossbud", "mistwisp"], "bosses": ["burrowbelly"], "grid": "T"},
 		{"level": "r6_l6", "towers": [TIER_2_TOWER], "creatures": ["gleamer"], "bosses": ["old_hayrick"], "grid": "X"},
+		{"level": "r7_l6", "towers": [TIER_3_TOWER], "creatures": ["snowroller", "yawner"], "bosses": ["snowsnore"], "grid": "^v<>"},
 	]
 
 
@@ -85,22 +92,24 @@ static func _replace_cell(rows: Array, row: int, col: int, ch: String) -> Array:
 	return out
 
 
-## Extra segments, in the file shape: a tier 1 middle with a tunnel and a tier 2 middle with a
-## bridge. Both are mid_split with one straight road cell changed, so their ports are its ports,
+## Extra segments, in the file shape: a tier 1 middle with a tunnel, a tier 2 middle with a
+## bridge and a tier 3 middle with an ice slide. All are mid_split with one straight road cell changed, so their ports are its ports,
 ## every top and bottom that fits it fits them, and the road still leads from entrance to base.
 static func segments() -> Dictionary:
 	var split: Array = Fx.SEGMENTS["mid_split"][1]
 	return {
 		"mid_tunnel": ["middle", _replace_cell(split, 4, 3, "T")],
 		"mid_bridge": ["middle", _replace_cell(split, 0, 3, "X")],
+		"mid_slide": ["middle", _replace_cell(split, 4, 3, "v")],
 	}
 
 
-## The fixture index order with the two tier segments in the middle of it.
+## The fixture index order with the three tier segments in the middle of it.
 static func index_order() -> Array:
 	var out: Array = Fx.INDEX_ORDER.duplicate()
 	out.insert(out.find("mid_split") + 1, "mid_tunnel")
 	out.insert(out.find("mid_bend") + 1, "mid_bridge")
+	out.insert(out.find("mid_side") + 1, "mid_slide")
 	return out
 
 
@@ -112,7 +121,7 @@ static func _pack(files: Dictionary, id: String) -> Dictionary:
 
 
 ## Packs that use the stand-ins, put first in the file: a tier 1 pack for band 2, a tier 2 pack
-## for band 3, and a band 6 pack for each new boss.
+## and a Snowroller pack for band 3, a Yawner pack for band 4, and a band 6 pack for each new boss.
 static func packs() -> Dictionary:
 	var base: Dictionary = Fx.packs()
 	var files: Dictionary = {"segments/packs.json": base}
@@ -135,6 +144,19 @@ static func packs() -> Dictionary:
 	hayrick["boss"] = "old_hayrick"
 	hayrick["waves"][2]["groups"][0]["enemy"] = "old_hayrick"
 	made.append(hayrick)
+	var roller: Dictionary = (_pack(files, "band3_pack1")).duplicate(true)
+	roller["id"] = "band3_snowroller"
+	roller["waves"][1]["groups"][0]["enemy"] = "snowroller"
+	made.append(roller)
+	var yawner: Dictionary = (_pack(files, "band4_pack0")).duplicate(true)
+	yawner["id"] = "band4_yawner"
+	yawner["waves"][1]["groups"][0]["enemy"] = "yawner"
+	made.append(yawner)
+	var snore: Dictionary = (_pack(files, "band6_pack2")).duplicate(true)
+	snore["id"] = "band6_snowsnore"
+	snore["boss"] = "snowsnore"
+	snore["waves"][2]["groups"][0]["enemy"] = "snowsnore"
+	made.append(snore)
 	var all: Array = made.duplicate()
 	all.append_array(base["packs"])
 	return {"format": 1, "packs": all}
@@ -153,6 +175,10 @@ static func cards() -> Dictionary:
 		"text": "Scarecrows reach further.", "once": true, "unlock": {"counter": "stars", "at": 10},
 		"effects": [{"type": "tower_add", "tower": TIER_2_TOWER, "stat": "reach", "amount": 50},
 			{"type": "tower_add", "tower": TIER_2_TOWER, "stat": "damage", "amount": -1}]})
+	list.insert(5, Fx.tower_card(TIER_3_TOWER, "Snow Fort"))
+	list.insert(12, {"id": "packed_snow", "kind": "perk", "tower": TIER_3_TOWER, "name": "Packed Snow",
+		"text": "Snow Forts deal 4 more damage.", "once": true, "unlock": {},
+		"effects": [{"type": "tower_add", "tower": TIER_3_TOWER, "stat": "damage", "amount": 4}]})
 	return out
 
 

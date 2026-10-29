@@ -46,6 +46,11 @@ func _pool(tier: int) -> Array[StringName]:
 	return data.pool({"stars": 1000, "best_run_wave": 1000}, tier)
 
 
+## The highest tier of the fixture data.
+func _top() -> int:
+	return data.tiers.size()
+
+
 func _stack_ids(plan: Dictionary) -> Array:
 	return [plan["top"], plan["middle"], plan["bottom"]]
 
@@ -57,9 +62,10 @@ func _many(count: int, id: String) -> Array:
 	return out
 
 
+## Adds count tiers that list nothing. Their levels continue the region numbers (r8_l6 for the fourth tier).
 func _empty_tiers(f: Dictionary, count: int) -> void:
 	for i: int in count:
-		_tiers(f).append({"level": "r%d_l6" % (i + 7), "towers": [], "creatures": [], "bosses": [], "grid": ""})
+		_tiers(f).append({"level": "r%d_l6" % (_tiers(f).size() + 5), "towers": [], "creatures": [], "bosses": [], "grid": ""})
 
 
 func _pack_in(f: Dictionary, id: String) -> Dictionary:
@@ -122,24 +128,27 @@ func _bring_mossbud(all: Dictionary) -> void:
 
 # run.json tiers
 
-func test_the_fixtures_pass_and_the_real_run_json_lists_tiers_1_and_2() -> void:
+func test_the_fixtures_pass_and_the_real_run_json_lists_tiers_1_to_3() -> void:
 	assert_eq(RunData.check(Tx.files(), catalog), PackedStringArray())
 	assert_not_null(data)
 	assert_eq(Fx.run_data().tiers.size(), 0, "the plain fixtures have no tiers")
 	var real: Dictionary = JsonFile.read("res://data/runs/run.json", 16384)
 	assert_eq(real["status"], JsonFile.OK_STATUS)
-	assert_eq(real["data"]["tiers"], [
+	# The first three tiers are pinned. A tier added later leaves them as they are.
+	assert_eq((real["data"]["tiers"] as Array).slice(0, 3), [
 		{"level": "r5_l6", "towers": ["bramble_cottage"], "creatures": ["mossbud", "mistwisp"], "bosses": ["burrowbelly"], "grid": "T"},
 		{"level": "r6_l6", "towers": ["scarecrow"], "creatures": ["gleamer", "sleepyhead"], "bosses": ["old_hayrick"], "grid": "X"},
-	], "tier 1 of E5.1 and tier 2 of E6.1b; tiers 3 and 4 come with their regions")
-	assert_eq(real["data"]["bands"][1], ["skitter", "flitter", "shellback", "mossbud", "sleepyhead"], "band 2 gains Mossbud and Sleepyhead")
-	assert_eq(real["data"]["bands"][2], ["bubbler", "puffball", "gleamer"], "band 3 gains Gleamer")
-	assert_eq(real["data"]["bands"][3], ["mender", "dusk_moth", "mistwisp"], "band 4 gains Mistwisp")
+		{"level": "r7_l6", "towers": ["snow_fort"], "creatures": ["snowroller", "yawner"], "bosses": ["snowsnore"], "grid": "^v<>"},
+	], "tier 1 of E5.1, tier 2 of E6.1b and tier 3 of E7.1b")
+	var bands: Array = real["data"]["bands"]
+	assert_eq((bands[1] as Array).slice(0, 5), ["skitter", "flitter", "shellback", "mossbud", "sleepyhead"], "band 2 gains Mossbud and Sleepyhead")
+	assert_eq((bands[2] as Array).slice(0, 4), ["bubbler", "puffball", "gleamer", "snowroller"], "band 3 gains Gleamer and Snowroller")
+	assert_eq((bands[3] as Array).slice(0, 4), ["mender", "dusk_moth", "mistwisp", "yawner"], "band 4 gains Mistwisp and Yawner")
 
 
 func test_the_tiers_are_read_in_order() -> void:
 	assert_eq(RunData.MAX_TIERS, 4)
-	assert_eq(data.tiers.size(), 2)
+	assert_eq(data.tiers.size(), 3)
 	assert_eq(data.tiers[0], {
 		"level": &"r5_l6", "towers": [&"bramble_cottage"], "creatures": [&"mossbud", &"mistwisp"],
 		"bosses": [&"burrowbelly"], "grid": "T",
@@ -147,19 +156,24 @@ func test_the_tiers_are_read_in_order() -> void:
 	assert_eq(data.tiers[1]["level"], &"r6_l6")
 	assert_eq(data.tiers[1]["grid"], "X")
 	assert_eq(data.tiers[1]["bosses"], [&"old_hayrick"])
+	assert_eq(data.tiers[2], {
+		"level": &"r7_l6", "towers": [&"snow_fort"], "creatures": [&"snowroller", &"yawner"],
+		"bosses": [&"snowsnore"], "grid": "^v<>",
+	})
 
 
 func test_a_tier_may_list_nothing_and_four_tiers_are_allowed() -> void:
 	var files: Dictionary = Tx.files()
-	_empty_tiers(files, 2)
+	var listed: int = _tiers(files).size()
+	_empty_tiers(files, RunData.MAX_TIERS - listed)
 	assert_eq(RunData.check(files, catalog), PackedStringArray())
 	var four: RunData = RunData.from_data(files, catalog)
-	assert_eq(four.tiers.size(), 4)
+	assert_eq(four.tiers.size(), RunData.MAX_TIERS)
 	assert_eq(four.tiers[3], {"level": &"r8_l6", "towers": [], "creatures": [], "bosses": [], "grid": ""})
-	# Tiers 3 and 4 list nothing, so their plans are the tier 2 plans.
+	# Tiers that list nothing add nothing, so their plans are the plans of the last tier that does.
 	for run_seed: int in [1, 2, 3]:
-		assert_eq(MapAssembler.plan(run_seed, four, 4), MapAssembler.plan(run_seed, four, 2))
-		assert_eq(MapAssembler.plan(run_seed, four, 3), MapAssembler.plan(run_seed, four, 2))
+		for tier: int in range(listed + 1, RunData.MAX_TIERS + 1):
+			assert_eq(MapAssembler.plan(run_seed, four, tier), MapAssembler.plan(run_seed, four, listed))
 
 
 func test_run_json_needs_the_tiers_key() -> void:
@@ -169,7 +183,7 @@ func test_run_json_needs_the_tiers_key() -> void:
 func test_hostile_tiers_lists_are_refused() -> void:
 	_expect("not a list", func(f: Dictionary) -> void: f["runs/run.json"]["tiers"] = "none", "tiers")
 	_expect("not a list (object)", func(f: Dictionary) -> void: f["runs/run.json"]["tiers"] = {}, "tiers")
-	_expect("five tiers", func(f: Dictionary) -> void: _empty_tiers(f, 3), "tiers")
+	_expect("one tier over the most", func(f: Dictionary) -> void: _empty_tiers(f, RunData.MAX_TIERS + 1 - _tiers(f).size()), "tiers")
 	_expect("an entry that is not an object", func(f: Dictionary) -> void: _tiers(f)[0] = 7, "tiers[0]")
 	for key: String in ["level", "towers", "creatures", "bosses", "grid"]:
 		_expect("missing " + key, func(f: Dictionary) -> void: _tiers(f)[0].erase(key), "tiers[0]")
@@ -226,6 +240,7 @@ func test_all_eight_feature_characters_are_accepted() -> void:
 	var files: Dictionary = Tx.files()
 	_tiers(files)[0]["grid"] = "T^<P"
 	_tiers(files)[1]["grid"] = "Xv>Q"
+	_tiers(files)[2]["grid"] = ""
 	assert_eq(RunData.check(files, catalog), PackedStringArray())
 	assert_eq(RunData.TIER_FEATURES, "TX^v<>PQ")
 
@@ -246,6 +261,8 @@ func test_cards_take_their_towers_tier() -> void:
 	assert_eq(data.card(&"thorn_tips")["tier"], 1)
 	assert_eq(data.card(&"tower_scarecrow")["tier"], 2)
 	assert_eq(data.card(&"straw_hats")["tier"], 2)
+	assert_eq(data.card(&"tower_snow_fort")["tier"], 3)
+	assert_eq(data.card(&"packed_snow")["tier"], 3)
 	for id: StringName in [&"tower_pumpkin_catapult", &"sharp_pebbles", &"spare_gate", &"gold_purse", &"flock", &"piggy_bank"]:
 		assert_eq(data.card(id)["tier"], 0, String(id))
 	assert_eq(Fx.run_data().card(&"sharp_pebbles")["tier"], 0, "with no tiers every card is tier 0")
@@ -254,14 +271,16 @@ func test_cards_take_their_towers_tier() -> void:
 func test_segments_take_the_highest_tier_of_their_features() -> void:
 	assert_eq(data.segment(&"mid_tunnel")["tier"], 1)
 	assert_eq(data.segment(&"mid_bridge")["tier"], 2)
+	assert_eq(data.segment(&"mid_slide")["tier"], 3)
 	for id: StringName in [&"top_one", &"mid_split", &"bot_home", &"mid_merge"]:
 		assert_eq(data.segment(id)["tier"], 0, String(id))
 	# The unit rule: the highest tier among the characters, and 0 without a feature.
-	var table: Dictionary = {"T": 1, "X": 2, "P": 4}
+	var table: Dictionary = {"T": 1, "X": 2, "v": 3, "P": 4}
 	assert_eq(RunSegments.tier_of(PackedStringArray(["...#...", ".T.#.X."]), table), 2)
+	assert_eq(RunSegments.tier_of(PackedStringArray(["...#...", ".v.#.X."]), table), 3)
 	assert_eq(RunSegments.tier_of(PackedStringArray(["...#...", ".P.#.T."]), table), 4)
 	assert_eq(RunSegments.tier_of(PackedStringArray(["...#...", "o.G#B.."]), table), 0)
-	assert_eq(RunSegments.tier_of(PackedStringArray(["..^v<>."]), table), 0, "a feature no tier lists is tier 0")
+	assert_eq(RunSegments.tier_of(PackedStringArray(["..^>."]), table), 0, "a feature no tier lists is tier 0")
 	assert_eq(RunSegments.tier_of(PackedStringArray(["..T.."]), {}), 0)
 
 
@@ -273,6 +292,9 @@ func test_packs_take_the_highest_tier_of_creatures_and_boss() -> void:
 	assert_eq(by_id["band3_gleamer"]["tier"], 2)
 	assert_eq(by_id["band6_burrowbelly"]["tier"], 1)
 	assert_eq(by_id["band6_hayrick"]["tier"], 2)
+	assert_eq(by_id["band3_snowroller"]["tier"], 3)
+	assert_eq(by_id["band4_yawner"]["tier"], 3)
+	assert_eq(by_id["band6_snowsnore"]["tier"], 3)
 	assert_eq(by_id["band2_pack0"]["tier"], 0)
 	assert_eq(by_id["band6_pack0"]["tier"], 0)
 	for pack: Dictionary in Fx.run_data().packs:
@@ -309,6 +331,7 @@ func test_segments_take_the_feature_characters_as_road() -> void:
 	assert_eq(data.segment(&"mid_tunnel")["bottom_ports"], [3])
 	assert_eq(data.segment(&"mid_bridge")["top_ports"], [3])
 	assert_eq(data.segment(&"mid_bridge")["bottom_ports"], [3])
+	assert_eq(data.segment(&"mid_slide")["bottom_ports"], [3], "a slide arrow counts as road in a port row")
 
 
 func test_a_feature_counts_in_the_road_rules_of_a_segment() -> void:
@@ -402,8 +425,11 @@ func test_a_problem_found_at_tier_0_is_named_once() -> void:
 # the filters
 
 func test_pool_and_card_ids_leave_out_cards_above_the_tier() -> void:
+	var every: Array[StringName] = data.card_ids(3)
+	assert_eq(every.size(), 21)
+	assert_eq(data.card_ids(_top()), every, "the top tier sees every card")
 	var all: Array[StringName] = data.card_ids(2)
-	assert_eq(all.size(), 19)
+	assert_eq(all.size(), 19, "tier 2 does not see the Snow Fort cards")
 	var zero: Array[StringName] = data.card_ids()
 	assert_eq(zero.size(), 15, "the default is tier 0")
 	assert_eq(zero, Fx.run_data().card_ids(), "tier 0 is exactly the plain fixtures' cards, in their order")
@@ -415,6 +441,10 @@ func test_pool_and_card_ids_leave_out_cards_above_the_tier() -> void:
 	assert_true(one.has(&"thorn_tips"))
 	assert_false(one.has(&"tower_scarecrow"))
 	assert_true(all.has(&"straw_hats"))
+	assert_false(all.has(&"tower_snow_fort"))
+	assert_false(all.has(&"packed_snow"))
+	assert_true(every.has(&"tower_snow_fort"))
+	assert_true(every.has(&"packed_snow"))
 	# File order: a filtered list is the full list with things removed.
 	var at: int = -1
 	for id: StringName in zero:
@@ -428,8 +458,11 @@ func test_pool_respects_unlocks_and_tiers_together() -> void:
 	assert_true(data.pool({"stars": 10}, 2).has(&"straw_hats"))
 	assert_false(data.pool({"stars": 10}, 1).has(&"straw_hats"), "reached, but above the tier")
 	assert_true(data.pool({}, 1).has(&"thorn_tips"))
+	assert_false(data.pool({}, 2).has(&"packed_snow"))
+	assert_true(data.pool({}, 3).has(&"packed_snow"))
 	assert_false(data.pool({}).has(&"thorn_tips"))
 	assert_eq(data.pool({"stars": 1000}), Fx.run_data().pool({"stars": 1000}), "tier 0 pool equals today's")
+	assert_eq(_pool(3), data.card_ids(3))
 	assert_eq(_pool(2), data.card_ids(2))
 	assert_eq(_pool(1), data.card_ids(1))
 	assert_eq(_pool(0), data.card_ids(0))
@@ -447,7 +480,12 @@ func test_segment_filters_keep_index_order_and_leave_out_higher_tiers() -> void:
 	assert_true(one.find(&"mid_tunnel") == one.find(&"mid_split") + 1, "it sits where the index puts it")
 	var two: Array = ids.call(data.segments_of(&"middle", 2))
 	assert_true(two.has(&"mid_bridge"))
+	assert_false(two.has(&"mid_slide"))
 	assert_eq(two.size(), plain.size() + 2)
+	var three: Array = ids.call(data.segments_of(&"middle", 3))
+	assert_true(three.has(&"mid_slide"))
+	assert_eq(three.size(), plain.size() + 3)
+	assert_true(three.find(&"mid_slide") == three.find(&"mid_side") + 1, "it sits where the index puts it")
 	assert_eq(ids.call(data.segments_of(&"top", 2)), ids.call(Fx.run_data().segments_of(&"top")), "the tops have no features")
 
 
@@ -459,6 +497,8 @@ func test_segments_under_filter_by_tier() -> void:
 	assert_false(ids.call(data.segments_under(&"top_one", 1)).has(&"mid_bridge"))
 	assert_true(ids.call(data.segments_under(&"top_one", 1)).has(&"mid_tunnel"))
 	assert_true(ids.call(data.segments_under(&"top_one", 2)).has(&"mid_bridge"))
+	assert_false(ids.call(data.segments_under(&"top_one", 2)).has(&"mid_slide"))
+	assert_true(ids.call(data.segments_under(&"top_one", 3)).has(&"mid_slide"))
 	# Bottoms under a middle have no features here: the filter changes nothing for them.
 	assert_eq(ids.call(data.segments_under(&"mid_split", 2)), ids.call(data.segments_under(&"mid_split")))
 	assert_eq(data.segments_under(&"nothing", 2), [])
@@ -479,6 +519,12 @@ func test_pack_and_boss_filters_by_tier() -> void:
 	assert_eq(ids.call(data.packs_of(6, &"burrowbelly")), [], "not at tier 0")
 	assert_eq(ids.call(data.packs_of(6, &"old_hayrick", 1)), [])
 	assert_eq(ids.call(data.packs_of(6, &"old_hayrick", 2)), [&"band6_hayrick"])
+	assert_eq(ids.call(data.packs_of(6, &"snowsnore", 2)), [], "not at tier 2")
+	assert_eq(ids.call(data.packs_of(6, &"snowsnore", 3)), [&"band6_snowsnore"])
+	assert_false(ids.call(data.packs_of(3, &"", 2)).has(&"band3_snowroller"))
+	assert_true(ids.call(data.packs_of(3, &"", 3)).has(&"band3_snowroller"))
+	assert_false(ids.call(data.packs_of(4, &"", 2)).has(&"band4_yawner"))
+	assert_true(ids.call(data.packs_of(4, &"", 3)).has(&"band4_yawner"))
 	assert_eq(data.boss_ids(), base.boss_ids(), "tier 0: today's bosses")
 	assert_eq(data.boss_ids(0), [&"grumblesack", &"ironshell", &"moon_moth", &"old_tusk"])
 	assert_eq(data.boss_ids(1).size(), 5)
@@ -486,6 +532,9 @@ func test_pack_and_boss_filters_by_tier() -> void:
 	assert_false(data.boss_ids(1).has(&"old_hayrick"))
 	assert_eq(data.boss_ids(2).size(), 6)
 	assert_eq(data.boss_ids(2)[5], &"old_hayrick", "enemies.json order")
+	assert_eq(data.boss_ids(3).size(), 7)
+	assert_eq(data.boss_ids(3)[6], &"snowsnore")
+	assert_false(data.boss_ids(2).has(&"snowsnore"))
 
 
 # plans at every tier
@@ -507,7 +556,7 @@ func test_plans_use_only_things_of_the_tier_or_below() -> void:
 	var packs: Dictionary = {}
 	for pack: Dictionary in data.packs:
 		packs[pack["id"]] = pack
-	for tier: int in 3:
+	for tier: int in _top() + 1:
 		for run_seed: int in range(1, 121):
 			var plan: Dictionary = MapAssembler.plan(run_seed, data, tier)
 			assert_false(plan.is_empty(), "seed %d tier %d" % [run_seed, tier])
@@ -521,26 +570,41 @@ func test_plans_use_only_things_of_the_tier_or_below() -> void:
 
 
 func test_higher_tiers_bring_the_new_things_in() -> void:
-	var seen_boss: Dictionary = {}
-	var seen_segment: Dictionary = {}
-	var seen_pack: Dictionary = {}
-	for run_seed: int in range(1, 401):
-		var plan: Dictionary = MapAssembler.plan(run_seed, data, 2)
-		seen_boss[plan["boss"]] = true
-		for id: StringName in _stack_ids(plan):
-			seen_segment[id] = true
-		for id: StringName in plan["packs"]:
-			seen_pack[id] = true
+	var seen: Array[Dictionary] = []
+	for tier: int in [2, 3]:
+		var boss: Dictionary = {}
+		var segment: Dictionary = {}
+		var pack: Dictionary = {}
+		for run_seed: int in range(1, 401):
+			var plan: Dictionary = MapAssembler.plan(run_seed, data, tier)
+			boss[plan["boss"]] = true
+			for id: StringName in _stack_ids(plan):
+				segment[id] = true
+			for id: StringName in plan["packs"]:
+				pack[id] = true
+		seen.append({"boss": boss, "segment": segment, "pack": pack})
 	for id: StringName in [&"burrowbelly", &"old_hayrick"]:
-		assert_true(seen_boss.has(id), String(id))
+		assert_true(seen[0]["boss"].has(id), "tier 2: %s" % id)
 	for id: StringName in [&"mid_tunnel", &"mid_bridge"]:
-		assert_true(seen_segment.has(id), String(id))
+		assert_true(seen[0]["segment"].has(id), "tier 2: %s" % id)
 	for id: StringName in [&"band2_mossbud", &"band3_gleamer", &"band6_burrowbelly", &"band6_hayrick"]:
-		assert_true(seen_pack.has(id), String(id))
+		assert_true(seen[0]["pack"].has(id), "tier 2: %s" % id)
+	# Tier 3 brings its own and keeps the older ones.
+	assert_true(seen[1]["boss"].has(&"snowsnore"))
+	assert_true(seen[1]["boss"].has(&"old_hayrick"))
+	assert_true(seen[1]["segment"].has(&"mid_slide"))
+	assert_true(seen[1]["segment"].has(&"mid_bridge"))
+	for id: StringName in [&"band3_snowroller", &"band4_yawner", &"band6_snowsnore", &"band3_gleamer", &"band6_hayrick"]:
+		assert_true(seen[1]["pack"].has(id), "tier 3: %s" % id)
+	# Tier 2 never meets them.
+	assert_false(seen[0]["boss"].has(&"snowsnore"))
+	assert_false(seen[0]["segment"].has(&"mid_slide"))
+	for id: StringName in [&"band3_snowroller", &"band4_yawner", &"band6_snowsnore"]:
+		assert_false(seen[0]["pack"].has(id), "tier 2: %s" % id)
 
 
 func test_plans_are_the_same_for_the_same_seed_and_tier() -> void:
-	for tier: int in 3:
+	for tier: int in _top() + 1:
 		for run_seed: int in [3, 99, 20261028]:
 			assert_eq(MapAssembler.plan(run_seed, data, tier), MapAssembler.plan(run_seed, Tx.run_data(), tier))
 			var a: LevelData = MapAssembler.assemble(run_seed, data, catalog, tier)
@@ -550,18 +614,18 @@ func test_plans_are_the_same_for_the_same_seed_and_tier() -> void:
 
 
 func test_every_plan_at_every_tier_builds_a_level() -> void:
-	for tier: int in 3:
+	for tier: int in _top() + 1:
 		for run_seed: int in range(1, 41):
 			assert_not_null(MapAssembler.assemble(run_seed, data, catalog, tier), "seed %d tier %d" % [run_seed, tier])
 
 
 func test_a_tier_outside_the_range_gives_no_plan() -> void:
-	assert_eq(MapAssembler.plan(1, data, 3), {})
+	assert_eq(MapAssembler.plan(1, data, _top() + 1), {})
 	assert_eq(MapAssembler.plan(1, data, -1), {})
-	assert_null(MapAssembler.assemble(1, data, catalog, 3))
+	assert_null(MapAssembler.assemble(1, data, catalog, _top() + 1))
 	assert_null(MapAssembler.assemble(1, data, catalog, -1))
 	assert_eq(MapAssembler.plan(1, Fx.run_data(), 1), {}, "no tiers in the data")
-	assert_not_null(MapAssembler.assemble(1, data, catalog, 2))
+	assert_not_null(MapAssembler.assemble(1, data, catalog, _top()))
 
 
 # RunCards.has_stat
@@ -691,7 +755,7 @@ func _restore(s: RunSession, raw_run: Variant = null) -> RunSession:
 
 
 func test_a_session_keeps_its_tier() -> void:
-	for tier: int in 3:
+	for tier: int in _top() + 1:
 		var s: RunSession = _start(5, tier)
 		assert_not_null(s, "tier %d" % tier)
 		assert_eq(s.tier, tier)
@@ -700,14 +764,14 @@ func test_a_session_keeps_its_tier() -> void:
 
 
 func test_a_session_builds_its_map_from_its_tier() -> void:
-	for tier: int in 3:
+	for tier: int in _top() + 1:
 		var s: RunSession = _start(9, tier)
 		var level: LevelData = MapAssembler.assemble(9, data, catalog, tier)
 		assert_eq(JSON.stringify(s.battle.level.to_data()), JSON.stringify(level.to_data()), "tier %d" % tier)
 
 
 func test_a_session_refuses_a_tier_outside_the_range() -> void:
-	assert_null(_start(5, 3))
+	assert_null(_start(5, _top() + 1))
 	assert_null(RunSession.start(5, "", false, data.pool({}), data, catalog, -1))
 	assert_null(RunSession.start(5, "", false, Fx.run_data().pool({}), Fx.run_data(), catalog, 1), "no tiers in the data")
 
@@ -722,7 +786,7 @@ func test_a_session_refuses_a_pool_with_a_card_above_its_tier() -> void:
 func test_a_daily_has_a_tier_too() -> void:
 	var day: String = "2026-10-28"
 	var seed_value: int = RunSeeds.daily_seed(day)
-	for tier: int in 3:
+	for tier: int in _top() + 1:
 		var s: RunSession = RunSession.start(seed_value, day, false, data.card_ids(tier), data, catalog, tier)
 		assert_not_null(s, "tier %d" % tier)
 		assert_eq(s.tier, tier)
@@ -732,7 +796,7 @@ func test_a_daily_has_a_tier_too() -> void:
 
 
 func test_the_tier_is_saved_and_comes_back() -> void:
-	for tier: int in 3:
+	for tier: int in _top() + 1:
 		var s: RunSession = _start(11, tier)
 		var back: RunSession = _restore(s)
 		assert_not_null(back, "tier %d" % tier)
@@ -744,11 +808,14 @@ func test_the_tier_is_saved_and_comes_back() -> void:
 
 func test_a_daily_save_keeps_its_tier() -> void:
 	var day: String = "2026-10-29"
-	var s: RunSession = RunSession.start(RunSeeds.daily_seed(day), day, false, data.card_ids(2), data, catalog, 2)
-	var back: RunSession = _restore(s)
-	assert_not_null(back)
-	assert_eq(back.tier, 2)
-	assert_eq(back.day, day)
+	for tier: int in [2, _top()]:
+		var s: RunSession = RunSession.start(RunSeeds.daily_seed(day), day, false, data.card_ids(tier), data, catalog, tier)
+		var back: RunSession = _restore(s)
+		assert_not_null(back, "tier %d" % tier)
+		if back == null:
+			return
+		assert_eq(back.tier, tier)
+		assert_eq(back.day, day)
 
 
 func test_a_save_without_tier_is_a_tier_0_run() -> void:
@@ -771,12 +838,12 @@ func test_a_save_without_tier_is_a_tier_0_run() -> void:
 
 func test_a_bad_tier_in_a_save_is_refused() -> void:
 	var s: RunSession = _start(13, 1)
-	for bad: Variant in [-1, 3, 4, 1000000, 1.5, "1", true, null, [1], {}, 1e30]:
+	for bad: Variant in [-1, _top() + 1, _top() + 2, 1000000, 1.5, "1", true, null, [1], {}, 1e30]:
 		var raw: Dictionary = JSON.parse_string(JSON.stringify(s.to_data()))
 		raw["tier"] = bad
 		assert_null(_restore(s, raw), "tier %s" % str(bad))
 	var ok: Dictionary = JSON.parse_string(JSON.stringify(s.to_data()))
-	ok["tier"] = 2
+	ok["tier"] = _top()
 	assert_not_null(_restore(s, ok), "a tier up to the tier count is read (the pool is then smaller than the tier allows)")
 	var raw_extra: Dictionary = JSON.parse_string(JSON.stringify(s.to_data()))
 	raw_extra["level"] = 3
@@ -794,26 +861,33 @@ func test_a_save_whose_pool_has_a_card_above_its_tier_is_refused() -> void:
 	var up: Dictionary = JSON.parse_string(JSON.stringify(s.to_data()))
 	up["pool"].append("straw_hats")
 	assert_null(_restore(s, up), "a tier 2 card in a tier 1 run")
+	up["pool"].append("packed_snow")
 	up["tier"] = 2
-	assert_not_null(_restore(s, up), "and fine in a tier 2 run")
+	assert_null(_restore(s, up), "a tier 3 card in a tier 2 run")
+	up["pool"].erase("packed_snow")
+	assert_not_null(_restore(s, up), "a tier 2 card is fine in a tier 2 run")
+	up["pool"].append("packed_snow")
+	up["tier"] = 3
+	assert_not_null(_restore(s, up), "and a tier 3 card in a tier 3 run")
 
 
 func test_a_tier_run_plays_to_the_end_and_resumes_the_same() -> void:
-	var s: RunSession = RunSession.start(21, "", false, data.pool({"stars": 1000}, 2), data, catalog, 2)
-	var player: RefCounted = Player.new(21, 0, false)
-	player.rich = true
-	var guard: int = 0
-	while s.battle.waves_started < 4 or s.battle.phase != Battle.Phase.WAVE:
-		assert_true(player.advance(s))
-		guard += 1
-		if guard > 100000:
-			break
-	var back: RunSession = _restore(s)
-	assert_not_null(back)
-	if back == null:
-		return
-	assert_eq(back.tier, 2)
-	var twin: RefCounted = player.fork()
-	assert_true(player.play(s))
-	assert_true(twin.play(back))
-	assert_eq(Player.fingerprint(back), Player.fingerprint(s))
+	for tier: int in [2, _top()]:
+		var s: RunSession = RunSession.start(21, "", false, data.pool({"stars": 1000}, tier), data, catalog, tier)
+		var player: RefCounted = Player.new(21, 0, false)
+		player.rich = true
+		var guard: int = 0
+		while s.battle.waves_started < 4 or s.battle.phase != Battle.Phase.WAVE:
+			assert_true(player.advance(s))
+			guard += 1
+			if guard > 100000:
+				break
+		var back: RunSession = _restore(s)
+		assert_not_null(back, "tier %d" % tier)
+		if back == null:
+			return
+		assert_eq(back.tier, tier)
+		var twin: RefCounted = player.fork()
+		assert_true(player.play(s))
+		assert_true(twin.play(back))
+		assert_eq(Player.fingerprint(back), Player.fingerprint(s), "tier %d" % tier)

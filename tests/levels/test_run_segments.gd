@@ -5,8 +5,8 @@ extends "res://tests/base_test.gd"
 ## RULES 14.2, 14.3, 14.9). Every file is listed, the files pass RunData.check, every stack of
 ## segments that fit, at every content tier, is a valid run map with a gate worth placing, a Bakery
 ## spot and tunnels that keep RULES 3.6 across the seams, every bottom segment keeps its last row
-## scenery, features sit only in middle segments, bridges keep RULES 3.7 on every stack, every choice of packs at every tier keeps the new
-## creature rule and shows each tier creature as if new, and only boss waves set their own strength.
+## scenery, features sit only in middle segments, bridges keep RULES 3.7 and slides RULES 3.8 on every stack, every choice of packs at
+## every tier keeps the new creature rule and shows each tier creature as if new, and only boss waves set their own strength.
 
 const SEGMENT_DIR: String = "res://data/segments/"
 const RUN_PATH: String = "res://data/runs/run.json"
@@ -37,7 +37,7 @@ const CAPPED_MOST: int = 6
 ## pack can show them, plus two band 6 packs for its boss. A band 2 pack already shows its three new
 ## creatures, one a wave, so no wave is left to show a tier creature as if new: the packs of every tier
 ## start in band 3, the Mossbud and the Sleepyhead of band 2 included.
-const TIER_FIRST_BAND: Dictionary = {1: 3, 2: 3}
+const TIER_FIRST_BAND: Dictionary = {1: 3, 2: 3, 3: 3}
 ## RULES 14.2: which feature each map character belongs to.
 const FEATURE_KINDS: Dictionary = {"T": "tunnel", "X": "bridge", "^": "slide", "v": "slide", "<": "slide", ">": "slide", "P": "stump", "Q": "stump"}
 
@@ -588,6 +588,53 @@ func test_every_stack_keeps_the_bridge_rules() -> void:
 		var off: Array[Vector2i] = Rules.bridges_off_every_route(level, data.gates)
 		assert_true(off.is_empty(), "%s / %s / %s: the bridges %s lie on no route" % [stack[0], stack[1], stack[2], off])
 	assert_true(bridged >= 1, "some stack has a bridge, so the rules are exercised")
+
+
+## RULES 3.8 and 14.2 on every stack at every tier: slides are straight runs of 2 or more tiles with every arrow
+## along the run, each arrow points at road, no slide is a dead end with no gates, and each slide tile lies on the
+## shortest route of some placement of the run's starting gates, so it always matters.
+func test_every_stack_keeps_the_slide_rules() -> void:
+	var slid: int = 0
+	for stack: Array in _stacks():
+		var level: LevelData = _build(stack)
+		if level == null:
+			fail("%s / %s / %s does not build" % stack)
+			continue
+		if not Rules.slide_tiles(level).is_empty():
+			slid += 1
+		var found: PackedStringArray = Rules.slide_problems(level)
+		assert_eq(found, PackedStringArray(), "%s / %s / %s: %s" % [stack[0], stack[1], stack[2], "; ".join(found)])
+		var off: Array[Vector2i] = Rules.slides_off_every_route(level, data.gates)
+		assert_true(off.is_empty(), "%s / %s / %s: the slides %s lie on no route" % [stack[0], stack[1], stack[2], off])
+	assert_true(slid >= 1, "some stack has a slide, so the rules are exercised")
+
+
+## RULES 14.2: a slide can make a gate placement seal that looks open, so on every stack with a slide some
+## placement of the run's first gate that seals nothing makes a detour: some entrance's route gets longer.
+func test_every_slide_stack_has_a_gate_that_makes_a_detour() -> void:
+	var slid: int = 0
+	for stack: Array in _stacks():
+		var level: LevelData = _build(stack)
+		if level == null:
+			fail("%s / %s / %s does not build" % stack)
+			continue
+		if Rules.slide_tiles(level).is_empty():
+			continue
+		slid += 1
+		var map: RoadMap = RoadMap.new(level)
+		var none: Array[Vector2i] = []
+		var open_dist: PackedInt32Array = map.distances(none)
+		var detour: bool = false
+		for socket: Vector2i in level.sockets:
+			var closed: Array[Vector2i] = [socket]
+			if map.seals(closed):
+				continue
+			var dist: PackedInt32Array = map.distances(closed)
+			for entrance: Vector2i in level.entrances:
+				if map.route(entrance, dist).size() > map.route(entrance, open_dist).size():
+					detour = true
+		assert_true(detour, "%s / %s / %s: some gate makes a detour" % stack)
+	assert_true(slid >= 1, "some stack has a slide, so the rule is exercised")
 
 
 # Packs by tier (RULES 14.3, 14.9)

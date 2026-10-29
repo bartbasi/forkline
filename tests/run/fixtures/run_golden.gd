@@ -111,19 +111,24 @@ static func with_tier_1(files: Dictionary) -> Dictionary:
 	burrow["boss"] = "burrowbelly"
 	burrow["waves"][2]["groups"][0]["enemy"] = "burrowbelly"
 	(packs["packs"] as Array).insert(0, burrow)
-	# The real run.json lists tier 2 too, so its boss needs a band 6 pack until the real ones exist.
-	var has_hayrick: bool = false
+	# The real run.json lists more tiers, and each tier boss needs a band 6 pack until the real ones
+	# exist. A stand-in is cut from a real tier 0 pack for every listed boss that has none.
+	var has_boss: Dictionary = {}
 	for item: Dictionary in packs["packs"]:
-		has_hayrick = has_hayrick or item["boss"] == "old_hayrick"
-	if not has_hayrick:
-		var hayrick: Dictionary = (by_id["b6_tusk_charge"] as Dictionary).duplicate(true)
-		hayrick["id"] = "b6_hayrick_stand_in"
-		hayrick["boss"] = "old_hayrick"
-		hayrick["waves"][2]["strength"] = 140
-		for group: Dictionary in hayrick["waves"][2]["groups"]:
-			if group["enemy"] == "old_tusk":
-				group["enemy"] = "old_hayrick"
-		(packs["packs"] as Array).insert(0, hayrick)
+		has_boss[String(item["boss"])] = true
+	for tier: Dictionary in (out["runs/run.json"] as Dictionary)["tiers"]:
+		for boss: String in tier["bosses"]:
+			if has_boss.has(boss):
+				continue
+			has_boss[boss] = true
+			var made: Dictionary = (by_id["b6_tusk_charge"] as Dictionary).duplicate(true)
+			made["id"] = "b6_%s_stand_in" % boss
+			made["boss"] = boss
+			made["waves"][2]["strength"] = 140
+			for group: Dictionary in made["waves"][2]["groups"]:
+				if group["enemy"] == "old_tusk":
+					group["enemy"] = boss
+			(packs["packs"] as Array).insert(0, made)
 	(packs["packs"] as Array).insert(0, mossbud)
 	return out
 
