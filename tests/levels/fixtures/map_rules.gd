@@ -1,7 +1,7 @@
 # Forkline. Copyright 2026 Play, Inc.
 # Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.
 extends RefCounted
-## The map feature rules that are level design rules, not load checks (RULES 3.5 to 3.8, 14.2;
+## The map feature rules that are level design rules, not load checks (RULES 3.5 to 3.9, 14.2;
 ## docs/ARCHITECTURE.md 14.2, 14.13). Used on campaign levels and on assembled run maps, so a
 ## run map is checked across the seams between its segments.
 
@@ -268,6 +268,96 @@ static func slides_walked(level: LevelData, route: Array[Vector2i]) -> int:
 		if level.feature_at(cell) == LevelData.Feature.SLIDE:
 			count += 1
 	return count
+
+
+## RULES 3.9: a map has at most 2 pairs of hollow stumps.
+const MAX_STUMP_PAIRS: int = 2
+const STUMP_CHARS: String = "PQ"
+
+
+static func stump_tiles(level: LevelData) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for r: int in level.rows:
+		for c: int in Sim.MAP_COLUMNS:
+			var cell: Vector2i = Vector2i(c, r)
+			if level.feature_at(cell) == LevelData.Feature.STUMP:
+				out.append(cell)
+	return out
+
+
+## The stump pairs of a map, each [stump, twin] in cell order, one per letter.
+static func stump_pairs(level: LevelData) -> Array[Array]:
+	var by_letter: Dictionary = {}
+	for cell: Vector2i in stump_tiles(level):
+		var ch: String = level.grid[cell.y][cell.x]
+		if not by_letter.has(ch):
+			by_letter[ch] = []
+		(by_letter[ch] as Array).append(cell)
+	var out: Array[Array] = []
+	for i: int in STUMP_CHARS.length():
+		if by_letter.has(STUMP_CHARS[i]):
+			out.append(by_letter[STUMP_CHARS[i]])
+	return out
+
+
+## Every way the stumps of `level` break RULES 3.9, one line each. Empty when they keep every rule: each letter
+## twice or not at all, at most 2 pairs, twins never next to each other, and each stump's twin is the other stump
+## of its letter.
+static func stump_problems(level: LevelData) -> PackedStringArray:
+	var out: PackedStringArray = PackedStringArray()
+	var pairs: Array[Array] = stump_pairs(level)
+	if pairs.size() > MAX_STUMP_PAIRS:
+		out.append("%d pairs of stumps, at most %d" % [pairs.size(), MAX_STUMP_PAIRS])
+	var map: RoadMap = RoadMap.new(level)
+	for pair: Array in pairs:
+		if pair.size() != 2:
+			out.append("the stumps at %s are not one pair" % [pair])
+			continue
+		var a: Vector2i = pair[0]
+		var b: Vector2i = pair[1]
+		if absi(a.x - b.x) + absi(a.y - b.y) == 1:
+			out.append("the twins %s and %s are next to each other" % [a, b])
+		if map.twin_of(a) != b or map.twin_of(b) != a:
+			out.append("the stumps %s and %s are not twins" % [a, b])
+	return out
+
+
+## The twin steps a route takes: each pair of cells in a row that are not neighbors (docs/ARCHITECTURE.md 14.3).
+static func twin_steps(route: Array[Vector2i]) -> int:
+	var count: int = 0
+	for i: int in range(1, route.size()):
+		if absi(route[i].x - route[i - 1].x) + absi(route[i].y - route[i - 1].y) > 1:
+			count += 1
+	return count
+
+
+## RULES 3.9 level guide: the stump pairs whose twin step no entrance's shortest route takes, for any placement of up
+## to `gates` gates that seals nothing. Each pair is given by its first stump. Empty when every pair matters.
+static func stump_pairs_off_every_route(level: LevelData, gates: int) -> Array[Vector2i]:
+	var pairs: Array[Array] = stump_pairs(level)
+	var out: Array[Vector2i] = []
+	if pairs.is_empty():
+		return out
+	var map: RoadMap = RoadMap.new(level)
+	var sets: Array[Array] = []
+	gate_sets(level.sockets, gates, 0, [], sets)
+	var stepped: Dictionary = {}
+	for placed: Array in sets:
+		var closed: Array[Vector2i] = []
+		closed.assign(placed)
+		if map.seals(closed):
+			continue
+		var dist: PackedInt32Array = map.distances(closed)
+		for entrance: Vector2i in level.entrances:
+			var route: Array[Vector2i] = map.route(entrance, dist)
+			for i: int in range(1, route.size()):
+				if absi(route[i].x - route[i - 1].x) + absi(route[i].y - route[i - 1].y) > 1:
+					stepped[mini(route[i].y * Sim.MAP_COLUMNS + route[i].x, route[i - 1].y * Sim.MAP_COLUMNS + route[i - 1].x)] = true
+	for pair: Array in pairs:
+		var a: Vector2i = pair[0]
+		if not stepped.has(a.y * Sim.MAP_COLUMNS + a.x):
+			out.append(a)
+	return out
 
 
 ## The kinds of feature a map holds ("tunnel", "bridge", "slide", "stump"), each once, in reading order.

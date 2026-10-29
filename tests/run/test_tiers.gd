@@ -128,27 +128,29 @@ func _bring_mossbud(all: Dictionary) -> void:
 
 # run.json tiers
 
-func test_the_fixtures_pass_and_the_real_run_json_lists_tiers_1_to_3() -> void:
+func test_the_fixtures_pass_and_the_real_run_json_lists_tiers_1_to_4() -> void:
 	assert_eq(RunData.check(Tx.files(), catalog), PackedStringArray())
 	assert_not_null(data)
 	assert_eq(Fx.run_data().tiers.size(), 0, "the plain fixtures have no tiers")
 	var real: Dictionary = JsonFile.read("res://data/runs/run.json", 16384)
 	assert_eq(real["status"], JsonFile.OK_STATUS)
-	# The first three tiers are pinned. A tier added later leaves them as they are.
-	assert_eq((real["data"]["tiers"] as Array).slice(0, 3), [
+	# The first four tiers are pinned. A tier added later leaves them as they are.
+	assert_eq((real["data"]["tiers"] as Array).slice(0, 4), [
 		{"level": "r5_l6", "towers": ["bramble_cottage"], "creatures": ["mossbud", "mistwisp"], "bosses": ["burrowbelly"], "grid": "T"},
 		{"level": "r6_l6", "towers": ["scarecrow"], "creatures": ["gleamer", "sleepyhead"], "bosses": ["old_hayrick"], "grid": "X"},
 		{"level": "r7_l6", "towers": ["snow_fort"], "creatures": ["snowroller", "yawner"], "bosses": ["snowsnore"], "grid": "^v<>"},
-	], "tier 1 of E5.1, tier 2 of E6.1b and tier 3 of E7.1b")
+		{"level": "r8_l6", "towers": ["moth_lantern"], "creatures": ["blinker", "hootling"], "bosses": ["glimmertoad"], "grid": "PQ"},
+	], "tier 1 of E5.1, tier 2 of E6.1b, tier 3 of E7.1b and tier 4 of E8.1b")
 	var bands: Array = real["data"]["bands"]
 	assert_eq((bands[1] as Array).slice(0, 5), ["skitter", "flitter", "shellback", "mossbud", "sleepyhead"], "band 2 gains Mossbud and Sleepyhead")
-	assert_eq((bands[2] as Array).slice(0, 4), ["bubbler", "puffball", "gleamer", "snowroller"], "band 3 gains Gleamer and Snowroller")
+	assert_eq((bands[2] as Array).slice(0, 5), ["bubbler", "puffball", "gleamer", "snowroller", "blinker"], "band 3 gains Gleamer, Snowroller and Blinker")
 	assert_eq((bands[3] as Array).slice(0, 4), ["mender", "dusk_moth", "mistwisp", "yawner"], "band 4 gains Mistwisp and Yawner")
+	assert_eq((bands[4] as Array).slice(0, 2), ["gatecrasher", "hootling"], "band 5 gains Hootling")
 
 
 func test_the_tiers_are_read_in_order() -> void:
 	assert_eq(RunData.MAX_TIERS, 4)
-	assert_eq(data.tiers.size(), 3)
+	assert_eq(data.tiers.size(), 4)
 	assert_eq(data.tiers[0], {
 		"level": &"r5_l6", "towers": [&"bramble_cottage"], "creatures": [&"mossbud", &"mistwisp"],
 		"bosses": [&"burrowbelly"], "grid": "T",
@@ -160,14 +162,42 @@ func test_the_tiers_are_read_in_order() -> void:
 		"level": &"r7_l6", "towers": [&"snow_fort"], "creatures": [&"snowroller", &"yawner"],
 		"bosses": [&"snowsnore"], "grid": "^v<>",
 	})
+	assert_eq(data.tiers[3], {
+		"level": &"r8_l6", "towers": [&"moth_lantern"], "creatures": [&"blinker", &"hootling"],
+		"bosses": [&"glimmertoad"], "grid": "PQ",
+	})
 
 
-func test_a_tier_may_list_nothing_and_four_tiers_are_allowed() -> void:
+## Takes tier 4 out of the fixtures: its tier entry, cards, segment and packs.
+func _drop_tier_4(f: Dictionary) -> void:
+	_tiers(f).resize(3)
+	var cards: Array = f["cards/cards.json"]["cards"]
+	cards.erase(_card_in(f, "tower_moth_lantern"))
+	cards.erase(_card_in(f, "bright_wick"))
+	f["segments/index.json"]["segments"].erase("mid_stumps")
+	f.erase("segments/mid_stumps.json")
+	for id: String in ["band3_blinker", "band4_blinker", "band5_hootling", "band6_glimmertoad"]:
+		_drop_pack(f, id)
+
+
+func test_the_fixtures_hold_the_most_tiers() -> void:
+	assert_eq(_tiers(Tx.files()).size(), RunData.MAX_TIERS)
+
+
+func test_a_tier_may_list_nothing() -> void:
 	var files: Dictionary = Tx.files()
+	_drop_tier_4(files)
+	# The stats lose the tier 4 stand-ins too, so no tower is left without its card.
+	var three: Catalog = Tx.catalog(func(all: Dictionary) -> void:
+		var gone: Array = ["moth_lantern", "blinker", "hootling", "glimmertoad"]
+		all["towers"]["towers"] = (all["towers"]["towers"] as Array).filter(func(item: Dictionary) -> bool: return not gone.has(item["id"]))
+		all["enemies"]["enemies"] = (all["enemies"]["enemies"] as Array).filter(func(item: Dictionary) -> bool: return not gone.has(item["id"]))
+	)
 	var listed: int = _tiers(files).size()
+	assert_eq(RunData.check(files, three), PackedStringArray(), "three tiers pass")
 	_empty_tiers(files, RunData.MAX_TIERS - listed)
-	assert_eq(RunData.check(files, catalog), PackedStringArray())
-	var four: RunData = RunData.from_data(files, catalog)
+	assert_eq(RunData.check(files, three), PackedStringArray())
+	var four: RunData = RunData.from_data(files, three)
 	assert_eq(four.tiers.size(), RunData.MAX_TIERS)
 	assert_eq(four.tiers[3], {"level": &"r8_l6", "towers": [], "creatures": [], "bosses": [], "grid": ""})
 	# Tiers that list nothing add nothing, so their plans are the plans of the last tier that does.
@@ -241,6 +271,7 @@ func test_all_eight_feature_characters_are_accepted() -> void:
 	_tiers(files)[0]["grid"] = "T^<P"
 	_tiers(files)[1]["grid"] = "Xv>Q"
 	_tiers(files)[2]["grid"] = ""
+	_tiers(files)[3]["grid"] = ""
 	assert_eq(RunData.check(files, catalog), PackedStringArray())
 	assert_eq(RunData.TIER_FEATURES, "TX^v<>PQ")
 
@@ -263,6 +294,8 @@ func test_cards_take_their_towers_tier() -> void:
 	assert_eq(data.card(&"straw_hats")["tier"], 2)
 	assert_eq(data.card(&"tower_snow_fort")["tier"], 3)
 	assert_eq(data.card(&"packed_snow")["tier"], 3)
+	assert_eq(data.card(&"tower_moth_lantern")["tier"], 4)
+	assert_eq(data.card(&"bright_wick")["tier"], 4)
 	for id: StringName in [&"tower_pumpkin_catapult", &"sharp_pebbles", &"spare_gate", &"gold_purse", &"flock", &"piggy_bank"]:
 		assert_eq(data.card(id)["tier"], 0, String(id))
 	assert_eq(Fx.run_data().card(&"sharp_pebbles")["tier"], 0, "with no tiers every card is tier 0")
@@ -272,6 +305,7 @@ func test_segments_take_the_highest_tier_of_their_features() -> void:
 	assert_eq(data.segment(&"mid_tunnel")["tier"], 1)
 	assert_eq(data.segment(&"mid_bridge")["tier"], 2)
 	assert_eq(data.segment(&"mid_slide")["tier"], 3)
+	assert_eq(data.segment(&"mid_stumps")["tier"], 4)
 	for id: StringName in [&"top_one", &"mid_split", &"bot_home", &"mid_merge"]:
 		assert_eq(data.segment(id)["tier"], 0, String(id))
 	# The unit rule: the highest tier among the characters, and 0 without a feature.
@@ -295,6 +329,10 @@ func test_packs_take_the_highest_tier_of_creatures_and_boss() -> void:
 	assert_eq(by_id["band3_snowroller"]["tier"], 3)
 	assert_eq(by_id["band4_yawner"]["tier"], 3)
 	assert_eq(by_id["band6_snowsnore"]["tier"], 3)
+	assert_eq(by_id["band3_blinker"]["tier"], 4)
+	assert_eq(by_id["band4_blinker"]["tier"], 4)
+	assert_eq(by_id["band5_hootling"]["tier"], 4)
+	assert_eq(by_id["band6_glimmertoad"]["tier"], 4)
 	assert_eq(by_id["band2_pack0"]["tier"], 0)
 	assert_eq(by_id["band6_pack0"]["tier"], 0)
 	for pack: Dictionary in Fx.run_data().packs:
@@ -327,6 +365,7 @@ func test_a_pack_counts_what_its_creatures_summon_split_into_or_release() -> voi
 func test_segments_take_the_feature_characters_as_road() -> void:
 	assert_eq(RunSegments.ROAD_CHARS, LevelData.ROAD_CHARS, "one list of road characters")
 	assert_eq(RunSegments.ROAD_CHARS, "#G1234BTX^v<>PQ")
+	assert_eq(data.segment(&"mid_stumps")["bottom_ports"], [3], "a stump counts as road too")
 	# A feature in the port rows counts as a road cell there.
 	assert_eq(data.segment(&"mid_tunnel")["bottom_ports"], [3])
 	assert_eq(data.segment(&"mid_bridge")["top_ports"], [3])
@@ -371,6 +410,7 @@ func test_every_band_needs_four_packs_of_tier_0() -> void:
 
 func test_every_boss_still_needs_a_band_6_pack() -> void:
 	_expect("no pack for the tier 2 boss", func(f: Dictionary) -> void: _drop_pack(f, "band6_hayrick"), "no band 6 pack for the boss old_hayrick")
+	_expect("no pack for the tier 4 boss", func(f: Dictionary) -> void: _drop_pack(f, "band6_glimmertoad"), "no band 6 pack for the boss glimmertoad")
 
 
 func test_a_pack_may_use_a_tier_creature_in_any_band_but_not_an_unlisted_one() -> void:
@@ -425,9 +465,15 @@ func test_a_problem_found_at_tier_0_is_named_once() -> void:
 # the filters
 
 func test_pool_and_card_ids_leave_out_cards_above_the_tier() -> void:
-	var every: Array[StringName] = data.card_ids(3)
-	assert_eq(every.size(), 21)
+	var every: Array[StringName] = data.card_ids(4)
+	assert_eq(every.size(), 23)
 	assert_eq(data.card_ids(_top()), every, "the top tier sees every card")
+	var three: Array[StringName] = data.card_ids(3)
+	assert_eq(three.size(), 21, "tier 3 does not see the Moth Lantern cards")
+	assert_false(three.has(&"tower_moth_lantern"))
+	assert_false(three.has(&"bright_wick"))
+	assert_true(every.has(&"tower_moth_lantern"))
+	assert_true(every.has(&"bright_wick"))
 	var all: Array[StringName] = data.card_ids(2)
 	assert_eq(all.size(), 19, "tier 2 does not see the Snow Fort cards")
 	var zero: Array[StringName] = data.card_ids()
@@ -462,6 +508,9 @@ func test_pool_respects_unlocks_and_tiers_together() -> void:
 	assert_true(data.pool({}, 3).has(&"packed_snow"))
 	assert_false(data.pool({}).has(&"thorn_tips"))
 	assert_eq(data.pool({"stars": 1000}), Fx.run_data().pool({"stars": 1000}), "tier 0 pool equals today's")
+	assert_false(data.pool({}, 3).has(&"bright_wick"))
+	assert_true(data.pool({}, 4).has(&"bright_wick"))
+	assert_eq(_pool(4), data.card_ids(4))
 	assert_eq(_pool(3), data.card_ids(3))
 	assert_eq(_pool(2), data.card_ids(2))
 	assert_eq(_pool(1), data.card_ids(1))
@@ -484,8 +533,13 @@ func test_segment_filters_keep_index_order_and_leave_out_higher_tiers() -> void:
 	assert_eq(two.size(), plain.size() + 2)
 	var three: Array = ids.call(data.segments_of(&"middle", 3))
 	assert_true(three.has(&"mid_slide"))
+	assert_false(three.has(&"mid_stumps"))
 	assert_eq(three.size(), plain.size() + 3)
 	assert_true(three.find(&"mid_slide") == three.find(&"mid_side") + 1, "it sits where the index puts it")
+	var four: Array = ids.call(data.segments_of(&"middle", 4))
+	assert_true(four.has(&"mid_stumps"))
+	assert_eq(four.size(), plain.size() + 4)
+	assert_true(four.find(&"mid_stumps") == four.find(&"mid_merge") + 1, "it sits where the index puts it")
 	assert_eq(ids.call(data.segments_of(&"top", 2)), ids.call(Fx.run_data().segments_of(&"top")), "the tops have no features")
 
 
@@ -499,6 +553,8 @@ func test_segments_under_filter_by_tier() -> void:
 	assert_true(ids.call(data.segments_under(&"top_one", 2)).has(&"mid_bridge"))
 	assert_false(ids.call(data.segments_under(&"top_one", 2)).has(&"mid_slide"))
 	assert_true(ids.call(data.segments_under(&"top_one", 3)).has(&"mid_slide"))
+	assert_false(ids.call(data.segments_under(&"top_one", 3)).has(&"mid_stumps"))
+	assert_true(ids.call(data.segments_under(&"top_one", 4)).has(&"mid_stumps"))
 	# Bottoms under a middle have no features here: the filter changes nothing for them.
 	assert_eq(ids.call(data.segments_under(&"mid_split", 2)), ids.call(data.segments_under(&"mid_split")))
 	assert_eq(data.segments_under(&"nothing", 2), [])
@@ -525,6 +581,14 @@ func test_pack_and_boss_filters_by_tier() -> void:
 	assert_true(ids.call(data.packs_of(3, &"", 3)).has(&"band3_snowroller"))
 	assert_false(ids.call(data.packs_of(4, &"", 2)).has(&"band4_yawner"))
 	assert_true(ids.call(data.packs_of(4, &"", 3)).has(&"band4_yawner"))
+	assert_eq(ids.call(data.packs_of(6, &"glimmertoad", 3)), [], "not at tier 3")
+	assert_eq(ids.call(data.packs_of(6, &"glimmertoad", 4)), [&"band6_glimmertoad"])
+	assert_false(ids.call(data.packs_of(3, &"", 3)).has(&"band3_blinker"))
+	assert_true(ids.call(data.packs_of(3, &"", 4)).has(&"band3_blinker"))
+	assert_false(ids.call(data.packs_of(4, &"", 3)).has(&"band4_blinker"))
+	assert_true(ids.call(data.packs_of(4, &"", 4)).has(&"band4_blinker"))
+	assert_false(ids.call(data.packs_of(5, &"", 3)).has(&"band5_hootling"))
+	assert_true(ids.call(data.packs_of(5, &"", 4)).has(&"band5_hootling"))
 	assert_eq(data.boss_ids(), base.boss_ids(), "tier 0: today's bosses")
 	assert_eq(data.boss_ids(0), [&"grumblesack", &"ironshell", &"moon_moth", &"old_tusk"])
 	assert_eq(data.boss_ids(1).size(), 5)
@@ -535,6 +599,9 @@ func test_pack_and_boss_filters_by_tier() -> void:
 	assert_eq(data.boss_ids(3).size(), 7)
 	assert_eq(data.boss_ids(3)[6], &"snowsnore")
 	assert_false(data.boss_ids(2).has(&"snowsnore"))
+	assert_eq(data.boss_ids(4).size(), 8)
+	assert_eq(data.boss_ids(4)[7], &"glimmertoad")
+	assert_false(data.boss_ids(3).has(&"glimmertoad"))
 
 
 # plans at every tier
@@ -571,7 +638,7 @@ func test_plans_use_only_things_of_the_tier_or_below() -> void:
 
 func test_higher_tiers_bring_the_new_things_in() -> void:
 	var seen: Array[Dictionary] = []
-	for tier: int in [2, 3]:
+	for tier: int in [2, 3, 4]:
 		var boss: Dictionary = {}
 		var segment: Dictionary = {}
 		var pack: Dictionary = {}
@@ -601,6 +668,18 @@ func test_higher_tiers_bring_the_new_things_in() -> void:
 	assert_false(seen[0]["segment"].has(&"mid_slide"))
 	for id: StringName in [&"band3_snowroller", &"band4_yawner", &"band6_snowsnore"]:
 		assert_false(seen[0]["pack"].has(id), "tier 2: %s" % id)
+	# Tier 4 brings its own and keeps the older ones.
+	assert_true(seen[2]["boss"].has(&"glimmertoad"))
+	assert_true(seen[2]["boss"].has(&"snowsnore"))
+	assert_true(seen[2]["segment"].has(&"mid_stumps"))
+	assert_true(seen[2]["segment"].has(&"mid_slide"))
+	for id: StringName in [&"band3_blinker", &"band4_blinker", &"band5_hootling", &"band6_glimmertoad", &"band6_snowsnore"]:
+		assert_true(seen[2]["pack"].has(id), "tier 4: %s" % id)
+	# Tier 3 never meets them.
+	assert_false(seen[1]["boss"].has(&"glimmertoad"))
+	assert_false(seen[1]["segment"].has(&"mid_stumps"))
+	for id: StringName in [&"band3_blinker", &"band4_blinker", &"band5_hootling", &"band6_glimmertoad"]:
+		assert_false(seen[1]["pack"].has(id), "tier 3: %s" % id)
 
 
 func test_plans_are_the_same_for_the_same_seed_and_tier() -> void:
@@ -869,6 +948,10 @@ func test_a_save_whose_pool_has_a_card_above_its_tier_is_refused() -> void:
 	up["pool"].append("packed_snow")
 	up["tier"] = 3
 	assert_not_null(_restore(s, up), "and a tier 3 card in a tier 3 run")
+	up["pool"].append("bright_wick")
+	assert_null(_restore(s, up), "a tier 4 card in a tier 3 run")
+	up["tier"] = 4
+	assert_not_null(_restore(s, up), "and a tier 4 card in a tier 4 run")
 
 
 func test_a_tier_run_plays_to_the_end_and_resumes_the_same() -> void:

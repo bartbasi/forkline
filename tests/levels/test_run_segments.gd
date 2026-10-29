@@ -5,7 +5,8 @@ extends "res://tests/base_test.gd"
 ## RULES 14.2, 14.3, 14.9). Every file is listed, the files pass RunData.check, every stack of
 ## segments that fit, at every content tier, is a valid run map with a gate worth placing, a Bakery
 ## spot, tunnels that keep RULES 3.6 across the seams and a first gate that takes walkers out of them, every bottom segment keeps its last row
-## scenery, features sit only in middle segments, bridges keep RULES 3.7 and slides RULES 3.8 on every stack, every choice of packs at
+## scenery, features sit only in middle segments, bridges keep RULES 3.7, slides RULES 3.8 and stumps RULES 3.9 on every stack, a first
+## gate closes the way into every stump, every choice of packs at
 ## every tier keeps the new creature rule and shows each tier creature as if new, and only boss waves set their own strength.
 
 const SEGMENT_DIR: String = "res://data/segments/"
@@ -37,11 +38,13 @@ const CAPPED_MOST: int = 6
 ## pack can show them, plus two band 6 packs for its boss. A band 2 pack already shows its three new
 ## creatures, one a wave, so no wave is left to show a tier creature as if new: the packs of every tier
 ## start in band 3, the Mossbud and the Sleepyhead of band 2 included.
-const TIER_FIRST_BAND: Dictionary = {1: 3, 2: 3, 3: 3}
+const TIER_FIRST_BAND: Dictionary = {1: 3, 2: 3, 3: 3, 4: 3}
 ## RULES 14.2: which feature each map character belongs to.
 const FEATURE_KINDS: Dictionary = {"T": "tunnel", "X": "bridge", "^": "slide", "v": "slide", "<": "slide", ">": "slide", "P": "stump", "Q": "stump"}
 ## TUNING_R5.md 1.6: on a tunnel stack the best first gate adds at least this many steps outside tunnels.
 const TUNNEL_DETOUR_MIN: int = 2
+## RULES 14.2, TUNING_R5.md 1.6 for stumps: on a stump stack the best first gate adds at least this many steps in reach.
+const STUMP_DETOUR_MIN: int = 2
 
 const Rules: GDScript = preload("res://tests/levels/fixtures/map_rules.gd")
 
@@ -682,6 +685,65 @@ func test_every_slide_stack_has_a_gate_that_makes_a_detour() -> void:
 					detour = true
 		assert_true(detour, "%s / %s / %s: some gate makes a detour" % stack)
 	assert_true(slid >= 1, "some stack has a slide, so the rule is exercised")
+
+
+## RULES 3.9 and 14.2 on every stack at every tier: stumps come in one pair a segment with twins apart, and each pair's
+## twin step lies on the shortest route of some placement of the run's starting gates, so it always matters.
+func test_every_stack_keeps_the_stump_rules() -> void:
+	var stumped: int = 0
+	for stack: Array in _stacks():
+		var level: LevelData = _build(stack)
+		if level == null:
+			fail("%s / %s / %s does not build" % stack)
+			continue
+		if not Rules.stump_tiles(level).is_empty():
+			stumped += 1
+		var found: PackedStringArray = Rules.stump_problems(level)
+		assert_eq(found, PackedStringArray(), "%s / %s / %s: %s" % [stack[0], stack[1], stack[2], "; ".join(found)])
+		var off: Array[Vector2i] = Rules.stump_pairs_off_every_route(level, data.gates)
+		assert_true(off.is_empty(), "%s / %s / %s: the stump pairs at %s lie on no route" % [stack[0], stack[1], stack[2], off])
+	assert_true(stumped >= 1, "some stack has stumps, so the rules are exercised")
+
+
+## RULES 3.9 and 14.2, and TUNING_R5.md 1.6 as for tunnels: on every stack with stumps the twin step is the shortcut
+## that walkers take with no gates, and some placement of the run's first gate that seals nothing closes the way into it
+## and sends them the long way: the entrance with the fewest steps in reach gains at least STUMP_DETOUR_MIN of them. A
+## walker is out of reach for its whole twin step, so a twin step counts as a step out of reach.
+func test_every_stump_stack_has_a_gate_that_closes_the_way_in() -> void:
+	var stumped: int = 0
+	for stack: Array in _stacks():
+		var level: LevelData = _build(stack)
+		if level == null:
+			fail("%s / %s / %s does not build" % stack)
+			continue
+		if Rules.stump_tiles(level).is_empty():
+			continue
+		stumped += 1
+		var map: RoadMap = RoadMap.new(level)
+		var none: Array[Vector2i] = []
+		var open_dist: PackedInt32Array = map.distances(none)
+		var stepped: bool = false
+		for entrance: Vector2i in level.entrances:
+			stepped = stepped or Rules.twin_steps(map.route(entrance, open_dist)) >= 1
+		assert_true(stepped, "%s / %s / %s: with no gates some walkers take a twin step" % stack)
+		var open_reach: int = _least_off_stumps(level, map, open_dist)
+		var best: int = open_reach
+		for socket: Vector2i in level.sockets:
+			var closed: Array[Vector2i] = [socket]
+			if not map.seals(closed):
+				best = maxi(best, _least_off_stumps(level, map, map.distances(closed)))
+		assert_true(best - open_reach >= STUMP_DETOUR_MIN, "%s / %s / %s: the best gate adds %d steps in reach, needs %d" % [stack[0], stack[1], stack[2], best - open_reach, STUMP_DETOUR_MIN])
+	assert_true(stumped >= 1, "some stack has stumps, so the rule is exercised")
+
+
+## The fewest steps in reach on any entrance's route over `dist`: its steps less its twin steps.
+static func _least_off_stumps(level: LevelData, map: RoadMap, dist: PackedInt32Array) -> int:
+	var least: int = -1
+	for entrance: Vector2i in level.entrances:
+		var route: Array[Vector2i] = map.route(entrance, dist)
+		var reach: int = route.size() - 1 - Rules.twin_steps(route)
+		least = reach if least < 0 else mini(least, reach)
+	return least
 
 
 # Packs by tier (RULES 14.3, 14.9)

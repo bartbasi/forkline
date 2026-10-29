@@ -84,5 +84,18 @@
   {"id": "snowsnore", "name": "Snowsnore",
    "info": "Grows as it walks. Every 6 seconds it yawns and towers near it doze.",
    "health": 3400, "armor": 3, "speed": 35, "lives": 20, "bounty": 350, "boss": true,
-   "grow_pct": 2, "grow_cap_pct": 150, "yawn_ms": 6000, "yawn_reach": 200, "doze_ms": 3000}
+   "grow_pct": 2, "grow_cap_pct": 150, "yawn_ms": 6000, "yawn_reach": 200, "doze_ms": 3000},
+  {"id": "blinker", "name": "Blinker",
+   "info": "Every 3 seconds it blinks 2 tiles ahead along the road.",
+   "health": 60, "armor": 0, "speed": 90, "lives": 1, "bounty": 9,
+   "blink_ms": 3000, "blink_tiles": 2},
+  {"id": "hootling", "name": "Hootling",
+   "info": "Its hoots keep everything near it awake. Nothing near it can be slowed.",
+   "health": 80, "armor": 1, "speed": 90, "lives": 1, "bounty": 11,
+   "wake_reach": 150},
+  {"id": "glimmertoad", "name": "Glimmertoad",
+   "info": "Hops ahead every 6 seconds. Can't be slowed. At half health, 6 Flitters fly out.",
+   "health": 3600, "armor": 4, "speed": 35, "lives": 20, "bounty": 400, "boss": true,
+   "blink_ms": 6000, "blink_tiles": 3, "wake_reach": 200,
+   "release": {"at_pct": 50, "enemy": "flitter", "count": 6, "gap_ms": 300}}
 ]}

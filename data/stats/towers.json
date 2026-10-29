@@ -118,5 +118,19 @@
       "cost": 260, "reach": 400, "hits": "ground", "damage": 64, "reload_ms": 3500, "line": 100},
      {"id": "flurry", "name": "Flurry", "info": "Quick snowballs, twice as often.",
       "cost": 260, "reach": 350, "hits": "ground", "damage": 24, "reload_ms": 1500, "line": 80}
+   ]},
+  {"id": "moth_lantern", "name": "Moth Lantern", "plural": "Moth Lanterns",
+   "info": "Lures flyers low, so every tower can hit them. Can't hit walkers.",
+   "kind": "attack",
+   "tiers": [
+     {"cost": 110, "reach": 300, "hits": "air", "damage": 4, "reload_ms": 1000, "lure_ms": 2000},
+     {"cost": 110, "reach": 350, "hits": "air", "damage": 6, "reload_ms": 1000, "lure_ms": 3000}
+   ],
+   "specs": [
+     {"id": "beacon_lantern", "name": "Beacon Lantern", "info": "Reaches far and holds flyers low longer.",
+      "cost": 200, "reach": 450, "hits": "air", "damage": 8, "reload_ms": 1000, "lure_ms": 4000},
+     {"id": "lantern_garland", "name": "Lantern Garland", "info": "Lures three flyers at once.",
+      "cost": 200, "reach": 350, "hits": "air", "damage": 6, "reload_ms": 1000, "targets": 3,
+      "lure_ms": 3000}
    ]}
 ]}
