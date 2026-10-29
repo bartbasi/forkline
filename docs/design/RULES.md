@@ -45,6 +45,8 @@ Region 6 data, 2026-10-28 (task E6.1). No number changed. data/stats/ now holds 
 
 Region 7 data, 2026-10-28 (task E7.1a). No number changed. data/stats/ now holds region 7's tower, creatures and boss. Made precise, as the game already shows it: once a Snowroller or Snowsnore has grown, its panel also gives the max health it started with (9.4). Region 7's band 3 packs can use only the Snowroller, since the Yawner joins in band 4 (14.3). Old Hayrick's two band 6 packs, built in E6.1, join the table of 14.3, and 6.3 now says its escort walks on in a run, because a campaign boss wave brings no escort (12.5). The guide for building waves now names the late Pip crowd at strength 160 to 210, which levels of regions 3, 4 and 6 already use (12.3, 12.5). It also settles three region 6 calls from the level designer's E6.1 report (12.4). Level 6-1's third star is now "No tower above tier 2." in place of "Use at most 1 gate." Level 6-4 keeps its third star and gets a late Pip crowd in the region 6 tuning. Level 6-6's hint no longer tells the player to splash Old Hayrick's escort, which it does not have there. The 7-2 hint says "a straight road" instead of "a long road", because a Snow Fort's line needs a road that runs straight at it, and road past its range adds nothing. The third star of 6-1 and the hints of 6-6 and 7-2 change what Bart approved, so they are for the DM to tell Bart.
 
+Region 5 tuning, 2026-10-29 (task E5.3), after the region 5 balance report (docs/balance/region5-2026-10-28.md). The plan and its evidence are in docs/design/TUNING_R5.md. Changed numbers: the Bramble Cottage hits harder at every tier (tier 1 from 4 to 10, the others twice as hard) and its rings are wider (5.12), with its rows of the 5.10 model recomputed. The boss waves of Burrowbelly's two run packs change strength (14.3). Changed plan: the third stars of 5-1, 5-3, 5-4 and 5-6 (12.4), with a line on region 5 in the guide to third stars (12.5), and level 5-4's Twist, now No Gates (13). The level designer's changes to region 5's run segments and packs are in TUNING_R5.md. The Bramble Cottage's numbers, the four third stars and the 5-4 Twist change what Bart approved, so they are for the DM to tell Bart. They go ahead now under the DM's rule of 2026-10-28 (CLAUDE.md).
+
 Names follow docs/art/NAMES.md, which Bart approved at hard stop B and which holds the names of regions 5 to 8 that he approved on 2026-10-27. The tables in 5.1, 5.3 to 5.8, 5.12 to 5.15, 6.1, 6.3 and 12.1 give each tower, tier 3 path, creature, boss and region its id from that list, so the data files have one source. In each tower's tier table, the first tier 3 row is spec 0 and the second is spec 1.
 
 This file holds every game rule and number for version 1. The sim engineer, level designer, roguelite engineer, balance analyst and UI engineer build from it. If something here is unclear or seems to conflict with docs/ARCHITECTURE.md, ask the DM. Do not guess.
@@ -370,7 +372,7 @@ Regions 1 to 4 bring the first six, in 5.3 to 5.8. Regions 5 to 8 bring one each
 | Longbow Loft | `longbow_loft` | Long range, heavy arrows that ignore armor | Walkers | Shellbacks, Gatecrashers, Menders, armored bosses, covering two roads from one spot | Bubblers, Pips and Puffs (wasted arrows), flyers |
 | Firework Tower | `firework_tower` | Anti air with splash | Flyers | Flitter flocks, Dusk Moths, the Moon Moth | Every walker. It cannot hit them |
 | Bakery | `bakery` | Makes the towers around it attack faster | Nothing | Tight clusters of spots, late waves, bosses | Spread-out spots, early waves when gold is short, Bells (it cannot boost them) |
-| Bramble Cottage | `bramble_cottage` | Thorns hit every walker in its ring, again and again, with no aim | Walkers | Roads that wrap around a spot, loops and bridges, Mistwisp groups, a Gleamer's escort | Armor (except Holly Crown), flyers, roads that only pass by |
+| Bramble Cottage | `bramble_cottage` | Thorns hit every walker in its ring, again and again, with no aim | Walkers | Roads that wrap around a spot, loops and bridges, Mistwisp groups, a Gleamer's escort | Armor (except Holly Crown), flyers, spots with little road near them |
 | Scarecrow | `scarecrow` | Creatures in its ring take more damage from every hit | Walkers (Crow Keeper: flyers too) | Bosses, Mossbuds, Gleamers, Sleepyheads, late waves where many towers aim at one stretch | Early waves, spread-out spots. It never defeats anything alone |
 | Snow Fort | `snow_fort` | Rolls a snowball down a straight line, and every walker in it is hit | Walkers | Long straight roads and slides that run toward it, armored columns, creatures hidden behind a Mistwisp or a Gleamer | Bends, roads that cross its line, flyers |
 | Moth Lantern | `moth_lantern` | Pulls flyers low, so every tower can hit them | Flyers | Flocks and flying bosses whose line passes over ground towers | Walkers. Flight lines far from other towers |
@@ -564,25 +566,25 @@ The support towers, from the same rough model with the phase 4 numbers (before t
 - Bakery. Sixteen Shellbacks at strength 200 past a cluster of four Quickshots. A fifth Quickshot let 9 through. A Grand Oven in the middle let 7 through. A Spice Kitchen let none through.
 - Jam Pot against Prize Pumpkin, each at the point where one build starts to leak: against 30 Scamps the Jam Pot build let 0 through and the Prize Pumpkin build 9. Against 12 Shellbacks, 1 against 4. Against 16 fast Skitters, 9 against 3. Against 40 Pips, 4 against 3.
 
-The four towers of regions 5 to 8, from the same rough model (docs/design/EXPANSION.md 4.8): tier 1 at strength 100, a steady stream of one creature. The Bramble Cottage and the Snow Fort depend on the shape of the road, so each gets two rows. For the Bramble, "passing" is a straight road beside its spot (about 2.2 tiles of road in its ring) and "wrapped" a road that bends around its spot on two sides (about 3.5 tiles). For the Snow Fort, "across" is a road that crosses its line (about 0.8 tiles in the line) and "aligned" a straight road that runs down its line (about 2.5 tiles).
+The four towers of regions 5 to 8, from the same rough model (docs/design/EXPANSION.md 4.8): tier 1 at strength 100, a steady stream of one creature. The Bramble Cottage and the Snow Fort depend on the shape of the road, so each gets two rows. For the Bramble, "passing" is a straight road beside its spot (about 3.5 tiles of road in its tier 1 ring of 2.0) and "wrapped" a road that bends around its spot, an L whose corner touches the spot's corner (about 5.5 tiles). For the Snow Fort, "across" is a road that crosses its line (about 0.8 tiles in the line) and "aligned" a straight road that runs down its line (about 2.5 tiles).
 
 | Tower | Road shape | Scamp | Pip | Skitter | Shellback |
 |---|---|---|---|---|---|
 | Sling Post | any | 11.4 | 10.5 | 12.0 | 4.0 |
 | Pumpkin Catapult | any | 5.6 | 21.9 | 4.2 | 4.2 |
 | Longbow Loft | any | 10.7 | 5.6 | 8.0 | 8.0 |
-| Bramble Cottage | passing | 7.5 | 20.7 | 4.7 | 1.8 |
-| Bramble Cottage | wrapped | 11.7 | 32.4 | 7.3 | 2.8 |
+| Bramble Cottage | passing | 28.9 | 58.3 | 18.0 | 16.5 |
+| Bramble Cottage | wrapped | 33.3 | 58.3 | 28.5 | 26.0 |
 | Snow Fort | across | 3.0 | 8.5 | 1.9 | 2.2 |
 | Snow Fort | aligned | 9.5 | 26.4 | 5.9 | 6.8 |
 
 What this table shows:
 
-- In a plain placement neither new attacking tower tops a column. Each needs the map read right, which is the point: the Bramble where the road wraps around its spot, the Snow Fort where a straight road runs down its line.
-- The Bramble is a crowd tower only where the road wraps around it. On a road that only passes by, the Catapult is better against crowds and the Sling Post against single walkers. Armor stops it, except as a Holly Crown.
+- Each new attacking tower needs the map read right, which is the point: the Bramble where the road runs close to its spot or wraps around it, the Snow Fort where a straight road runs down its line.
+- The model overrates the Bramble Cottage. It counts every pulse on every walker in the ring as useful, but a pulse that pops nothing helps only when another tower finishes the walker, and a crowd crosses the ring in a few seconds. At its first numbers (4 damage, ring 1.5) the model put it at the Catapult's level against Pips, yet on real maps the bots found it weak: it stood in 18% of the three-star builds on the region 5 levels that offer it, and its run card cost the run bots 23 points (docs/design/TUNING_R5.md). So its numbers come from the bots, not from this table. What decides its worth is the damage one walker takes while it crosses the ring. At tier 1, on a straight road beside the spot, a Scamp now takes about 35 of its 40 health (before: 9), and a Pip is popped (before: 7 of its 21). Armor still blunts it, except as a Holly Crown, and a Mossbud regrows 4 of the 10 damage of each tier 1 pulse.
 - The Snow Fort is poor across a road. Down an aligned road it is about the Catapult's equal on crowds and, after the Longbow, the best tier 1 buy against an armored column. Big Snowball takes armored columns at tier 3.
 - The Scarecrow and the Moth Lantern deal no damage worth counting. Like the Bell and the Bakery, the bots judge them on real maps: the Scarecrow's fright is worth more the more towers aim into its ring, and the Lantern is worth what the ground towers under a flight line can add.
-- One watch item: the Bramble's Pip numbers are chip damage. Four a second for two or three seconds pops no Pip on its own, but it could crowd the Catapult's job at a tight bend. If the bots find that, the lever is tier 1 damage, 4 down to 3.
+- One watch item: the new numbers make the Bramble region 5's staple. It stood in nearly every three-star build that the searches found on 5-2 to 5-6, often as a Holly Crown where armored walkers come (docs/design/TUNING_R5.md). In region 5 that is the plan: its answers are towers that need no aim. If it stands in more than 9 of every 10 three-star builds on levels of regions 6 to 8, the first lever is the Holly Crown's damage, 24 down to 20 to match the Wild Bramble's, so the two paths differ only by ring and armor. The next is tier 1 damage, 10 down to 8.
 
 ### 5.11 Pairs players can discover
 
@@ -615,15 +617,15 @@ A cottage under a crown of thorns. Every second, its thorns scratch every walker
 
 | Tier | Name | Id | Price | Total spent | Damage | Reload (s) | Rate per s | Ring | Extra |
 |---|---|---|---|---|---|---|---|---|---|
-| 1 | Bramble Cottage | `bramble_cottage` | 120 | 120 | 4 | 1.0 | 1.0 | 1.5 | none |
-| 2 | Bramble Cottage | `bramble_cottage` | 130 | 250 | 7 | 1.0 | 1.0 | 1.5 | none |
-| 3 | Wild Bramble | `wild_bramble` | 230 | 480 | 10 | 1.0 | 1.0 | 2.0 | none |
-| 3 | Holly Crown | `holly_crown` | 230 | 480 | 12 | 1.0 | 1.0 | 1.5 | Ignores armor |
+| 1 | Bramble Cottage | `bramble_cottage` | 120 | 120 | 10 | 1.0 | 1.0 | 2.0 | none |
+| 2 | Bramble Cottage | `bramble_cottage` | 130 | 250 | 14 | 1.0 | 1.0 | 2.5 | none |
+| 3 | Wild Bramble | `wild_bramble` | 230 | 480 | 20 | 1.0 | 1.0 | 3.0 | none |
+| 3 | Holly Crown | `holly_crown` | 230 | 480 | 24 | 1.0 | 1.0 | 2.5 | Ignores armor |
 
 - It is an attacking tower with a reload timer (5.2), but it aims at nothing and has no targeting mode.
 - When its timer is 0 or less and at least one creature it can hit is in its ring, it pulses: every creature it can hit whose center is within the ring takes the hit. Then its reload starts, as for any tower (5.2). With nothing it can hit in its ring, its timer waits at 0, so it never saves up a pulse.
 - The creatures it can hit are walkers and low flyers (5.15). Hidden creatures (6.2, Mist) count. Creatures that are out of reach or napping (8.8) do not.
-- A ring of 1.5 covers the eight tiles around it, diagonals included, like the Bakery's reach.
+- Its rings grow as a Bell's and a Scarecrow's do. A ring of 2.0 covers the eight tiles around it and the four tiles two steps away in a straight line. A ring of 2.5 covers every tile of the 5 by 5 block around it except the four corners. The Wild Bramble's ring of 3.0 covers the whole block, and the four tiles three steps away in a straight line.
 - Wild Bramble: a wider ring for a spot that sees two roads.
 - Holly Crown: sharp holly that ignores armor, for Shellbacks and Yawners at a bend.
 
@@ -1413,12 +1415,12 @@ The number in each star 3 rule is a starting target. The level designer confirms
 | 4-4 | Use at most 3 kinds of tower. | none | none |
 | 4-5 | Call 6 waves early. | none | none |
 | 4-6 | Lose no lives. | Old Tusk breaks gates fast. Don't count on them to hold. | The spot beside its route |
-| 5-1 | Have at most 6 towers. | Creatures in a tunnel are out of reach. Close the tunnel road with a gate. | The socket that closes the tunnel road |
+| 5-1 | Have at most 4 towers. | Creatures in a tunnel are out of reach. Close the tunnel road with a gate. | The socket that closes the tunnel road |
 | 5-2 | No tower above tier 2. | Bramble Cottages scratch every walker around them. Build where roads bend. | A spot the road wraps around |
-| 5-3 | Build no Lullaby Bells. | Mossbuds regrow. Big hits beat them. Slows only give them time. | The spot beside the longest stretch |
-| 5-4 | Have at most 7 towers. | Mistwisps hide creatures near them. Pop the wisp, or use rings and splash. | A spot the road wraps around |
+| 5-3 | Have at most 4 towers. | Mossbuds regrow. Big hits beat them. Slows only give them time. | The spot beside the longest stretch |
+| 5-4 | Build no Sling Posts. | Mistwisps hide creatures near them. Pop the wisp, or use rings and splash. | A spot the road wraps around |
 | 5-5 | Use at most 3 kinds of tower. | none | none |
-| 5-6 | Have at most 8 towers. | Burrowbelly digs under, then comes up with Mistwisps. Keep Brambles near. | A spot beside its longest open stretch |
+| 5-6 | Have at most 6 towers. | Burrowbelly digs under, then comes up with Mistwisps. Keep Brambles near. | A spot beside its longest open stretch |
 | 6-1 | No tower above tier 2. | At a bridge one road crosses over another. Walkers go straight across. | The socket that sends walkers over the bridge and back under it |
 | 6-2 | Have at most 6 towers. | Walkers near a Scarecrow take more damage. Put it where your towers aim. | A spot whose ring covers the road that most spots reach |
 | 6-3 | Build no Longbow Lofts. | Every tower aims at a Gleamer. Splash and rings still hit the rest. | A spot beside the road for a Catapult |
@@ -1446,7 +1448,9 @@ Region 2 keeps five of its six rules (TUNING_R2.md). They hold because 2-1, 2-4 
 
 Region 3's third stars were set with the campaign pass (TUNING_CAMPAIGN.md). Under the old rules of 3-1 and 3-6 (Lose no lives), 3-2 (Have at most 6 towers) and 3-3 (Use at most 2 gates), a lone Sling Post with Bells earned all three stars: those rules take away nothing it needs, and the early waves bring no crowd before the gold (12.5). On the three levels about flyers (3-1, 3-4 and 3-6), the third star now asks the player to stop every flyer with Fireworks, so it bans the Sling Post. On 3-2 and 3-5 it caps towers at tier 2. On 3-3 it allows 5 towers, so the three gates must make the road long.
 
-Regions 5 to 8's third stars are starting targets from docs/design/EXPANSION.md 6.4. Most limit spending, which 12.5 found is what makes the mix matter. No two levels in a row share a rule, and no level's Twist repeats its star 3. On 7-3, "Use no gates." asks the player to win on the short road near the entrance, because a long road feeds Snowrollers. On 8-2, "Build no Sling Posts." asks for the region's new answer, Moth Lanterns or Fireworks with ground towers under the flight line, as region 3's flyer levels do. On 5-3 and 8-4, "Build no Lullaby Bells." points away from Bells, which give Mossbuds time to regrow and do nothing near a Hootling. On 6-6 and 8-6, "Lose no lives." may hold, because these boss levels bring flyers and a boss that needs several kinds of tower. If the bots find one tower type earning all three stars there, the fallback is "Have at most 8 towers."
+Regions 5 to 8's third stars are starting targets from docs/design/EXPANSION.md 6.4. Most limit spending, which 12.5 found is what makes the mix matter. No two levels in a row share a rule, and no level's Twist repeats its star 3. On 7-3, "Use no gates." asks the player to win on the short road near the entrance, because a long road feeds Snowrollers. On 8-2, "Build no Sling Posts." asks for the region's new answer, Moth Lanterns or Fireworks with ground towers under the flight line, as region 3's flyer levels do. On 8-4, "Build no Lullaby Bells." points away from Bells, which do nothing near a Hootling. On 6-6 and 8-6, "Lose no lives." may hold, because these boss levels bring flyers and a boss that needs several kinds of tower. If the bots find one tower type earning all three stars there, the fallback is "Have at most 8 towers."
+
+Region 5's third stars after its balance pass (2026-10-29, docs/design/TUNING_R5.md). Under the starting rules a lone Sling Post with Bells earned all three stars on 5-1, 5-3, 5-4 and 5-6. Levels 5-1 and 5-3 now allow 4 towers and 5-6 allows 6. Under those limits, searches that may use every tower found three-star wins, and two searches of 6000 builds each found none for a lone Sling Post. On 5-4 only a ban held. With at most 5 towers, with at most 4 (once the stronger Bramble Cottage made 4 towers enough for anyone), with at most 1 gate and with no gates at all, a lone Sling Post still earned all three stars: a Mistwisp is never hidden itself, so pebbles pop it, and Bells give them time. A tier 2 cap left no three-star win for anyone. So 5-4 bans the Sling Post, which is its lesson as a challenge: mist stops aim, so rings, lines and splash carry the level. Its Twist banned the Sling Post too, so the Twist is now No Gates (13). Region 5's rules are now a tower limit, a tier cap, a tower limit, a ban, a kinds limit and a tower limit. No two levels in a row share a rule, and no third star repeats its level's Twist.
 
 Region 6's third stars after the level designer's first searches (2026-10-28). Against a lone Sling Post with Bells, a late Pip crowd (12.5) and "No tower above tier 2." work as a pair: the crowd is too much for tier 2 pebbles, and the cap keeps Quickshots out. Level 6-1 had the crowds, at strength 190 and 200, with "Use at most 1 gate." as its third star. One search of 6000 builds found 966 lone Sling Post builds there with all three stars, with Quickshots and Bells. The same search, with the same seed, under "No tower above tier 2." found none: every win it found needed a tower above tier 2. The plain mixed recipe buys no tier 3 path there and keeps 17 lives with its best gate, so all three stars stay in reach. So 6-1 now caps towers at tier 2. Level 6-4 already has the cap but no late crowd: its Pip waves stay at 125 or less, and a lone Sling Post at tier 2 keeps all 20 lives there. So 6-4 keeps its third star, and the region 6 tuning gives its waves a late crowd. If a lone Sling Post still earns all three stars there after that, the tuning sets a new third star. The two levels are not neighbors, so they may share the rule.
 
@@ -1494,7 +1498,7 @@ Region 6's third stars after the level designer's first searches (2026-10-28). A
 - Pip health and splash. A Pip at strength 115 or less has 24 health or less, so one pumpkin from a tier 2 Catapult or a Jam Pot pops it. At strength 120 to 230 it takes two of those, and one from a Prize Pumpkin. Keep a Pip wave at 115 or less when tier 2 Catapults should clear it.
 - A late crowd. From region 3 on, the starting gold buys a lot before wave 1, so a crowd before the gold bites less, and a crowd at 115 or less after wave 6 never did. A stronger late crowd still bites: 30 to 64 Pips 0.05 s apart at strength 160 to 210, in one or two waves from wave 5 on. Such a Pip has 34 to 44 health. One Prize Pumpkin or Big Snowball pops it, and so do two pumpkins from a tier 2 Catapult or a Jam Pot, but a tier 2 Sling Post or a Quickshot needs 5 or 6 pebbles. Levels 3-3, 4-3 to 4-6 and most of region 6 have one, and any level of regions 3 to 8 may. The wave's strength raises every creature in it, so give the crowd light company, such as Flitters, Skitters or two Gatecrashers, and keep the wave at 80 creatures or fewer. On 6-1, with "No tower above tier 2.", a search found no win for a lone Sling Post with Bells that kept to the cap (12.4).
 - A short road favors splash. Single-target towers need time to work through a crowd, so they need a long road. Splash and slows need a crowd that is packed, not time, so they hold a short road too. This is why "Use no gates" asks for a mix on 2-2.
-- Third stars that bite. A star 3 rule that limits spending (Upgrade no towers, No tower above tier 2, Have at most N towers) makes the mix matter. In region 1, rules that limit nothing about towers (Call N waves early, Lose no lives) did not stop one tower type from earning all three stars: it bought its way through. Use no gates works on 1-6 only because its late waves are hard, and on 2-2 because a short road favors splash. Region 3 showed the same: Lose no lives, Use at most 2 gates and Have at most 6 towers let a lone Sling Post earn all three stars there. A ban on the tower that would do every job also works when another tower can take that job: Build no Sling Posts on the flyer levels, where Fireworks take the flyers.
+- Third stars that bite. A star 3 rule that limits spending (Upgrade no towers, No tower above tier 2, Have at most N towers) makes the mix matter. In region 1, rules that limit nothing about towers (Call N waves early, Lose no lives) did not stop one tower type from earning all three stars: it bought its way through. Use no gates works on 1-6 only because its late waves are hard, and on 2-2 because a short road favors splash. Region 3 showed the same: Lose no lives, Use at most 2 gates and Have at most 6 towers let a lone Sling Post earn all three stars there. A ban on the tower that would do every job also works when another tower can take that job: Build no Sling Posts on the flyer levels, where Fireworks take the flyers. Region 5 showed that hiding does not stop pebbles: on 5-4 a lone Sling Post with Bells earned all three stars even with no gates, because a Mistwisp is never hidden itself and the Bells give the pebbles time. A ban held there.
 - Largest wave: one wave spawns at most 120 creatures, counting 3 Puffs for every Puffball, with the level's Twist applied. Boss summons depend on how long the boss lives, so the bots report the real peak. At most 2 waves run at once (4.9). That is the contract's performance ceiling. Aim for 80 or fewer per wave so the screen stays readable.
 - Hootlings and Mistwisps, from region 5 on and in run packs. Count them as the 120 bound counts creatures: with the level's Twist, or in a run with any one risk card, and without boss summons. A wave brings at most 6 Hootlings, so the wake checks stay cheap, and at most 6 Mistwisps, so the mist marks stay readable (docs/art/EXPANSION_LOOK.md 6). Measure the most crowded new wave on the phone before release (contract 9.4).
 - Groups per wave. The folded preview strip is one line (9.1), with room for about 4 groups on the cover screen. Prefer 4 groups or fewer a wave, so even a folded preview shows the whole wave. This is a guide, not a limit.
@@ -1593,7 +1597,7 @@ And the same inputs always give the same result.
 | 5-1 | One Gate | The level gives 1 gate instead of 2. | You get 1 gate instead of 2. |
 | 5-2 | No Catapults | The Pumpkin Catapult cannot be built. | Pumpkin Catapults cannot be built. |
 | 5-3 | Tier 2 Cap | No tower can go above tier 2. | No tower can go above tier 2. |
-| 5-4 | No Sling Posts | The Sling Post cannot be built. | Sling Posts cannot be built. |
+| 5-4 | No Gates | The level gives 0 gates. | You get no gates. |
 | 5-5 | Five Lives | Start with 5 lives. | Start with 5 lives, or 10 on Relaxed. |
 | 5-6 | Double Trouble | Every group in the final wave has twice as many. Two bosses. | The final wave is twice as big, with two bosses. |
 | 6-1 | Stuck Gates | Both of the level's gates start placed on sockets the level sets. They cannot be moved or removed, and there are no others. | Both gates are stuck on their sockets for the whole level. |
@@ -1615,6 +1619,7 @@ And the same inputs always give the same result.
 | 8-5 | Five Lives | Start with 5 lives. | Start with 5 lives, or 10 on Relaxed. |
 | 8-6 | Double Trouble | Every group in the final wave has twice as many. Two bosses. | The final wave is twice as big, with two bosses. |
 
+- Level 5-4's Twist was No Sling Posts until the region 5 tuning, when its third star took that ban (12.4). It is now No Gates: with no gates the walkers take the short middle road through both tunnels, under the mist.
 - Every Twist of regions 5 to 8 uses a change that regions 1 to 4 already use, so none needs a new effect type (contract 2.8). Each fits its level's lesson and none repeats the level's star 3 (docs/design/EXPANSION.md 8).
 - Twice the Wings goes only on levels whose waves bring flyers, so it always changes something. The level designer keeps flyer groups in the waves of 6-3 and 8-4.
 - Double Trouble on 5-6 and 8-6: two Burrowbellies summon 4 Mistwisps at a time, and two Glimmertoads release 12 Flitters.
@@ -1682,8 +1687,8 @@ All core rules (4 to 9) apply in runs: phases, pause, speeds, early calls, selli
 | `b6_moon_tide` | Moon Moth | 140 | 2240 |
 | `b6_tusk_charge` | Old Tusk | 200 | 6000 |
 | `b6_tusk_night` | Old Tusk | 180 | 5400 |
-| `b6_burrow_deep` | Burrowbelly | 130 | 4160 |
-| `b6_burrow_mist` | Burrowbelly | 120 | 3840 |
+| `b6_burrow_deep` | Burrowbelly | 120 | 3840 |
+| `b6_burrow_mist` | Burrowbelly | 140 | 4480 |
 | `b6_hayrick_field` | Old Hayrick | 140 | 3640, then 1820 after its nap |
 | `b6_hayrick_barn` | Old Hayrick | 130 | 3380, then 1690 after its nap |
 

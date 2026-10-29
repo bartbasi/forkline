@@ -21,7 +21,7 @@
   "gates": 2,
   "strength": 240,
   "towers": ["sling_post", "pumpkin_catapult", "lullaby_bell", "longbow_loft", "firework_tower", "bakery", "bramble_cottage"],
-  "star3": {"kind": "tower_ban", "tower": "lullaby_bell"},
+  "star3": {"kind": "towers_at_most", "value": 4},
   "hint": {"text": "Mossbuds regrow. Big hits beat them. Slows only give them time.", "cell": [4, 8]},
   "waves": [
     {"strength": 100, "groups": [{"enemy": "scamp", "count": 14, "entrance": 1, "at_ms": 0, "every_ms": 1200}]},

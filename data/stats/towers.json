@@ -83,14 +83,14 @@
    "info": "Thorns scratch every walker in its ring each second. Armor blunts them.",
    "kind": "attack",
    "tiers": [
-     {"cost": 120, "reach": 150, "hits": "ground", "damage": 4, "reload_ms": 1000, "pulse": true},
-     {"cost": 130, "reach": 150, "hits": "ground", "damage": 7, "reload_ms": 1000, "pulse": true}
+     {"cost": 120, "reach": 200, "hits": "ground", "damage": 10, "reload_ms": 1000, "pulse": true},
+     {"cost": 130, "reach": 250, "hits": "ground", "damage": 14, "reload_ms": 1000, "pulse": true}
    ],
    "specs": [
      {"id": "wild_bramble", "name": "Wild Bramble", "info": "A wider ring of thorns.",
-      "cost": 230, "reach": 200, "hits": "ground", "damage": 10, "reload_ms": 1000, "pulse": true},
+      "cost": 230, "reach": 300, "hits": "ground", "damage": 20, "reload_ms": 1000, "pulse": true},
      {"id": "holly_crown", "name": "Holly Crown", "info": "Sharp holly that ignores armor.",
-      "cost": 230, "reach": 150, "hits": "ground", "damage": 12, "reload_ms": 1000, "pulse": true,
+      "cost": 230, "reach": 250, "hits": "ground", "damage": 24, "reload_ms": 1000, "pulse": true,
       "pierce": true}
    ]},
   {"id": "scarecrow", "name": "Scarecrow", "plural": "Scarecrows",

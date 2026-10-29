@@ -4,7 +4,7 @@ extends "res://tests/base_test.gd"
 ## The real run segments and wave packs in data/segments/ (docs/ARCHITECTURE.md 2.9, 2.12;
 ## RULES 14.2, 14.3, 14.9). Every file is listed, the files pass RunData.check, every stack of
 ## segments that fit, at every content tier, is a valid run map with a gate worth placing, a Bakery
-## spot and tunnels that keep RULES 3.6 across the seams, every bottom segment keeps its last row
+## spot, tunnels that keep RULES 3.6 across the seams and a first gate that takes walkers out of them, every bottom segment keeps its last row
 ## scenery, features sit only in middle segments, bridges keep RULES 3.7 and slides RULES 3.8 on every stack, every choice of packs at
 ## every tier keeps the new creature rule and shows each tier creature as if new, and only boss waves set their own strength.
 
@@ -40,6 +40,8 @@ const CAPPED_MOST: int = 6
 const TIER_FIRST_BAND: Dictionary = {1: 3, 2: 3, 3: 3}
 ## RULES 14.2: which feature each map character belongs to.
 const FEATURE_KINDS: Dictionary = {"T": "tunnel", "X": "bridge", "^": "slide", "v": "slide", "<": "slide", ">": "slide", "P": "stump", "Q": "stump"}
+## TUNING_R5.md 1.6: on a tunnel stack the best first gate adds at least this many steps outside tunnels.
+const TUNNEL_DETOUR_MIN: int = 2
 
 const Rules: GDScript = preload("res://tests/levels/fixtures/map_rules.gd")
 
@@ -560,6 +562,51 @@ func test_every_stack_keeps_the_tunnel_rules() -> void:
 		var found: PackedStringArray = Rules.tunnel_problems(level)
 		assert_eq(found, PackedStringArray(), "%s / %s / %s: %s" % [stack[0], stack[1], stack[2], "; ".join(found)])
 	assert_true(tunnelled >= 1, "some stack has a tunnel, so the rules are exercised")
+
+
+## RULES 14.2 and TUNING_R5.md 1.6: on every stack with a tunnel, walkers with no gates take a tunnel, and some
+## placement of the run's first gate that seals nothing takes them out of it onto a longer road: the entrance
+## with the fewest steps outside tunnels gains at least TUNNEL_DETOUR_MIN of them.
+func test_every_tunnel_stack_has_a_gate_that_adds_road_in_reach() -> void:
+	var tunnelled: int = 0
+	for stack: Array in _stacks():
+		var level: LevelData = _build(stack)
+		if level == null:
+			fail("%s / %s / %s does not build" % stack)
+			continue
+		var tiles: Array[Vector2i] = Rules.tunnel_tiles(level)
+		if tiles.is_empty():
+			continue
+		tunnelled += 1
+		var map: RoadMap = RoadMap.new(level)
+		var none: Array[Vector2i] = []
+		var open_dist: PackedInt32Array = map.distances(none)
+		var walked: bool = false
+		for entrance: Vector2i in level.entrances:
+			for cell: Vector2i in map.route(entrance, open_dist):
+				walked = walked or tiles.has(cell)
+		assert_true(walked, "%s / %s / %s: with no gates some walkers take a tunnel" % stack)
+		var open_reach: int = _least_in_reach(level, map, open_dist, tiles)
+		var best: int = open_reach
+		for socket: Vector2i in level.sockets:
+			var closed: Array[Vector2i] = [socket]
+			if not map.seals(closed):
+				best = maxi(best, _least_in_reach(level, map, map.distances(closed), tiles))
+		assert_true(best - open_reach >= TUNNEL_DETOUR_MIN, "%s / %s / %s: the best gate adds %d steps in reach, needs %d" % [stack[0], stack[1], stack[2], best - open_reach, TUNNEL_DETOUR_MIN])
+	assert_true(tunnelled >= 1, "some stack has a tunnel, so the rule is exercised")
+
+
+## The fewest steps outside tunnels on any entrance's route over `dist`.
+static func _least_in_reach(level: LevelData, map: RoadMap, dist: PackedInt32Array, tiles: Array[Vector2i]) -> int:
+	var least: int = -1
+	for entrance: Vector2i in level.entrances:
+		var route: Array[Vector2i] = map.route(entrance, dist)
+		var reach: int = route.size() - 1
+		for cell: Vector2i in route:
+			if tiles.has(cell):
+				reach -= 1
+		least = reach if least < 0 else mini(least, reach)
+	return least
 
 
 ## RULES 14.9: a tier 0 run never meets a feature, so the run maps of regions 1 to 4 stay as they were.

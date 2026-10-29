@@ -217,6 +217,8 @@ A cottage under a crown of thorns. Every second, its thorns scratch every walker
 | 3 | Wild Bramble | `wild_bramble` | 230 | 480 | 10 | 1.0 | 1.0 | 2.0 | none |
 | 3 | Holly Crown | `holly_crown` | 230 | 480 | 12 | 1.0 | 1.0 | 1.5 | Ignores armor |
 
+These are the first numbers. The region 5 tuning of 2026-10-29 doubled its damage and widened its rings (docs/design/TUNING_R5.md). RULES 5.12 holds the current numbers.
+
 - When its timer is 0 or less and at least one creature it can hit is in its ring, it pulses: every creature it can hit whose center is within the ring takes the hit. Then its reload starts, as for any tower (RULES 5.2). With nothing it can hit in its ring, its timer waits at 0, so it never saves up a pulse.
 - The creatures it can hit are walkers and low flyers (4.6). Hidden ones (5.2, Mistwisp) count. Out of reach (3.3) and napping (5.2) creatures do not.
 - A ring of 1.5 covers the eight tiles around it, diagonals included, like the Bakery's reach.
@@ -321,6 +323,7 @@ What the table shows:
 - The Snow Fort is poor across a road. Down an aligned road it is about the Catapult's equal on crowds and, after the Longbow, the best tier 1 buy against an armored column. Big Snowball takes armored columns at tier 3.
 - The Scarecrow and the Moth Lantern deal no damage worth counting. Like the Bell and the Bakery, the bots judge them on real maps: the Scarecrow's fright is worth more the more towers aim into its ring, and the Lantern is worth what the ground towers under a flight line can add.
 - One watch item: the Bramble's Pip numbers are chip damage. Four a second for two or three seconds pops no Pip on its own, but it could crowd the Catapult's job at a tight bend. If the bots find that, the lever is tier 1 damage, 4 down to 3.
+- The bots found the opposite (2026-10-29): the Bramble was weak in the campaign and a trap in runs, so its damage doubled and its rings widened (docs/design/TUNING_R5.md). RULES 5.10 has its current rows and the new watch item.
 
 ### 4.9 Pairs players can discover (RULES 5.11 additions)
 
@@ -704,7 +707,7 @@ Why some of these fit:
 - **5-1 One Gate and 8-1 One Gate.** The feature levels: with one gate, the choice of which tunnel road or which way into a stump to close is the whole puzzle.
 - **6-1 Stuck Gates.** The level sets the gates so walkers must loop over the bridge and back under it. The player builds around a loop they did not choose.
 - **7-1 No Gates.** The slides alone decide the route.
-- **5-4 No Sling Posts.** Mist stops aim, so the player leans on rings, lines and splash.
+- **5-4 No Sling Posts.** Mist stops aim, so the player leans on rings, lines and splash. Since the region 5 tuning (2026-10-29) this ban is 5-4's third star, and its Twist is No Gates (`set_gates` 0): the walkers then take the short middle road through both tunnels, under the mist (docs/design/TUNING_R5.md, RULES 13).
 - **8-2 No Fireworks.** Flyers fall to Moth Lanterns and the ground towers, or to Sling Posts.
 - **Double Trouble** on three boss levels, as in regions 1, 3 and 4. Two Burrowbellies summon 4 Mistwisps at a time, inside the 8 summoner bound. Two Glimmertoads release 12 Flitters, inside the spawn bound.
 
