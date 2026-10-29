@@ -628,10 +628,16 @@ func _battle_panels_and_touch(size: Vector2, safe: Rect2, label: String) -> void
 	var where: String = "battle touches at %s" % size
 	# A real tap on a build spot opens the build panel.
 	var spot: Vector2i = b.level.spots[0]
+	var map_scale: Vector2 = screen.map_view.scale
+	var map_at: Vector2 = screen.map_view.position
 	_touch(vp, _cell_center(screen, spot))
 	await _frames(3)
 	check(screen.context_panel() == screen.build_panel, "%s: a tap on a spot opens the build panel" % where)
 	check(screen.selected_cell() == spot, "%s: and selects it" % where)
+	# Opening the panel never resizes the map, and in landscape never moves it either (U6b).
+	check(screen.map_view.scale.is_equal_approx(map_scale), "%s: opening the build panel keeps the map's scale (%s to %s)" % [where, map_scale, screen.map_view.scale])
+	if screen.landscape:
+		check(screen.map_view.position.is_equal_approx(map_at), "%s: opening the build panel does not move the map (%s to %s)" % [where, map_at, screen.map_view.position])
 	if not screen.landscape:
 		var sheet_top: float = screen.build_panel.get_global_rect().position.y
 		check(sheet_top >= screen.hud.get_global_rect().end.y - 0.5, "%s: the sheet never covers the HUD (%s vs %s)" % [where, sheet_top, screen.hud.get_global_rect().end.y])

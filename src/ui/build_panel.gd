@@ -17,6 +17,9 @@ signal built(cell: Vector2i, type: StringName)
 const NO_CELL: Vector2i = Vector2i(-1, -1)
 ## The space between cards, both ways.
 const CARD_GAP: int = 14
+## The same in the landscape side column. With its scroll bar showing, the column has room
+## for four 160 px cards only at this gap.
+const SIDE_GAP: int = 8
 ## Most cards in one row. Ten towers make two rows of five in the roomy portrait sheet.
 const MAX_COLUMNS: int = 5
 
@@ -34,6 +37,10 @@ var star_warning_label: Label = null
 
 var _signature: Array = []
 var _open: bool = false
+## The most width the cards may use, margins included, set by the screen for the landscape
+## side column (0 means no limit). Without it ten towers ask for five columns, the panel gets
+## wider than the column, and the column grows and pushes the map aside.
+var _width_limit: float = 0.0
 
 
 func _init() -> void:
@@ -57,6 +64,15 @@ func show_spot(new_cell: Vector2i) -> void:
 
 func is_open() -> bool:
 	return _open
+
+
+## Sets the widest the panel may ask for, so the cards wrap to the room there is. The side
+## column passes its width less the margins around the panel; the portrait sheet passes 0.
+func set_width_limit(px: float) -> void:
+	if not is_equal_approx(px, _width_limit):
+		_width_limit = px
+		_signature = []
+		refresh()
 
 
 ## Cards in one row or a grid, and the numbers in two columns when wide.
@@ -145,8 +161,8 @@ func _rebuild(options: Array[Dictionary]) -> void:
 	column.add_child(header)
 	var grid: GridContainer = GridContainer.new()
 	grid.columns = _columns(options.size())
-	grid.add_theme_constant_override(&"h_separation", CARD_GAP)
-	grid.add_theme_constant_override(&"v_separation", CARD_GAP)
+	grid.add_theme_constant_override(&"h_separation", _gap())
+	grid.add_theme_constant_override(&"v_separation", _gap())
 	for option: Dictionary in options:
 		var button: TapButton = _card(option)
 		card_buttons[option["tower"]] = button
@@ -228,7 +244,7 @@ func _rows(rows: Array[PackedStringArray]) -> Control:
 ## Cards per row for `count` towers when the panel is `room` px wide inside its margins
 ## (0 when it has no width yet). Two rows is the aim, and a card is never narrower than
 ## MIN_TOUCH, so a narrow side panel gets fewer columns and more rows.
-static func columns_for(count: int, room: float) -> int:
+static func columns_for(count: int, room: float, gap: int = CARD_GAP) -> int:
 	var wanted: int = maxi(1, count)
 	if count == 4:
 		wanted = 2
@@ -236,20 +252,30 @@ static func columns_for(count: int, room: float) -> int:
 		wanted = mini(MAX_COLUMNS, ceili(float(count) / 2.0))
 	if room <= 0.0:
 		return wanted
-	var fit: int = maxi(1, int((room + float(CARD_GAP)) / (Layout.MIN_TOUCH + float(CARD_GAP))))
+	var fit: int = maxi(1, int((room + float(gap)) / (Layout.MIN_TOUCH + float(gap))))
 	return mini(wanted, fit)
 
 
 func _columns(count: int) -> int:
-	return columns_for(count, _room())
+	return columns_for(count, _room(), _gap())
 
 
-## The width the cards have, inside the panel's margins. 0 before the panel has been laid out.
+## Portrait keeps the roomy gap; the side column has no width to spare.
+func _gap() -> int:
+	return CARD_GAP if wide else SIDE_GAP
+
+
+## The width the cards have, inside the panel's margins. 0 before the panel has been laid out
+## and when nothing limits it. A limit is used from the first layout, so the panel never asks
+## for more than it may have.
 func _room() -> float:
-	if size.x <= 0.0:
+	var width: float = size.x
+	if _width_limit > 0.0:
+		width = minf(width, _width_limit) if width > 0.0 else _width_limit
+	if width <= 0.0:
 		return 0.0
 	var box: StyleBox = get_theme_stylebox(&"panel")
-	return size.x - box.get_margin(SIDE_LEFT) - box.get_margin(SIDE_RIGHT)
+	return width - box.get_margin(SIDE_LEFT) - box.get_margin(SIDE_RIGHT)
 
 
 ## The panel got its width or changed it: the cards may need another number of columns.
