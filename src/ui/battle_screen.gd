@@ -41,8 +41,8 @@ signal ended(result: Dictionary)
 signal restart_confirmed()
 ## "Back to menu" in Pause. The game stays saved.
 signal left()
-## The player used the music button in the HUD. `on` is what music should be now.
-signal music_changed(on: bool)
+## The player used the sound button in the HUD. `on` is what the sound should be now.
+signal sound_changed(on: bool)
 ## Pause asked for the Info screen. The App opens it.
 signal info_requested()
 ## Pause asked for Settings. The App opens it.
@@ -259,7 +259,7 @@ func _wrap(inner: Control, top: float, bottom: float) -> MarginContainer:
 func _connect_panels() -> void:
 	hud.speed_selected.connect(func(speed: int) -> void: clock.speed = speed)
 	hud.pause_requested.connect(freeze)
-	hud.music_selected.connect(func(on: bool) -> void: music_changed.emit(on))
+	hud.sound_selected.connect(func(on: bool) -> void: sound_changed.emit(on))
 	hud.resume_requested.connect(resume)
 	hud.wave_started.connect(func() -> void: save_requested.emit())
 	pause_strip.menu_requested.connect(_on_strip_menu)
@@ -444,10 +444,9 @@ func restart_text() -> String:
 	return "This run counts as lost on its current wave. Then a new run starts, on the same difficulty."
 
 
-## Shows what the music is doing on the HUD's music button. `sound_on` is the sound effects
-## switch, which music needs too.
-func set_music_state(music_on: bool, sound_on: bool) -> void:
-	hud.set_music(music_on, sound_on)
+## Shows the sound switch (sound effects and music together) on the HUD's sound button.
+func set_sound_state(sound_on: bool) -> void:
+	hud.set_sound(sound_on)
 
 
 ## True while the Pause menu is open.

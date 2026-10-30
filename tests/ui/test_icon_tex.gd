@@ -15,7 +15,7 @@ extends "res://tests/base_test.gd"
 ## build now takes 8), or the same code with its blocks cut to one pixel (a trial on
 ## 2026-10-29: median 9), lands far above MEDIAN_LIMIT.
 
-const KINDS: Array[StringName] = [&"cup", &"gear", &"back", &"lock", &"check", &"arrow", &"close", &"pause", &"play", &"note", &"note_off"]
+const KINDS: Array[StringName] = [&"cup", &"gear", &"back", &"lock", &"check", &"arrow", &"close", &"pause", &"play", &"speaker", &"speaker_off"]
 const SIZES: Array[int] = [57, 73]
 const MEDIAN_LIMIT: float = 5.0
 var _sink: float = 0.0
@@ -129,25 +129,25 @@ func test_the_shapes_are_where_they_should_be() -> void:
 		assert_true(solid > 200 and solid < 3000, "%s covers a sensible area (%d)" % [kind, solid])
 
 
-## The music note has a head, a stem and a flag. Crossed out, it gains a slash and loses a
+## The speaker has a box, a cone and a sound wave. Crossed out, it gains a slash and loses a
 ## gap around it, so the two read apart by shape and not by color.
-func test_the_music_note_and_its_crossed_out_twin() -> void:
-	var note: Image = IconTex.make(&"note", 64).get_image()
-	var off: Image = IconTex.make(&"note_off", 64).get_image()
-	assert_true(note.get_pixel(24, 47).a > 0.99, "note head")
-	assert_true(note.get_pixel(32, 20).a > 0.99, "note stem")
-	assert_true(note.get_pixel(44, 22).a > 0.99, "note flag")
-	assert_true(note.get_pixel(4, 4).a < 0.01, "note corner")
-	assert_true(note.get_pixel(13, 13).a < 0.01, "no slash on the plain note")
+func test_the_speaker_and_its_crossed_out_twin() -> void:
+	var plain: Image = IconTex.make(&"speaker", 64).get_image()
+	var off: Image = IconTex.make(&"speaker_off", 64).get_image()
+	assert_true(plain.get_pixel(14, 32).a > 0.99, "speaker box")
+	assert_true(plain.get_pixel(26, 32).a > 0.99, "speaker cone")
+	assert_true(plain.get_pixel(48, 32).a > 0.99, "sound wave")
+	assert_true(plain.get_pixel(4, 4).a < 0.01, "speaker corner")
+	assert_true(plain.get_pixel(13, 13).a < 0.01, "no slash on the plain speaker")
 	assert_true(off.get_pixel(13, 13).a > 0.99, "the slash starts top left")
 	assert_true(off.get_pixel(51, 51).a > 0.99, "and ends bottom right")
-	assert_true(note.get_pixel(32, 27).a > 0.99, "the stem is solid where the gap will be")
-	assert_true(off.get_pixel(32, 27).a < 0.01, "the slash keeps a clear gap beside it")
+	assert_true(plain.get_pixel(18, 25).a > 0.99, "the box is solid where the gap will be")
+	assert_true(off.get_pixel(18, 25).a < 0.01, "the slash keeps a clear gap beside it")
 	var count_note: int = 0
 	var count_off: int = 0
 	for y: int in 64:
 		for x: int in 64:
-			if note.get_pixel(x, y).a > 0.5:
+			if plain.get_pixel(x, y).a > 0.5:
 				count_note += 1
 			if off.get_pixel(x, y).a > 0.5:
 				count_off += 1

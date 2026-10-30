@@ -1196,7 +1196,7 @@ class_name App extends Control                         # src/ui/app.gd, root of 
 ## Creates GameData, SaveStore, Settings, Progress, the saved games and AudioService once and passes them down with setup().
 ## Routes between screens, saves on lifecycle notifications, handles the back button.
 signal sound_changed(on: bool)                         # the Settings sound effects toggle
-signal music_changed(on: bool)                         # A12: the music toggle, from Settings or the battle HUD's music button
+signal music_changed(on: bool)                         # A12: the music toggle, from Settings
 signal continue_requested()                            # the mode screen's taps; the battle flow answers them (Roguelite and Daily from U3)
 signal campaign_requested()
 signal roguelite_requested()
@@ -1249,7 +1249,7 @@ signal ended(result: Dictionary)                       # won, lost, or abandoned
                                                        # Battle.result() plus "abandoned", "relaxed" and "twist" (the battle has Twist effects)
 signal left()                                          # "Back to menu" in Pause; the game stays saved
 signal restart_confirmed()                             # A12: Restart in Pause, after a confirm; the App starts the game again (below)
-signal music_changed(on: bool)                         # A12: the HUD's music button; on is what the music should be now
+signal sound_changed(on: bool)                         # U8: the HUD's sound button; on is what the sound should be now
 var stars_in_play: bool = true                         # false in a run or daily (set_run sets it). Star lines and star warnings
                                                        # need it true and a battle with no Twist.
 func setup(battle: Battle, audio: AudioService, progress: Progress, region: StringName = &"lantern_hill") -> void   # region: A12 (14.11)
@@ -1262,7 +1262,7 @@ func needs_pause_menu() -> bool                        # a wave is on, Pause is 
 func pause_for_leave() -> bool                         # the app is being left: when needs_pause_menu(), pause() and true (Pause's
                                                        # save_requested has saved). Else false and the caller saves. While a first sight
                                                        # card holds the wave, Pause opens when the card closes, as after a resize (7.5).
-func set_music_state(music_on: bool, sound_on: bool) -> void   # A12: what the HUD's music button shows (below)
+func set_sound_state(sound_on: bool) -> void           # U8: what the HUD's sound button shows (below)
 
 class_name Links extends RefCounted                    # src/ui/links.gd (section 8)
 ```
@@ -1282,7 +1282,7 @@ class_name Links extends RefCounted                    # src/ui/links.gd (sectio
   - InfoScreen: every tower, creature and boss from the data, and the rules of Twists, runs, cards and the daily (RULES 13 to 15).
 - A12 additions (Bart, 2026-10-28):
   - **Restart.** Pause has Restart beside Abandon. Each asks first, and the Restart question says in plain words what happens to this game. On a yes, BattleScreen sends `restart_confirmed`, and the App ends the game and starts it again. A campaign level or Twist starts over on the same difficulty and records nothing, like an abandoned one. A run or daily follows the start over rule (RULES 4.10, 14.7): it counts as lost at its current wave and records what an ended run records (step 5). Then a new run starts: after a normal run, a new one on the same difficulty, as the run card's Start makes it; after a daily, its own day's daily again, with the same seed and tier.
-  - **The music button.** The battle HUD has a small round button beside the call button: a music note, crossed out when the music is off, so it never relies on color. A tap turns the music on or off and nothing else: the App saves `Settings.music_on` and calls `AudioService.set_music_on()`. While sound effects are off the music is silent whatever its setting, so the button shows the crossed out note, dimmed, and cannot be tapped. Settings shows two rows, "Sound effects" (`sound_on`, the master switch) and "Music" (`music_on`). The Music row keeps its value while sound effects are off.
+  - **The sound button (U8, Bart 2026-10-30).** The battle HUD has a small round button beside the call button: a speaker, crossed out when the sound is off, so it never relies on color. A tap turns the whole sound on or off, sound effects and music together: it flips the master switch `Settings.sound_on` (the "Sound effects" row in Settings), the App saves it and calls `AudioService.set_enabled()`, the same path the Settings row uses. It never changes `music_on`, so turning the sound back on restores the player's own music choice. The button is never dimmed or disabled. Settings keeps its two rows, "Sound effects" (`sound_on`, the master switch) and "Music" (`music_on`); a change made with the HUD button shows in the Settings row the next time it opens. The Music row keeps its value while sound effects are off.
   - **Finger scrolling.** Every button is a `TapButton` (src/ui/tap_button.gd). Once a finger that went down on one has moved 24 px (`DEADZONE`) up or down, the button scrolls the nearest ScrollContainer above it that scrolls vertically, following the finger, and lets go of its press, so the lift is not a tap. A finger that stays inside 24 px still taps. `BattlePanel` (src/ui/battle_panel.gd, the base of the HUD and every battle panel) uses `MOUSE_FILTER_PASS`, so a drag that starts on a panel's background reaches the scroll container above it too, while the map under the panel still gets no touch.
 
 App flow:
@@ -1341,7 +1341,7 @@ func set_music(track: StringName) -> void              # &"menu", &"battle", or 
 func is_in_front() -> bool                             # the app is in front, or the service is not gated
 ```
 
-- The App creates the service with `AudioService.new()`, adds it as its own child (no autoload), and calls `set_enabled(settings.sound_on)` and, since A12, `set_music_on(settings.music_on)` once at boot, then again whenever either setting changes (3.6, the music button). It passes the service down with `setup()`.
+- The App creates the service with `AudioService.new()`, adds it as its own child (no autoload), and calls `set_enabled(settings.sound_on)` and, since A12, `set_music_on(settings.music_on)` once at boot, then again whenever either setting changes (3.6, the sound button). It passes the service down with `setup()`.
 - AudioService makes its Sfx and Music buses at run time, so project.godot and the bus layout need nothing.
 - A shot's sound comes from the `fired` event's `tower` and `spec` (3.1).
 - A12 adds the sounds of 14.11.
@@ -1645,7 +1645,7 @@ Why 1.5: every phone shape stays portrait, and the Fold5 inner screen gets the l
 
 The map never rotates. The same 7 column grid shows in both layouts; only the HUD moves (RULES 3.1).
 
-- **Portrait:** the HUD above the map and nothing else in the layout flow. The HUD is two rows of 48 dp controls, 360 logical px with its margins. The first row holds the numbers, the gate chip and the pause button; the second the speeds and the call button, and since A12 the round music button after it (3.6). The map gets the rest of the safe area, as large as fits, aligned to the top. On the cover the width decides, so cells stay 154 px, 49 dp for any row count up to 13. The map never loses height to any state.
+- **Portrait:** the HUD above the map and nothing else in the layout flow. The HUD is two rows of 48 dp controls, 360 logical px with its margins. The first row holds the numbers, the gate chip and the pause button; the second the speeds and the call button, and since A12 the round sound button after it (3.6). The map gets the rest of the safe area, as large as fits, aligned to the top. On the cover the width decides, so cells stay 154 px, 49 dp for any row count up to 13. The map never loses height to any state.
 - **The gate chip** shows the gate picture and the number in hand, and a lock during a wave. Drag from it as from the landscape strip. A tap on it shows its sentence, "Drag one onto a marked road, or tap a marked road.", as a dock message (FUN_REVIEW_R1 item 6).
 - **The call button** has the honey `PrimaryButton` look only as "Start wave N" in a build phase. An early call keeps the plain `Button` look with its "+N" and works the same (FUN_REVIEW_R1 item 3). The HUD never changes height or width with the call button's label (U7, QA 2026-10-29 L1): the call button has a fixed height of two lines at the button font plus padding (`BattleHud.call_button_height()`), and a longer label wraps to its width and takes the largest font size in `CALL_SIZES` that fits. The map and its area never move during a level. tests/ui/test_hud_steady.gd guards it.
 - **The dock** floats at the bottom of the safe area, under the map or over its lowest rows. Top to bottom it holds the messages (the HUD's and the gate chip's), the Paused strip and the wave preview. The dock and the floating hint hide while a build, tower, creature or draft sheet is open. Messages last 3 s. Besides refusals they include "Wave 3 cleared: +35 gold." when a wave is cleared, from the `wave_cleared` event (FUN_REVIEW_R1 item 8).

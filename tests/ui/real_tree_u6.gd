@@ -3,7 +3,7 @@
 extends SceneTree
 ## Step U6 checks that need a running scene tree: a finger that slides over a list scrolls it
 ## and does not press the button under it, on every scrolling list in the app; and the new
-## Restart and music buttons at both Fold5 sizes. The test runner has no tree, so
+## Restart and sound buttons at both Fold5 sizes. The test runner has no tree, so
 ## tests/ui/test_u6_real_tree.gd starts this script in a second Godot process.
 ##
 ##     godot --headless --path . --script res://tests/ui/real_tree_u6.gd
@@ -434,22 +434,22 @@ func _battle_buttons() -> void:
 		var vp: SubViewport = made[0]
 		var screen: BattleScreen = made[1]
 		var hud: BattleHud = screen.hud
-		var music: TapButton = hud.music_button
-		var rect: Rect2 = music.get_global_rect()
-		check(music.is_visible_in_tree(), "%s: the music button shows" % where)
-		check(rect.size.x >= Layout.MIN_TOUCH - 0.5 and rect.size.y >= Layout.MIN_TOUCH - 0.5, "%s: the music button is 48 dp (%s)" % [where, rect.size])
-		check(hud.get_global_rect().encloses(rect), "%s: the music button is inside the HUD (%s in %s)" % [where, rect, hud.get_global_rect()])
+		var sound: TapButton = hud.sound_button
+		var rect: Rect2 = sound.get_global_rect()
+		check(sound.is_visible_in_tree(), "%s: the sound button shows" % where)
+		check(rect.size.x >= Layout.MIN_TOUCH - 0.5 and rect.size.y >= Layout.MIN_TOUCH - 0.5, "%s: the sound button is 48 dp (%s)" % [where, rect.size])
+		check(hud.get_global_rect().encloses(rect), "%s: the sound button is inside the HUD (%s in %s)" % [where, rect, hud.get_global_rect()])
 		check(safe.encloses(rect), "%s: and inside the safe area" % where)
 		for other: Control in [hud.pause_button, hud.speed_buttons[0], hud.speed_buttons[1], hud.speed_buttons[2], hud.call_button]:
-			check(_rects_apart(music, other), "%s: the music button does not overlap '%s'" % [where, str((other as Button).text)])
+			check(_rects_apart(sound, other), "%s: the sound button does not overlap '%s'" % [where, str((other as Button).text)])
 		check(hud.call_button.size.x >= 340.0, "%s: the call button keeps room for its words (%s)" % [where, hud.call_button.size.x])
 		var call_rows: float = hud.call_button.size.y
 		check(call_rows <= Layout.MIN_TOUCH + 60.0, "%s: the call button stays a single row high (%s)" % [where, call_rows])
-		# A tap on the music button toggles it, and a swipe over it does not.
+		# A tap on the sound button toggles it, and a swipe over it does not.
 		var seen: Array[bool] = []
-		hud.music_selected.connect(func(on: bool) -> void: seen.append(on))
+		hud.sound_selected.connect(func(on: bool) -> void: seen.append(on))
 		_tap(vp, rect.get_center(), true)
-		check(seen == ([false] as Array[bool]), "%s: a touch on the music button turns the music off" % where)
+		check(seen == ([false] as Array[bool]), "%s: a touch on the sound button turns the sound off" % where)
 		_swipe(vp, rect.get_center(), Vector2(TapButton.DEADZONE * 3.0, 0.0), true)
 		check(seen.size() == 1, "%s: a swipe over it does nothing" % where)
 		# Pause with Restart.

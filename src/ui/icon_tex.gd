@@ -4,7 +4,7 @@ class_name IconTex
 extends RefCounted
 ## Small white icons for buttons, drawn in code (no image files). A button tints
 ## them with its icon colors. Kinds: cup, gear, back, lock, check, arrow, close,
-## pause, play, note (music), note_off (the same note crossed out).
+## pause, play, speaker (sound), speaker_off (the same speaker crossed out).
 ##
 ## Each kind is a distance function on the unit square (negative inside). A pixel's
 ## coverage is read from its distance, one sample per pixel. Blocks that are clearly
@@ -24,7 +24,7 @@ const SLACK: float = 1.0
 const USED_ICONS: Array[Array] = [
 	[&"cup", 56], [&"gear", 72], [&"back", 72], [&"lock", 56], [&"lock", 64], [&"lock", 72],
 	[&"check", 56], [&"check", 64], [&"arrow", 64], [&"close", 64], [&"close", 72],
-	[&"pause", 72], [&"play", 72], [&"note", 72], [&"note_off", 72],
+	[&"pause", 72], [&"play", 72], [&"speaker", 72], [&"speaker_off", 72],
 ]
 
 static var _cache: Dictionary[String, ImageTexture] = {}
@@ -114,10 +114,10 @@ static func _distance_of(kind: StringName) -> Callable:
 			return Callable(IconTex, &"_pause")
 		&"play":
 			return Callable(IconTex, &"_play")
-		&"note":
-			return Callable(IconTex, &"_note")
-		&"note_off":
-			return Callable(IconTex, &"_note_off")
+		&"speaker":
+			return Callable(IconTex, &"_speaker")
+		&"speaker_off":
+			return Callable(IconTex, &"_speaker_off")
 	return Callable()
 
 
@@ -208,22 +208,26 @@ static func _play(u: float, v: float) -> float:
 	return maxf(maxf(0.30 - u, d_up), d_low)
 
 
-## A music note: a round head, a stem and a flag.
-static func _note(u: float, v: float) -> float:
+## A speaker: a small box, a cone that opens to the right, and a curved sound wave.
+static func _speaker(u: float, v: float) -> float:
 	var p: Vector2 = Vector2(u, v)
-	var head: float = p.distance_to(Vector2(0.38, 0.74)) - 0.145
-	var stem: float = _segment(p, Vector2(0.50, 0.70), Vector2(0.50, 0.17), 0.05)
-	var flag: float = _segment(p, Vector2(0.50, 0.19), Vector2(0.76, 0.44), 0.05)
-	return minf(head, minf(stem, flag))
+	var box: float = _box(p, Vector2(0.22, 0.50), Vector2(0.08, 0.12))
+	var up_side: Vector2 = Vector2(-0.20, -0.22).normalized()
+	var low_side: Vector2 = Vector2(-0.20, 0.22).normalized()
+	var d_up: float = (p - Vector2(0.30, 0.40)).dot(up_side)
+	var d_low: float = (p - Vector2(0.30, 0.60)).dot(low_side)
+	var cone: float = maxf(maxf(0.30 - u, u - 0.52), maxf(d_up, d_low))
+	var wave: float = maxf(absf(p.distance_to(Vector2(0.48, 0.50)) - 0.27) - 0.045, 0.62 - u)
+	return minf(box, minf(cone, wave))
 
 
-## The note with a slash across it. A clear gap on both sides of the slash keeps the two
-## apart, so the slash reads even where it crosses the note. The shape differs from the
-## plain note, so the state is never shown by color alone.
-static func _note_off(u: float, v: float) -> float:
+## The speaker with a slash across it. A clear gap on both sides of the slash keeps the two
+## apart, so the slash reads even where it crosses the speaker. The shape differs from the
+## plain speaker, so the state is never shown by color alone.
+static func _speaker_off(u: float, v: float) -> float:
 	var p: Vector2 = Vector2(u, v)
 	var slash: float = _segment(p, Vector2(0.14, 0.14), Vector2(0.86, 0.86), 0.0)
-	return minf(maxf(_note(u, v), 0.10 - slash), slash - 0.045)
+	return minf(maxf(_speaker(u, v), 0.10 - slash), slash - 0.045)
 
 
 ## Distance to a box (negative inside).

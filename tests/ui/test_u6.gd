@@ -2,7 +2,7 @@
 # Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.
 extends "res://tests/base_test.gd"
 ## Bart's three requests of 2026-10-28: Restart in Pause (in a level, a Twist, a run and the
-## daily, with what each records), the music button in the HUD, and the Music and Sound
+## daily, with what each records), the sound button in the HUD (U8), and the Music and Sound
 ## effects rows in Settings. The finger scrolling of lists needs a scene tree and is checked in
 ## tests/ui/real_tree_u6.gd. No running scene tree here.
 
@@ -364,54 +364,80 @@ func test_restarting_one_mode_leaves_the_other_modes_saved_games_alone() -> void
 	assert_eq(made.progress.counters[&"dailies_finished"], 0, "the daily was not counted")
 
 
-# The music button in the HUD.
+# The sound button in the HUD (U8: it turns sound effects and music off together).
 
-func test_the_hud_music_button_is_a_round_touch_sized_note_that_crosses_out() -> void:
+func test_the_hud_sound_button_is_a_round_touch_sized_speaker_that_crosses_out() -> void:
 	var made: App = _app()
 	var screen: BattleScreen = _start(made)
 	var hud: BattleHud = screen.hud
-	var button: TapButton = hud.music_button
+	var button: TapButton = hud.sound_button
 	assert_not_null(button)
 	assert_true(button.custom_minimum_size.x >= Layout.MIN_TOUCH and button.custom_minimum_size.y >= Layout.MIN_TOUCH, "at least 48 dp")
-	assert_true(button.icon == IconTex.make(&"note", 72), "a note while music is on")
+	assert_true(button.icon == IconTex.make(&"speaker", 72), "a speaker while the sound is on")
 	var round_box: StyleBoxFlat = button.get_theme_stylebox(&"normal") as StyleBoxFlat
 	assert_true(round_box.corner_radius_top_left >= 80, "round")
 	var seen: Array[bool] = []
-	hud.music_selected.connect(func(on: bool) -> void: seen.append(on))
+	hud.sound_selected.connect(func(on: bool) -> void: seen.append(on))
 	button.tapped.emit()
-	assert_eq(seen, [false] as Array[bool], "a tap asks for music off")
-	assert_true(button.icon == IconTex.make(&"note_off", 72), "the note is crossed out")
-	assert_false(hud.music_on)
+	assert_eq(seen, [false] as Array[bool], "a tap asks for sound off")
+	assert_true(button.icon == IconTex.make(&"speaker_off", 72), "the speaker is crossed out")
+	assert_false(button.disabled, "never disabled")
+	assert_false(hud.sound_on)
 	button.tapped.emit()
 	assert_eq(seen, [false, true] as Array[bool])
-	assert_true(button.icon == IconTex.make(&"note", 72))
+	assert_true(button.icon == IconTex.make(&"speaker", 72))
+	assert_false(button.disabled)
 
 
-func test_the_music_button_saves_the_setting_and_switches_the_music() -> void:
+func test_the_sound_button_flips_sound_on_and_never_touches_music_on() -> void:
 	var made: App = _app()
 	var screen: BattleScreen = _start(made)
-	assert_true(made.audio.is_music_on())
-	screen.hud.music_button.tapped.emit()
-	assert_false(made.settings.music_on, "the setting changed")
-	assert_false(made.music_on)
-	assert_false(made.audio.is_music_on(), "the music is off")
-	assert_true(made.audio.is_enabled(), "sound effects stay on")
-	assert_false(_store().load_settings().music_on, "and it is saved")
-	assert_true(_store().load_settings().sound_on, "sound effects setting untouched")
-	screen.hud.music_button.tapped.emit()
-	assert_true(made.audio.is_music_on())
+	assert_true(made.audio.is_enabled())
+	screen.hud.sound_button.tapped.emit()
+	assert_false(made.settings.sound_on, "the master switch changed")
+	assert_false(made.sound_on)
+	assert_false(made.audio.is_enabled(), "sound effects are off")
+	assert_true(made.settings.music_on, "the music setting is untouched")
+	assert_true(made.music_on)
+	assert_true(made.audio.is_music_on(), "and so is the music switch in the audio service")
+	assert_false(_store().load_settings().sound_on, "saved")
+	assert_true(_store().load_settings().music_on, "music setting saved as it was")
+	screen.hud.sound_button.tapped.emit()
+	assert_true(made.audio.is_enabled())
+	assert_true(_store().load_settings().sound_on)
 	assert_true(_store().load_settings().music_on)
 
 
-func test_a_saved_music_off_is_applied_at_boot_and_shown_in_the_next_level() -> void:
+func test_a_tap_never_leaves_music_playing_with_sound_off() -> void:
+	var made: App = _app()
+	var screen: BattleScreen = _start(made)
+	assert_true(made.audio.is_music_playing(), "the battle music plays")
+	screen.hud.sound_button.tapped.emit()
+	assert_false(made.audio.is_music_playing(), "sound off silences the music too")
+	assert_false(made.audio.is_enabled())
+	screen.hud.sound_button.tapped.emit()
+	assert_true(made.audio.is_music_playing(), "sound on brings the music back")
+	# The player's own music choice is kept across the toggle.
+	made.settings.music_on = false
+	made.audio.set_music_on(false)
+	made.music_on = false
+	screen.hud.sound_button.tapped.emit()
+	screen.hud.sound_button.tapped.emit()
+	assert_true(made.audio.is_enabled())
+	assert_false(made.audio.is_music_playing(), "music stays off when the player had it off")
+	assert_false(made.settings.music_on)
+
+
+func test_a_saved_sound_off_is_applied_at_boot_and_shown_in_the_next_level() -> void:
 	var first: App = _app()
-	first.settings.music_on = false
+	first.settings.sound_on = false
 	assert_true(first.store.save_settings(first.settings))
 	var again: App = _app(false)
-	assert_false(again.music_on)
-	assert_false(again.audio.is_music_on(), "the audio service follows the setting")
+	assert_false(again.sound_on)
+	assert_false(again.audio.is_enabled(), "the audio service follows the setting")
 	var screen: BattleScreen = _start(again)
-	assert_true(screen.hud.music_button.icon == IconTex.make(&"note_off", 72), "the level shows it crossed out")
+	assert_true(screen.hud.sound_button.icon == IconTex.make(&"speaker_off", 72), "the level shows it crossed out")
+	assert_false(again.audio.is_music_playing())
 
 
 func test_settings_has_music_and_sound_effects_rows_that_save() -> void:
@@ -440,27 +466,28 @@ func test_settings_has_music_and_sound_effects_rows_that_save() -> void:
 	assert_eq(again.music_button.text, "Music: Off")
 
 
-func test_settings_music_row_updates_the_hud_button_and_the_hud_follows_sound_effects() -> void:
+func test_settings_rows_and_the_hud_sound_button_stay_in_step() -> void:
 	var made: App = _app()
 	var screen: BattleScreen = _start(made)
 	screen.pause()
 	_press(made.top_modal(), "Settings")
 	made.open_settings()
 	var panel: SettingsPanel = made.top_modal() as SettingsPanel
+	# The Music row is not the HUD button's business.
 	panel.music_button.tapped.emit()
-	assert_true(screen.hud.music_button.icon == IconTex.make(&"note_off", 72), "the HUD note is crossed out")
-	assert_false(screen.hud.music_button.disabled, "still usable: sound effects are on")
+	assert_true(screen.hud.sound_button.icon == IconTex.make(&"speaker", 72), "music off leaves the speaker plain")
+	assert_false(screen.hud.sound_button.disabled)
 	panel.music_button.tapped.emit()
-	assert_true(screen.hud.music_button.icon == IconTex.make(&"note", 72))
-	# Sound effects off: the music is silent whatever its setting says.
+	# The Sound effects row crosses the speaker out.
 	panel.sound_button.tapped.emit()
-	assert_true(screen.hud.music_button.icon == IconTex.make(&"note_off", 72), "silent, so crossed out")
-	assert_true(screen.hud.music_button.disabled, "and not tappable: a tap would change nothing you can hear")
-	var seen: Array[bool] = []
-	screen.hud.music_selected.connect(func(on: bool) -> void: seen.append(on))
-	screen.hud.music_button.tapped.emit()
-	assert_eq(seen.size(), 0, "a stray tap sends nothing")
-	assert_true(made.settings.music_on, "the music setting is as it was")
+	assert_true(screen.hud.sound_button.icon == IconTex.make(&"speaker_off", 72), "sound off, so crossed out")
+	assert_false(screen.hud.sound_button.disabled, "and still tappable")
 	panel.sound_button.tapped.emit()
-	assert_false(screen.hud.music_button.disabled)
-	assert_true(screen.hud.music_button.icon == IconTex.make(&"note", 72), "back to a note")
+	assert_true(screen.hud.sound_button.icon == IconTex.make(&"speaker", 72), "back to a plain speaker")
+	# The other way: the HUD button shows in Settings the next time it opens.
+	panel.request_close()
+	screen.hud.sound_button.tapped.emit()
+	made.open_settings()
+	var again: SettingsPanel = made.top_modal() as SettingsPanel
+	assert_eq(again.sound_button.text, "Sound effects: Off")
+	assert_eq(again.music_button.text, "Music: On", "the Music row is as it was")

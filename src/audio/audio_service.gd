@@ -26,12 +26,12 @@ extends Node
 ## themselves, so the App forwards nothing. On Windows and in tests the
 ## service is always in front, as before.
 ##
-## Two switches. set_enabled is the Settings sound switch: off silences sounds
-## and music. set_music_on is the music switch (the HUD button and the Settings
-## Music row): off silences only the music, with a short fade. Music plays only
-## when both are on and the app is in front. Sound effects follow set_enabled
-## alone. Music back on starts the wanted tune again from its beginning with
-## the usual fade in.
+## Two switches. set_enabled is the sound switch (the HUD button and the Settings
+## Sound effects row): off silences sounds and music. set_music_on is the music
+## switch (the Settings Music row): off silences only the music, with a short
+## fade. Music plays only when both are on and the app is in front. Sound
+## effects follow set_enabled alone. Music back on starts the wanted tune again
+## from its beginning with the usual fade in.
 
 const SFX_BUS: StringName = &"Sfx"
 const MUSIC_BUS: StringName = &"Music"

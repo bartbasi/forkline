@@ -23,7 +23,7 @@ extends Control
 
 ## The player turned sound effects on or off in Settings.
 signal sound_changed(on: bool)
-## The player turned music on or off, in Settings or with the button in a level.
+## The player turned music on or off in Settings.
 signal music_changed(on: bool)
 ## Taps on the mode screen. The App answers all four itself.
 signal continue_requested()
@@ -444,8 +444,9 @@ func close_all_modals() -> void:
 	_modal_layer.visible = true
 
 
-## The sound effects toggle (the master switch): kept in Settings, saved, and applied to the
-## AudioService. A level on screen shows it on its music button.
+## The sound toggle (the master switch, sound effects and music together), from Settings or the
+## level's sound button: kept in Settings, saved, applied to the AudioService, and shown on the
+## level's button. The music setting is not touched.
 func _on_sound_changed(on: bool) -> void:
 	sound_on = on
 	if settings != null:
@@ -454,12 +455,11 @@ func _on_sound_changed(on: bool) -> void:
 			_log_save_failure()
 	if audio != null:
 		audio.set_enabled(on)
-	_show_music_state()
+	_show_sound_state()
 	sound_changed.emit(on)
 
 
-## The music toggle, from Settings or the level's music button: kept in Settings, saved,
-## applied to the AudioService, and shown on the level's button.
+## The music toggle, from Settings: kept in Settings, saved, applied to the AudioService.
 func _on_music_changed(on: bool) -> void:
 	music_on = on
 	if settings != null:
@@ -468,14 +468,13 @@ func _on_music_changed(on: bool) -> void:
 			_log_save_failure()
 	if audio != null:
 		audio.set_music_on(on)
-	_show_music_state()
 	music_changed.emit(on)
 
 
-## Tells the level on screen what the music is doing.
-func _show_music_state() -> void:
+## Tells the level on screen whether the sound is on.
+func _show_sound_state() -> void:
 	if _battle_screen != null:
-		_battle_screen.set_music_state(music_on, sound_on)
+		_battle_screen.set_sound_state(sound_on)
 
 
 # Back button.
@@ -720,11 +719,11 @@ func _begin(saved: SavedGame, resumed: bool) -> void:
 	screen.ended.connect(_on_battle_ended)
 	screen.restart_confirmed.connect(_on_battle_restart)
 	screen.left.connect(_on_battle_left)
-	screen.music_changed.connect(_on_music_changed)
+	screen.sound_changed.connect(_on_sound_changed)
 	_battle_screen = screen
 	push_screen(screen)
 	screen.setup(saved.battle, audio, progress, region_of(saved))
-	screen.set_music_state(music_on, sound_on)
+	screen.set_sound_state(sound_on)
 	if saved.run != null:
 		screen.set_run(saved.run)
 	audio.set_music(&"battle")

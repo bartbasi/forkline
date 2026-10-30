@@ -2,7 +2,7 @@
 # Free software under the GNU GPL v3 with additional terms: see LICENSE and NOTICE.
 extends SceneTree
 ## Screenshots for step U6: Pause with Restart, the Restart question, the battle HUD with the
-## music button on, off and dimmed (sound effects off), and Settings with its two sound rows,
+## sound button on and off, and Settings with its two sound rows,
 ## at the Fold5 cover and inner sizes. Needs a display, so no --headless:
 ##
 ##     godot --path . --script res://tests/ui/shots_u6.gd -- --out=<folder>
@@ -81,16 +81,13 @@ func _battle(size: Vector2, safe: Rect2, label: String) -> void:
 	await _settle(30)
 	screen.hint_banner.dismiss()
 	await _settle(10)
-	screen.set_music_state(true, true)
+	screen.set_sound_state(true)
 	await _settle(6)
-	await _save(made[0], "ui_req_hud_music_on_%s" % label)
-	screen.set_music_state(false, true)
+	await _save(made[0], "ui_req_hud_sound_on_%s" % label)
+	screen.set_sound_state(false)
 	await _settle(6)
-	await _save(made[0], "ui_req_hud_music_off_%s" % label)
-	screen.set_music_state(true, false)
-	await _settle(6)
-	await _save(made[0], "ui_req_hud_silent_%s" % label)
-	screen.set_music_state(true, true)
+	await _save(made[0], "ui_req_hud_sound_off_%s" % label)
+	screen.set_sound_state(true)
 	screen.pause()
 	await _settle(20)
 	await _save(made[0], "ui_req_pause_%s" % label)
