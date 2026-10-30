@@ -779,7 +779,7 @@ Rules for A, now in RULES 14.9 and 15:
 
 ### 9.5 Balance risks
 
-- **Draft dilution.** At tier 4, 9 tower cards share the tower weight instead of 5, and 10 base perks come before any unlocked perk instead of 6. Each tower is offered less often and unlocked perks wait longer. The bots check RULES 14.8 at tier 0 and tier 4.
+- **Draft dilution.** At tier 4, 9 tower cards share the tower weight instead of 5, and 10 base perks come before any unlocked perk instead of 6. Each tower is offered less often and unlocked perks wait longer. The bots check RULES 14.8 at tier 0 and tier 4. The regions 6 and 7 pass (2026-10-29) found the bots losing more runs at tiers 2 and 3 because they take nearly every tower card and build every kind, not because the new content is harder. The bots now keep two habits from tier 2 on, and RULES 14.8 reads a missed bar a second time with the newer tower cards out of the pool (docs/design/TUNING_R67.md).
 - **The Yawner on run maps.** Every run map has a Bakery spot with 3 neighbors (RULES 14.2), exactly what a Yawner punishes. Keep Yawners in band 4, a few per wave.
 - **The Moth Lantern against Moon Moth packs.** A run with Lanterns and Giant Bows may find the Moon Moth easier. The per-pack boss bar (RULES 14.8) catches it.
 - **Run length.** Gleamers, Sleepyheads and Mossbuds add hidden health, so waves may run longer. Watch the 12 to 16 minute bar.
