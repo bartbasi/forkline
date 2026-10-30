@@ -15,7 +15,9 @@ const COVER: Vector2 = Vector2(1080.0, 2767.0)
 const INNER: Vector2 = Vector2(1998.0, 2400.0)
 const COVER_SAFE: Rect2 = Rect2(0.0, 96.0, 1080.0, 2500.0)
 const INNER_SAFE: Rect2 = Rect2(0.0, 0.0, 1998.0, 2250.0)
-const WATCHDOG_SECONDS: float = 400.0
+## Only a guard against a hang. The checks take about 100 s on an idle dev PC and took 317 s
+## with 20 other Godot jobs running (QA 2026-10-29), so the margin is nearly 3 times that.
+const WATCHDOG_SECONDS: float = 900.0
 ## The Fold5 cover: 1080 logical px across 344 dp (docs/ARCHITECTURE.md 7.4).
 const COVER_PX_PER_DP: float = 3.14
 const BattleFixtures: GDScript = preload("res://tests/ui/battle_fixtures.gd")

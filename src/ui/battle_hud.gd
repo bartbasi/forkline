@@ -53,6 +53,8 @@ var run: RunSession = null
 const PULSE_TIME: float = 0.3
 const PULSE_GROW: float = 0.3
 const PULSE_TINT: Color = Color(1.0, 0.7, 0.55)
+## The font sizes the call button's label may take, biggest first.
+const CALL_SIZES: Array[int] = [52, 48, 44, 40, 36, 32]
 
 var _stats: HBoxContainer
 var _lives_box: Control
@@ -107,11 +109,42 @@ func _init() -> void:
 		speed_buttons.append(b)
 	call_button = UiKit.wrapped(UiKit.button(""))
 	call_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# The same height for every label, so the HUD never changes height and the map never
+	# moves: two lines at the full size. A longer label takes a smaller size (_fit_call_text).
+	call_button.custom_minimum_size.y = call_button_height()
+	call_button.resized.connect(_fit_call_text)
 	call_button.tapped.connect(_on_call)
 	call_ring = CallRing.new()
 	call_button.add_child(call_ring)
 	_arrange(true)
 	_show_speed()
+
+
+## The call button's fixed height: two lines of the button font, plus the button's padding,
+## and never less than a touch target.
+static func call_button_height() -> float:
+	var lines: float = UiTheme.font(UiTheme.WEIGHT_BOLD).get_height(UiTheme.FONT_BUTTON) * 2.0
+	return maxf(Layout.MIN_TOUCH, ceilf(lines) + 2.0 * float(UiTheme.PAD_Y))
+
+
+## The biggest font size, from the full size down in steps, at which the call button's label
+## fits its fixed height. It wraps to the button's width, which is known once the button has
+## been laid out; the button calls this again whenever its size changes.
+func _fit_call_text() -> void:
+	var width: float = call_button.size.x - 2.0 * float(UiTheme.PAD_X)
+	if call_button.icon != null:
+		width -= float(call_button.icon.get_width()) + 16.0
+	if width <= 0.0 or call_button.text.is_empty():
+		return
+	var room: float = call_button.custom_minimum_size.y - 2.0 * float(UiTheme.PAD_Y)
+	var font: Font = UiTheme.font(UiTheme.WEIGHT_BOLD)
+	var chosen: int = CALL_SIZES[CALL_SIZES.size() - 1]
+	for size: int in CALL_SIZES:
+		if font.get_multiline_string_size(call_button.text, HORIZONTAL_ALIGNMENT_LEFT, width, size).y <= room:
+			chosen = size
+			break
+	if call_button.get_theme_font_size(&"font_size") != chosen:
+		call_button.add_theme_font_size_override(&"font_size", chosen)
 
 
 ## True: the portrait arrangement, two rows. False: the narrow side panel of the
@@ -308,6 +341,12 @@ func _refresh_call() -> void:
 	if state == _call_state:
 		return
 	_call_state = state
+	show_call_label(text, primary, locked)
+
+
+## Puts a label on the call button, in the honey look or the plain one, with the lock when
+## the call cannot be made yet. The tests use it to try every label.
+func show_call_label(text: String, primary: bool, locked: bool) -> void:
 	call_button.text = text
 	call_button.theme_type_variation = &"PrimaryButton" if primary else &"Button"
 	# A call that cannot be made yet carries a lock, so it never differs by color alone.
@@ -315,6 +354,7 @@ func _refresh_call() -> void:
 	call_button.add_theme_color_override(&"icon_normal_color", Palette.TEXT_SOFT)
 	call_button.add_theme_color_override(&"icon_hover_color", Palette.TEXT_SOFT)
 	call_button.add_theme_color_override(&"icon_pressed_color", Palette.TEXT_SOFT)
+	_fit_call_text()
 
 
 func _on_speed(value: int) -> void:

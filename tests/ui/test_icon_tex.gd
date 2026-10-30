@@ -3,24 +3,53 @@
 extends "res://tests/base_test.gd"
 ## IconTex: the icons are cheap to build, are drawn where they should be, and every
 ## one the screens ask for is built when the app starts (a first wave must not pay
-## for an icon). The time limit is 20 ms for one first build. On the PC the slowest
-## icon takes about 8 ms in this run. The old pixel by pixel drawing took 26 to 95 ms,
-## so the limit catches a return to it and leaves room for a busy machine.
+## for an icon).
+##
+## The speed bar is a ratio, like the sim perf tests (ARCHITECTURE 9.2), not milliseconds.
+## A fixed piece of plain GDScript (`_reference`) is timed right before and right after each
+## first build, and the build's time is divided by their mean, so a busy machine slows the
+## build and the reference alike. The test takes the median of all 22 ratios, so one slow
+## moment (a thread switch inside one build) cannot fail it. On the dev PC the median is
+## about 2 references, the slowest single build (the cup at 73 px) 4 to 6. A drawing that
+## is slow for every icon, like the old pixel by pixel one (26 to 95 ms where the slowest
+## build now takes 8), or the same code with its blocks cut to one pixel (a trial on
+## 2026-10-29: median 9), lands far above MEDIAN_LIMIT.
 
 const KINDS: Array[StringName] = [&"cup", &"gear", &"back", &"lock", &"check", &"arrow", &"close", &"pause", &"play", &"note", &"note_off"]
-const LIMIT_MS: float = 20.0
+const SIZES: Array[int] = [57, 73]
+const MEDIAN_LIMIT: float = 5.0
+var _sink: float = 0.0
+
+
+## About 2.5 ms on the dev PC: a few thousand callable calls and some block fills, the kind
+## of work IconTex does.
+func _reference() -> float:
+	var start: int = Time.get_ticks_usec()
+	var image: Image = Image.create_empty(64, 64, false, Image.FORMAT_RGBA8)
+	var distance: Callable = func(x: float, y: float) -> float: return sqrt(x * x + y * y) - 0.4
+	for i: int in 3000:
+		_sink += float(distance.call(float(i % 64) / 64.0, float(i / 64) / 64.0))
+	for i: int in 200:
+		image.fill_rect(Rect2i(i % 50, i % 40, 8, 8), Color.WHITE)
+	return float(Time.get_ticks_usec() - start) / 1000.0
 
 
 ## A size that no screen uses, so the first build really happens in this test.
 func test_first_build_of_every_kind_is_fast() -> void:
+	var ratios: Array[float] = []
 	for kind: StringName in KINDS:
-		for px: int in [57, 73]:
+		for px: int in SIZES:
+			var before: float = _reference()
 			var start: int = Time.get_ticks_usec()
 			var tex: ImageTexture = IconTex.make(kind, px)
 			var ms: float = float(Time.get_ticks_usec() - start) / 1000.0
-			assert_true(ms < LIMIT_MS, "%s at %d px took %.1f ms" % [kind, px, ms])
+			var after: float = _reference()
+			ratios.append(ms / maxf(0.01, (before + after) * 0.5))
 			assert_eq(tex.get_width(), px)
 			assert_eq(tex.get_height(), px)
+	ratios.sort()
+	var median: float = (ratios[ratios.size() / 2 - 1] + ratios[ratios.size() / 2]) * 0.5
+	assert_true(median < MEDIAN_LIMIT, "the median first build costs %.1f references, more than %.1f (slowest %.1f)" % [median, MEDIAN_LIMIT, ratios[ratios.size() - 1]])
 
 
 func test_a_second_call_gives_the_same_texture() -> void:
