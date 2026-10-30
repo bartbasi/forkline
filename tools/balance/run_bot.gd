@@ -91,7 +91,7 @@ static func set_bramble_cap(n: int) -> void:
 	bramble_cap = n
 
 
-## E6.2. The anti-air floor, in percent (0 = off, the default, and the report's bars). A what-if for the game designer's suggestion: when a bot would
+## E6.2. The anti-air floor, in percent (0 = off; the default at tiers 0 and 1, and 55 from tier 2 up since E5.5, see habits()). A what-if for the game designer's suggestion: when a bot would
 ## build an attacker that cannot hit flyers (Pumpkin Catapult, Longbow Loft, Bramble Cottage, Snow Fort) and anti-air towers (Sling Post, Firework
 ## Tower, Moth Lantern) would be fewer than this share of its attackers after the build, it builds an anti-air tower instead (the one with the
 ## lowest count over weight). The first tower of each type is not touched.
@@ -99,7 +99,7 @@ static var air_floor: int = 0
 const ANTI_AIR: Array[StringName] = [&"sling_post", &"firework_tower", &"moth_lantern"]
 
 
-## E6.2. Waves that must have started before a bot builds a Scarecrow (0 = no wait, the default, and the report's bars). A what-if for the
+## E6.2. Waves that must have started before a bot builds a Scarecrow (0 = no wait; the default at tiers 0 and 1, and 9 from tier 2 up since E5.5, see habits()). A what-if for the
 ## Scarecrow card: it deals no damage, and a bot builds the first tower of every type it has at once, so it spends its early gold on it.
 static var scarecrow_from: int = 0
 
@@ -110,6 +110,18 @@ static func set_scarecrow_from(n: int) -> void:
 
 static func set_air_floor(n: int) -> void:
 	air_floor = n
+
+
+## E5.5 (the DM's call after TUNING_R67.md 1.3, RULES 14.8): from content tier 2 up the bots keep the two habits by default, a Scarecrow only after
+## SCARECROW_HABIT waves and anti-air towers at AIR_HABIT percent of the attackers. Tiers 0 and 1 are unchanged. A value given on the command line wins,
+## so a what-if can turn either off with 0.
+const SCARECROW_HABIT: int = 9
+const AIR_HABIT: int = 55
+
+
+static func habits(tier: int, args: Dictionary) -> void:
+	set_air_floor(int(args.get("air_floor", str(AIR_HABIT if tier >= 2 else 0))))
+	set_scarecrow_from(int(args.get("scarecrow_from", str(SCARECROW_HABIT if tier >= 2 else 0))))
 
 
 const PICKS: Array[StringName] = [&"towers", &"economy", &"risk", &"random"]

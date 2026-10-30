@@ -47,6 +47,7 @@ func _initialize() -> void:
 			_args[parts[0]] = parts[1]
 	var game: GameData = Fixtures.game() if String(_args.get("fixture", "0")) == "1" else GameData.load_from("res://data")
 	_tier = int(_args.get("tier", "0"))
+	RunBot.habits(_tier, _args)
 	if game == null or not game.problems.is_empty() or game.run == null or _tier < 0 or _tier > game.run.tiers.size():
 		printerr("data problems")
 		quit(2)

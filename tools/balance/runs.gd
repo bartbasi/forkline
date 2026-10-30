@@ -12,7 +12,7 @@ extends SceneTree
 ##
 ## mode=rates: every strategy (or strats=id,id) plays run seeds seed_of(first) to seed_of(first + count - 1).
 ##   pool=base is the pool with no unlocks, pool=all every card, pool=plus:id,id the base cards and those cards. relaxed=1 plays Relaxed.
-##   pool=minus:id,id is the base cards without those (E5.2). bramble_fit=1 puts a Bramble Cottage on the spot with the most road in its own reach. bramble_cap=N builds at most N. E6.2: tweak=pack_count:PACK_ID;WAVE;ENEMY;N sets the count of a creature's group in a pack wave and tweak=pack_strength:PACK_ID;N sets a band 6 pack's boss wave strength (in memory); scarecrow_from=W builds no Scarecrow before W waves have started; air_floor=P keeps anti-air towers at P percent of a bot's attackers; leaks=1 (on rates) adds the lives lost by creature type to every row. towers=PATH and enemies=PATH play other stat files, and data=DIR plays another copy of the data folder (levels, stats, run files, segments and packs): what-ifs; the real data is not touched.
+##   pool=minus:id,id is the base cards without those (E5.2). bramble_fit=1 puts a Bramble Cottage on the spot with the most road in its own reach. bramble_cap=N builds at most N. E6.2: tweak=pack_count:PACK_ID;WAVE;ENEMY;N sets the count of a creature's group in a pack wave and tweak=pack_strength:PACK_ID;N sets a band 6 pack's boss wave strength (in memory); scarecrow_from=W builds no Scarecrow before W waves have started; air_floor=P keeps anti-air towers at P percent of a bot's attackers (E5.5: from tier 2 up the defaults are scarecrow_from=9 and air_floor=55, tiers 0 and 1 off; a value on the command line wins); leaks=1 (on rates) adds the lives lost by creature type to every row. towers=PATH and enemies=PATH play other stat files, and data=DIR plays another copy of the data folder (levels, stats, run files, segments and packs): what-ifs; the real data is not touched.
 ## mode=det: the same-seed checks (docs/balance/README.md "Runs"). days=N day_from=K play N dailies from day offset K
 ##   (default the first min(count, 50) days). A save that a load refuses is recorded in the row (wave_refused, draft_refused).
 ## mode=daily: day offsets from to from + count - 1, counted from 2026-10-25 (offset 0). Always Normal and every card.
@@ -70,8 +70,7 @@ func _initialize() -> void:
 	RunBot.set_options(int(_args.get("bakery_from", "9")), int(_args.get("boss_aim", "0")), int(_args.get("perk_fit", "1")))
 	RunBot.set_bramble_fit(int(_args.get("bramble_fit", "0")))
 	RunBot.set_bramble_cap(int(_args.get("bramble_cap", "0")))
-	RunBot.set_air_floor(int(_args.get("air_floor", "0")))
-	RunBot.set_scarecrow_from(int(_args.get("scarecrow_from", "0")))
+	RunBot.habits(_tier, _args)
 	var tweak: String = String(_args.get("tweak", ""))
 	if tweak != "" and not _apply_tweak(game, tweak):
 		return
@@ -119,9 +118,9 @@ func _initialize() -> void:
 		result["bots"]["bramble_fit"] = RunBot.bramble_fit
 	if RunBot.bramble_cap != 0:
 		result["bots"]["bramble_cap"] = RunBot.bramble_cap
-	if RunBot.air_floor != 0:
+	if RunBot.air_floor != 0 or _tier >= 2:
 		result["bots"]["air_floor"] = RunBot.air_floor
-	if RunBot.scarecrow_from != 0:
+	if RunBot.scarecrow_from != 0 or _tier >= 2:
 		result["bots"]["scarecrow_from"] = RunBot.scarecrow_from
 	for key: String in ["stack", "pack", "stop"]:
 		if _args.has(key):

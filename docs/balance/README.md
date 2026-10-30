@@ -238,6 +238,25 @@ Added (nothing changes unless its option is set; a default run equals the old on
 - `runs.gd tweak=pack_strength:PACK_ID;N` (the strength of a band 6 pack's boss wave) and `tweak=pack_count:PACK_ID;WAVE;ENEMY;N` (the count of one creature's group in a pack wave, 1 to 3): in memory only.
 - `tools/balance/variants/`: level files for what-ifs on 6-4's waves (`level_file=res://tools/balance/variants/r6_l4_v5.json`) and two copies of `towers.json` for the Scarecrow and Snow Fort what-ifs (`towers=res://tools/balance/variants/towers_scarecrow_plus10.json`). They are copies of the 3fb2285 data with the E5.3 cottage, so they go stale when the real files change.
 
+## The regions 5 and 8 pass, and a first look at tier 4 (tasks E5.5 and E8.2)
+
+Report: `region5-8-2026-10-30.md`. Raw numbers: `raw/2026-10-30-e58/` (git-ignored). Measured on a clean `git archive` of f31b761 with the working tree's `tools/balance/`. Job lists: `run_pass.sh` and `run_pass_post.sh` (`SEED_SHIFT=100000`, `r5_l1` to `r5_l6` and `r8_l1` to `r8_l6`; `r5_l5` and `r5_l6` with `EVALS=6000`) and `run_e58.sh PHASE N`.
+
+**One default changed (the DM's call, E5.5, after TUNING_R67.md 1.3 and RULES 14.8).** From content tier 2 up, the run bots keep two habits of a thoughtful player: no Scarecrow before 9 waves have started (`scarecrow_from=9`) and anti-air towers at 55% or more of the attackers (`air_floor=55`). Tiers 0 and 1 are unchanged. A value on the command line wins, so `air_floor=0 scarecrow_from=0` turns both off. Both are written into the `bots` field of every tier 2 and above file (also when they are 0). `RunBot.habits(tier, args)` in `run_bot.gd` is the one place that sets them; `runs.gd` and `perf_peak.gd` call it. Checked: `runs.gd mode=rates first=1 count=3 leaks=1` at tiers 0, 1 and 2 on the old code (with the two options named at tier 2) and the new code (no options): the files are equal in every field but `seconds`. The tier 0 golden test is a game test and is the DM's.
+
+`run_e58.sh` phases (each writes its list to `$OUT/jobs_e58_PHASE.txt` and plays it with `run_list.sh`; `DRY=1` only writes the list):
+
+- `T4`: tier 4 runs on seeds 1 to 100 (two jobs of 50), Normal, base cards, `leaks=1`, in five folders: `runs_t4` (neither habit), `runs_t4_air55`, `runs_t4_sc9`, `runs_t4_both` (both habits: the new default), `runs_t4_nocards` (both habits, and the tower cards of tiers 2 to 4 and their perks out of the pool: `pool=minus:tower_scarecrow,big_hat,tower_snow_fort,packed_snow,tower_moth_lantern,bright_wick`, the second reading of RULES 14.8). Read a folder with `runs_summary.gd dir=... tier=4 part=bars` (or `boss`, `fair`, `forced`).
+- `TP`: Glimmertoad's two packs forced onto seeds 1 to 100 in three folders, and the three new tier 4 packs of bands 3 to 5 forced with both habits.
+- `TS`: Glimmertoad's boss waves at strength 50, the lowest a band 6 pack allows (`tweak=pack_strength:` below 50 makes `RunSession.start` refuse the pack).
+- `PK`: the most crowded wave as a saved game on the 12 levels, three Twists and the tier 4 run packs (150 strategies a level this time).
+- `HU`: two more any-tower searches of 6000 builds where the first of 3000 found no three-star build (5-3, 5-6, 8-5).
+- `WI` and `WH`: 5-6 star 3 rules in memory (`tweak=star3:`), with the lone Sling Post on a fresh seed and on pass seed 835601; `WH` is the 6000 build hunt under "at most 5 towers".
+- `NB`: the any-tower search with the Bramble Cottage left out, on 8-2, 8-3 and 8-4.
+- `W86`: 8-6 wave what-ifs. The level files are `variants/r8_l6_NAME.json` (copies of f31b761's `r8_l6.json` with one wave edit; `level_file=res://tools/balance/variants/...`). `VARS` and `KINDS` (`plain`, `twist`, `any`, `solo`, `tsearch`, `tdeep`) choose the jobs. Variants: `b55`, `b60`, `b65`, `b80` (boss wave strength 55, 60, 65, 80; 50 as built), `c240` (wave 7 at 200 and wave 10 at 240; 160 and 195 as built), `c240b65`, `s25` and `s50` (waves 1 to 11 stronger by 25 and 50), `s25b55`. They go stale when `r8_l6.json` changes.
+
+A job list file is rewritten each time a phase starts. A copy already running has read its list, so starting another phase with other `VARS` or `KINDS` is safe, but do not start the same phase twice with different arguments while the first still reads.
+
 ## Files
 
 - `tools/balance/bot.gd`: strategies, the generator and mutator, the plain recipe, the player.
