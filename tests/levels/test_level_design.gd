@@ -42,7 +42,7 @@ const PLAN: Dictionary = {
 	"r5_l3": {"gates": 2, "sockets": 5, "waves": 12, "strength": 240, "gold": 750, "star3": ["towers_at_most", 4], "highlight": "spot"},
 	"r5_l4": {"gates": 3, "sockets": 6, "waves": 12, "strength": 245, "gold": 800, "star3": ["tower_ban", "sling_post"], "highlight": "spot"},
 	"r5_l5": {"gates": 3, "sockets": 6, "waves": 12, "strength": 250, "gold": 800, "star3": ["kinds_at_most", 3], "highlight": "none"},
-	"r5_l6": {"gates": 3, "sockets": 6, "waves": 12, "strength": 255, "gold": 850, "star3": ["towers_at_most", 6], "highlight": "spot"},
+	"r5_l6": {"gates": 3, "sockets": 6, "waves": 12, "strength": 255, "gold": 850, "star3": ["tower_ban", "sling_post"], "highlight": "spot"},
 	"r6_l1": {"gates": 2, "sockets": 5, "waves": 12, "strength": 245, "gold": 750, "star3": ["tier_at_most", 2], "highlight": "socket"},
 	"r6_l2": {"gates": 2, "sockets": 5, "waves": 12, "strength": 250, "gold": 800, "star3": ["towers_at_most", 6], "highlight": "spot"},
 	"r6_l3": {"gates": 3, "sockets": 6, "waves": 12, "strength": 255, "gold": 800, "star3": ["tower_ban", "longbow_loft"], "highlight": "spot"},

@@ -21,7 +21,7 @@
   "gates": 3,
   "strength": 255,
   "towers": ["sling_post", "pumpkin_catapult", "lullaby_bell", "longbow_loft", "firework_tower", "bakery", "bramble_cottage"],
-  "star3": {"kind": "towers_at_most", "value": 6},
+  "star3": {"kind": "tower_ban", "tower": "sling_post"},
   "hint": {"text": "Burrowbelly digs under, then comes up with Mistwisps. Keep Brambles near.", "cell": [2, 8]},
   "waves": [
     {"strength": 100, "groups": [{"enemy": "scamp", "count": 14, "entrance": 1, "at_ms": 0, "every_ms": 1200}, {"enemy": "scamp", "count": 8, "entrance": 2, "at_ms": 5000, "every_ms": 1300}]},
