@@ -224,6 +224,20 @@ What-if options added to `runs.gd` (nothing changes unless one is set): `pool=mi
 
 A `tweak=strength:N` on `run.gd` sets every wave of the level to strength N percent (waves are 100 to 135 in the levels), so it is not the level's `strength` number; do not use it to make a level a little harder.
 
+## The regions 6 and 7 pass (tasks E6.2 and E7.2)
+
+Report: `region6-7-2026-10-29.md`. Raw numbers: `raw/2026-10-29-e67/` (git-ignored). Measured on a clean `git archive` of 3fb2285 with the E5.3 patch applied (the Bramble Cottage numbers in `data/stats/towers.json`). Job lists: `run_pass.sh` and `run_pass_post.sh` (`SEED_SHIFT=100000`, `r6_l1` to `r7_l6`), `run_b4.sh A` with `TIER=2` and `TIER=3` for the runs and the daily, and `run_e67.sh` with a phase argument. `run_list.sh LIST N` plays any job list (a lock folder per job, so several copies can share a list). Do not overwrite a script while a copy of it runs: bash reads it as it goes (copy to a new name, as the E6.2 run did).
+
+`run_e67.sh` phases: `WI` and `WI2` (6-4 wave variants and star 3 rules for 6-4 and 7-4, with the lone Sling Post searches again on the seeds that found three-star builds), `NB` (the any-tower search with the Bramble Cottage left out), `AIR` and `T0` (tiers 1 to 3 and tier 0 with `leaks=1`, with and without the anti-air floor), `NC` (the new tower cards out of the pool), `SC` (a late Scarecrow), `WT` (a stronger Scarecrow, a stronger Snow Fort), `PB` (Old Hayrick's packs with a stronger boss wave), `PW` (the first wave of two band 3 packs with fewer Pips and Scamps), `FP` (the new packs of tiers 2 and 3 forced), `ST` (the bridge stacks forced), `PK` (the most crowded new wave as a saved game).
+
+Added (nothing changes unless its option is set; a default run equals the old one, checked on 800 rows at tier 2):
+
+- `runs.gd mode=rates leaks=1`: every row also holds `leaks`, the lives lost by creature type over the run (the battle records events and the bot reads the `leaked` ones). `runs_summary.gd part=air` prints the anti-air table from the `air/` folder.
+- `runs.gd air_floor=P` (`run_bot.gd`): when a bot would build an attacker that cannot hit flyers (Pumpkin Catapult, Longbow Loft, Bramble Cottage, Snow Fort) and the anti-air towers (Sling Post, Firework Tower, Moth Lantern) would be under P percent of its attackers after the build, it builds an anti-air tower instead (the one with the lowest count over weight). The first tower of each type is not touched. The default 0 is off.
+- `runs.gd scarecrow_from=W`: a bot builds no Scarecrow until W waves have started (the Bakery's `bakery_from` for the Scarecrow). The default 0 is off.
+- `runs.gd tweak=pack_strength:PACK_ID;N` (the strength of a band 6 pack's boss wave) and `tweak=pack_count:PACK_ID;WAVE;ENEMY;N` (the count of one creature's group in a pack wave, 1 to 3): in memory only.
+- `tools/balance/variants/`: level files for what-ifs on 6-4's waves (`level_file=res://tools/balance/variants/r6_l4_v5.json`) and two copies of `towers.json` for the Scarecrow and Snow Fort what-ifs (`towers=res://tools/balance/variants/towers_scarecrow_plus10.json`). They are copies of the 3fb2285 data with the E5.3 cottage, so they go stale when the real files change.
+
 ## Files
 
 - `tools/balance/bot.gd`: strategies, the generator and mutator, the plain recipe, the player.

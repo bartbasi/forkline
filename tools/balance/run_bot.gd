@@ -91,6 +91,27 @@ static func set_bramble_cap(n: int) -> void:
 	bramble_cap = n
 
 
+## E6.2. The anti-air floor, in percent (0 = off, the default, and the report's bars). A what-if for the game designer's suggestion: when a bot would
+## build an attacker that cannot hit flyers (Pumpkin Catapult, Longbow Loft, Bramble Cottage, Snow Fort) and anti-air towers (Sling Post, Firework
+## Tower, Moth Lantern) would be fewer than this share of its attackers after the build, it builds an anti-air tower instead (the one with the
+## lowest count over weight). The first tower of each type is not touched.
+static var air_floor: int = 0
+const ANTI_AIR: Array[StringName] = [&"sling_post", &"firework_tower", &"moth_lantern"]
+
+
+## E6.2. Waves that must have started before a bot builds a Scarecrow (0 = no wait, the default, and the report's bars). A what-if for the
+## Scarecrow card: it deals no damage, and a bot builds the first tower of every type it has at once, so it spends its early gold on it.
+static var scarecrow_from: int = 0
+
+
+static func set_scarecrow_from(n: int) -> void:
+	scarecrow_from = n
+
+
+static func set_air_floor(n: int) -> void:
+	air_floor = n
+
+
 const PICKS: Array[StringName] = [&"towers", &"economy", &"risk", &"random"]
 const BUILDS: Array[StringName] = [&"wide", &"tall"]
 const BASE_WEIGHT: Dictionary = {
@@ -365,11 +386,14 @@ static func _next_step(st: Dictionary, session: RunSession) -> Dictionary:
 		want = mini(ranked.size(), int(float(strat["base"]) + float(strat["rate"]) * waves))
 	# The Bakery waits until bakery_from waves have started (B4).
 	var bakery_wait: bool = waves < bakery_from
+	var scarecrow_wait: bool = waves < scarecrow_from
 	# A type never built goes first. With no spot free (or no good Bakery spot free) it sells one tower to make room.
 	for id: StringName in available:
 		if int(count[id]) > 0 or dead.has("t:" + String(id)):
 			continue
 		if id == &"bakery" and bakery_wait:
+			continue
+		if id == &"scarecrow" and scarecrow_wait:
 			continue
 		var cell: Vector2i = _spot_for(id, free, ranked, st)
 		if cell != Vector2i(-1, -1):
@@ -393,7 +417,11 @@ static func _next_step(st: Dictionary, session: RunSession) -> Dictionary:
 	var pickable: Array[StringName] = available.duplicate()
 	if bakery_wait:
 		pickable.erase(&"bakery")
+	if scarecrow_wait:
+		pickable.erase(&"scarecrow")
 	var type: StringName = _deficit(pickable, count, weight, dead)
+	if air_floor > 0 and type != &"" and not ANTI_AIR.has(type) and b.catalog.tower(type).kind == &"attack":
+		type = _keep_air(type, pickable, count, weight, dead)
 	if not free.is_empty() and type != &"" and (b.towers.size() < want or upgrade.is_empty()):
 		var cell2: Vector2i = _spot_for(type, free, ranked, st)
 		if cell2 != Vector2i(-1, -1):
@@ -442,6 +470,28 @@ static func _deficit(available: Array[StringName], count: Dictionary, weight: Di
 			best = id
 			best_score = score
 	return best
+
+
+## E6.2. The anti-air floor: `type` (an attacker that cannot hit flyers) stands unless anti-air towers would fall under the floor, then the
+## anti-air tower with the lowest count over weight is built instead. `type` itself when no anti-air tower can be built.
+static func _keep_air(type: StringName, available: Array[StringName], count: Dictionary, weight: Dictionary, dead: Dictionary) -> StringName:
+	var attackers: int = 0
+	var air: int = 0
+	for id: StringName in count.keys():
+		var n: int = int(count[id])
+		if ANTI_AIR.has(id):
+			air += n
+			attackers += n
+		elif id != &"lullaby_bell" and id != &"bakery" and id != &"scarecrow":
+			attackers += n
+	if (air * 100) >= air_floor * (attackers + 1):
+		return type
+	var pool: Array[StringName] = []
+	for id: StringName in available:
+		if ANTI_AIR.has(id):
+			pool.append(id)
+	var pick: StringName = _deficit(pool, count, weight, dead)
+	return pick if pick != &"" else type
 
 
 ## Where a tower of this type goes: attackers on the best free spot, a Bell on the best free spot
@@ -537,7 +587,9 @@ static func play(game: GameData, run_seed: int, day: String, relaxed: bool, pool
 			return {"bad": "RunSession.start gave null for seed %d" % run_seed}
 		st = new_state(session, strat, run_seed)
 	var b: Battle = session.battle
-	b.record_events = false
+	var leak_watch: bool = bool(opts.get("leaks", false))
+	var leaks: Dictionary = {}
+	b.record_events = leak_watch
 	var forced: StringName = StringName(opts.get("force", ""))
 	var draft_snaps: Array = []
 	var wave_count: int = b.wave_count()
@@ -585,7 +637,7 @@ static func play(game: GameData, run_seed: int, day: String, relaxed: bool, pool
 					return {"bad": "a forced pick would not load at seed %d" % run_seed}
 				session = made
 				b = session.battle
-				b.record_events = false
+				b.record_events = leak_watch
 				risk_force = {}
 				continue
 			if restore_draft == session.picks.size() and restores == 0:
@@ -595,7 +647,7 @@ static func play(game: GameData, run_seed: int, day: String, relaxed: bool, pool
 					return {"restore_failed": true, "refused": again["refused"], "at": "draft %d" % restore_draft, "won": false, "seed": run_seed}
 				session = again["session"]
 				b = session.battle
-				b.record_events = false
+				b.record_events = leak_watch
 				restores += 1
 				if session.offers() != before:
 					offers_equal = false
@@ -660,9 +712,14 @@ static func play(game: GameData, run_seed: int, day: String, relaxed: bool, pool
 					return {"restore_failed": true, "refused": moved["refused"], "at": "wave %d" % int(restore_wave[0]), "won": false, "seed": run_seed}
 				session = moved["session"]
 				b = session.battle
-				b.record_events = false
+				b.record_events = leak_watch
 				restores += 1
 			b.step()
+			if leak_watch:
+				for event: Dictionary in b.take_events():
+					if event["kind"] == &"leaked":
+						var type_key: String = String(event["enemy"])
+						leaks[type_key] = int(leaks.get(type_key, 0)) + int(event["lives"])
 			var live: int = b.enemies.size()
 			if live > peak:
 				peak = live
@@ -699,6 +756,8 @@ static func play(game: GameData, run_seed: int, day: String, relaxed: bool, pool
 		"battle_hash": JSON.stringify(b.to_data()).hash(), "run_hash": JSON.stringify(session.to_data()).hash(),
 		"restores": restores, "offers_equal": offers_equal,
 	}
+	if leak_watch:
+		out["leaks"] = leaks
 	if bool(opts.get("return_state", false)):
 		out["end_battle"] = b.to_data()
 		out["end_run"] = session.to_data()

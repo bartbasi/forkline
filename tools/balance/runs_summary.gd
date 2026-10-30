@@ -10,7 +10,7 @@ extends SceneTree
 ##       The bosses, packs and maps counted are those of the tier and below, so every bar of RULES 14.8 and 15 reads at that tier.
 ##
 ## B4 parts: bars (every bar of RULES 14.8 and 15 with pass or fail), boss (per band 6 pack), fair (segments, stacks, packs),
-## forced (the forced stack and pack files), cardbar (the card experiment against its bar), riskfair (the risk replay),
+## forced (the forced stack and pack files), air (E6.2: the anti-air check, from air/*.json of run_e67.sh AIR), cardbar (the card experiment against its bar), riskfair (the risk replay),
 ## lengthb4 (run length groups), detb4 (same seed, same run, refused saves), dailyb4, whatifb4, flags (the phase B job lines) and
 ## allstacks (the job lines that force every stack that fits onto seeds 1 to 200: phase C).
 ##
@@ -51,7 +51,7 @@ func _initialize() -> void:
 		"waves": _wave_tables, "boss": _boss_tables, "maps": _map_tables, "towers": _tower_tables, "cards": _card_tables,
 		"daily": _daily_tables, "risk": _risk_tables, "cardvalue": _cardvalue_tables, "whatif": _whatif_tables, "ironshell": _ironshell_tables, "lives": _lives_tables}
 	var b4: Dictionary = {"bars": _bars, "boss": _boss_b4, "fair": _fair_b4, "forced": _forced_b4, "cardbar": _cardbar_b4, "riskfair": _riskfair_b4,
-		"lengthb4": _length_b4, "detb4": _det_b4, "dailyb4": _daily_b4, "whatifb4": _whatif_b4, "flags": _flags_b4, "allstacks": _allstacks_b4, "fullstacks": _fullstacks_b5, "perf": _perf_b5}
+		"lengthb4": _length_b4, "detb4": _det_b4, "dailyb4": _daily_b4, "whatifb4": _whatif_b4, "flags": _flags_b4, "allstacks": _allstacks_b4, "fullstacks": _fullstacks_b5, "perf": _perf_b5, "air": _air_e6}
 	if part == "b4":
 		for part_name: String in ["bars", "boss", "fair", "forced", "cardbar", "riskfair", "lengthb4", "detb4", "dailyb4", "whatifb4", "perf", "fullstacks", "flags"]:
 			(b4[part_name] as Callable).call()
@@ -1914,4 +1914,89 @@ func _perf_b5() -> void:
 		_row([d["case"], int(d["wave"]), int(d.get("wave_size", 0)) if is_level else "-", int(d.get("next_wave_size", 0)) if is_level else "-", int(d["peak"]),
 			"%d (%d)" % [int(d["ticks"]), int(d["busy_ticks"])], int(d["mean_us"]), int(d["p99_us"]), int(d["busy_mean_us"]), int(d["busy_p99_us"]), int(d["max_us"]),
 			("%d" % int(d["seed"])) if is_level else ("%d, %s" % [int(d["seed"]), d["strategy"]])])
+	print()
+
+
+## E6.2: the anti-air check. Reads air/t<tier>_floor<P>_<first>.json (runs.gd mode=rates leaks=1 air_floor=P) from the folder given by dir=.
+## Per tier and floor: win rate, how many attackers a run builds and the share that can hit flyers (Sling Post, Firework Tower, Moth Lantern),
+## the share that cannot (Bramble Cottage, Snow Fort are the new ones), and in the lost runs the lives lost to flyers against walkers.
+func _air_e6() -> void:
+	var dir: DirAccess = DirAccess.open(_dir.path_join("air"))
+	if dir == null:
+		return
+	var groups: Dictionary = {}
+	for file: String in dir.get_files():
+		if not file.ends_with(".json"):
+			continue
+		var key: String = file.get_slice("_floor", 0) + "|" + file.get_slice("_floor", 1).get_slice("_", 0)
+		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(_dir.path_join("air").path_join(file)))
+		if typeof(parsed) != TYPE_DICTIONARY:
+			continue
+		if not groups.has(key):
+			groups[key] = []
+		(groups[key] as Array).append_array((parsed as Dictionary).get("rows", []))
+	var keys: Array = groups.keys()
+	keys.sort()
+	print("\n### Anti-air towers and the lives lost to flyers (Normal, base cards, the 16 strategies; floor 0 is the default bots)\n")
+	_head(["Tier", "Floor", "Plays", "Won", "Attackers a run", "Anti-air share", "Bramble and Snow Fort share", "Lost runs", "Lives lost, flyers share of lost runs", "Lost runs where flyers took more lives than walkers"])
+	for key: String in keys:
+		var rows: Array = groups[key]
+		var wins: int = 0
+		var attackers: int = 0
+		var air: int = 0
+		var ground_new: int = 0
+		var lost: int = 0
+		var fly_lives: int = 0
+		var walk_lives: int = 0
+		var flyer_lost: int = 0
+		for r: Dictionary in rows:
+			if bool(r["won"]):
+				wins += 1
+			for tower: String in r["mix"].keys():
+				if not _game.catalog.has_tower(StringName(tower)) or _game.catalog.tower(StringName(tower)).kind != &"attack":
+					continue
+				var n: int = int(r["mix"][tower])
+				attackers += n
+				if tower == "sling_post" or tower == "firework_tower" or tower == "moth_lantern":
+					air += n
+				elif tower == "bramble_cottage" or tower == "snow_fort":
+					ground_new += n
+			if not bool(r["won"]):
+				lost += 1
+				var f: int = 0
+				var w: int = 0
+				for type_key: String in r.get("leaks", {}).keys():
+					if _game.catalog.enemy(StringName(type_key)).flying:
+						f += int(r["leaks"][type_key])
+					else:
+						w += int(r["leaks"][type_key])
+				fly_lives += f
+				walk_lives += w
+				if f > w:
+					flyer_lost += 1
+		_row([key.get_slice("|", 0).trim_prefix("t"), key.get_slice("|", 1), rows.size(), _rate(wins, rows.size()), "%.2f" % (float(attackers) / maxf(rows.size(), 1.0)),
+			"%.3f" % (float(air) / maxf(attackers, 1.0)), "%.3f" % (float(ground_new) / maxf(attackers, 1.0)), lost, _pct(fly_lives, fly_lives + walk_lives), _rate(flyer_lost, lost)])
+	print("\nWin rate by the anti-air share of the run's attackers (floor 0, all tiers in the folder):\n")
+	_head(["Tier", "Anti-air share", "Plays", "Won"])
+	for key: String in keys:
+		if not key.ends_with("|0"):
+			continue
+		var bands: Dictionary = {}
+		for r: Dictionary in groups[key]:
+			var a: int = 0
+			var t: int = 0
+			for tower: String in r["mix"].keys():
+				if _game.catalog.has_tower(StringName(tower)) and _game.catalog.tower(StringName(tower)).kind == &"attack":
+					t += int(r["mix"][tower])
+					if tower == "sling_post" or tower == "firework_tower" or tower == "moth_lantern":
+						a += int(r["mix"][tower])
+			var share: float = float(a) / maxf(t, 1.0)
+			var band: String = "under 0.35" if share < 0.35 else ("0.35 to 0.45" if share < 0.45 else ("0.45 to 0.55" if share < 0.55 else ("0.55 to 0.65" if share < 0.65 else "0.65 and over")))
+			if not bands.has(band):
+				bands[band] = [0, 0]
+			bands[band][0] += 1
+			bands[band][1] += 1 if bool(r["won"]) else 0
+		for band: String in ["under 0.35", "0.35 to 0.45", "0.45 to 0.55", "0.55 to 0.65", "0.65 and over"]:
+			if bands.has(band):
+				_row([key.get_slice("|", 0).trim_prefix("t"), band, bands[band][0], _rate(bands[band][1], bands[band][0])])
 	print()
