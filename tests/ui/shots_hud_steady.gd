@@ -90,7 +90,7 @@ func _shots(size: Vector2, safe: Rect2, label: String) -> void:
 	screen.hud.call_button.tapped.emit()
 	await _settle()
 	await _save(host, screen, "hud_%s_last" % label)
-	screen.hud.show_call_label("Card due after this wave", false, true)
+	screen.hud.show_call_label("Card due next", false, true)
 	await _settle()
 	await _save(host, screen, "hud_%s_card_due" % label)
 	host.queue_free()

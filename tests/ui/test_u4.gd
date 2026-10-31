@@ -323,7 +323,7 @@ func test_the_text_of_a_dozing_tower() -> void:
 	var zero: Array[PackedStringArray] = BattleText.tower_rows({"damage": 4, "reload_ms": 1000, "reach": 150, "hits_ground": true, "doze_ms": 0}, &"attack")
 	for row: PackedStringArray in zero:
 		assert_ne(row[0], "Dozing")
-	assert_eq(BattleText.doze_text(50), "0.0 s left")
+	assert_eq(BattleText.doze_text(50), "0.1 s left", "time left above zero never reads 0.0")
 	assert_eq(BattleText.doze_text(3000), "3.0 s left")
 
 
@@ -338,7 +338,7 @@ func test_a_dozing_tower_panel_counts_down_without_being_rebuilt() -> void:
 	assert_not_null(panel.doze_label, "a dozing tower shows the line")
 	assert_eq(panel.doze_label.text, "2.4 s left")
 	var first_aim: TapButton = panel.aim_buttons[0]
-	panel.doze_ms = 2350
+	panel.doze_ms = 2250
 	panel.refresh()
 	assert_eq(panel.doze_label.text, "2.3 s left", "the time runs down in place")
 	assert_eq(panel.aim_buttons[0], first_aim, "the buttons are the same, so a finger on one is not lost")

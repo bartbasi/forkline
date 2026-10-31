@@ -95,6 +95,21 @@ func test_every_refusal_has_a_short_sentence() -> void:
 	assert_eq(BattleText.refusal(&"too_poor", 40), "Need 40 more gold.")
 
 
+func test_seconds_round_up_to_the_next_tenth() -> void:
+	# QA 2026-10-30 L2: time left above zero never reads "0.0".
+	assert_eq(BattleText.seconds(50), "0.1")
+	assert_eq(BattleText.seconds(1), "0.1")
+	assert_eq(BattleText.seconds(100), "0.1")
+	assert_eq(BattleText.seconds(101), "0.2")
+	assert_eq(BattleText.seconds(1050), "1.1")
+	assert_eq(BattleText.seconds(2500), "2.5")
+	assert_eq(BattleText.seconds(3000), "3.0")
+	assert_eq(BattleText.seconds(0), "0.0")
+	assert_eq(BattleText.seconds(-40), "0.0")
+	var lines: PackedStringArray = BattleText.status_lines({"slow_pct": 60, "slow_ms": 50})
+	assert_eq(lines[0], "Slowed 60% for 0.1 s")
+
+
 func test_number_formats() -> void:
 	assert_eq(BattleText.tiles(250), "2.5")
 	assert_eq(BattleText.tiles(300), "3")

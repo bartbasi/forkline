@@ -23,7 +23,7 @@ const WATCHDOG_SECONDS: float = 600.0
 const LABELS: Array = [
 	["Start wave 12", false], ["Call wave 12  +120", false], ["Call wave 12", true],
 	["Last wave is out", true], ["Battle over", true], ["Pick a card first", true],
-	["Card due after this wave", true],
+	["Card due next", true],
 ]
 const Sx: GDScript = preload("res://tests/sim/fixtures/sim_fixtures.gd")
 const Tx: GDScript = preload("res://tests/sim/fixtures/tower_fixtures.gd")
@@ -147,6 +147,20 @@ func _states(size: Vector2, safe: Rect2, label: String) -> void:
 	await _frames(2)
 
 
+## The label takes a font size of 40 or more (FONT_SMALL, QA 2026-10-30 L1) and its wrapped text
+## fits the button's fixed height at that size.
+func _fits(hud: BattleHud, text: String, where: String) -> void:
+	var size: int = hud.call_button.get_theme_font_size(&"font_size")
+	check(size >= UiTheme.FONT_SMALL, "%s: the font size is %d, not below %d" % [where, size, UiTheme.FONT_SMALL])
+	var width: float = hud.call_button.size.x - 2.0 * float(UiTheme.PAD_X)
+	if hud.call_button.icon != null:
+		width -= float(hud.call_button.icon.get_width()) + 16.0
+	var room: float = hud.call_button.custom_minimum_size.y - 2.0 * float(UiTheme.PAD_Y)
+	var wrapped: Vector2 = UiTheme.font(UiTheme.WEIGHT_BOLD).get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, width, size)
+	check(wrapped.y <= room, "%s: the text fits the button at %d (%s high, room %s)" % [where, size, wrapped.y, room])
+	print("%s: %d px" % [where, size])
+
+
 ## Every label the button can show, with the lock it wears, set straight on the button.
 func _labels(size: Vector2, safe: Rect2, label: String) -> void:
 	var b: Battle = Tx.battle(Sx.CLUSTER_GRID, _two_waves(), {"start_gold": 500})
@@ -159,5 +173,6 @@ func _labels(size: Vector2, safe: Rect2, label: String) -> void:
 		screen.hud.show_call_label(text, text.begins_with("Start"), locked)
 		await _frames(6)
 		_same(before, screen, "%s, label \"%s\"%s" % [label, text, " with lock" if locked else ""])
+		_fits(screen.hud, text, "%s, label \"%s\"" % [label, text])
 	made[0].queue_free()
 	await _frames(2)

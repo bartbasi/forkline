@@ -52,8 +52,8 @@ var run: RunSession = null
 const PULSE_TIME: float = 0.3
 const PULSE_GROW: float = 0.3
 const PULSE_TINT: Color = Color(1.0, 0.7, 0.55)
-## The font sizes the call button's label may take, biggest first.
-const CALL_SIZES: Array[int] = [52, 48, 44, 40, 36, 32]
+## The font sizes the call button's label may take, biggest first. None is below FONT_SMALL.
+const CALL_SIZES: Array[int] = [52, 48, 44, 40]
 
 var _stats: HBoxContainer
 var _lives_box: Control
@@ -314,7 +314,7 @@ func _refresh_call() -> void:
 	var locked: bool = false
 	var early: bool = false
 	if owes_card:
-		text = "Pick a card first" if battle.phase == Battle.Phase.BUILD else "Card due after this wave"
+		text = "Pick a card first" if battle.phase == Battle.Phase.BUILD else "Card due next"
 		locked = true
 	elif battle.phase == Battle.Phase.BUILD and refusal == &"":
 		text = "Start wave %d" % next_number

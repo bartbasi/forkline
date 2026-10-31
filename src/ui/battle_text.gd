@@ -44,10 +44,15 @@ static func wave_number(battle: Battle) -> int:
 	return clampi(now, 0, battle.wave_count())
 
 
-## Milliseconds as seconds with one decimal: 1000 is "1.0".
+## Milliseconds as seconds with one decimal, rounded up to the next tenth: 1000 is "1.0" and
+## 50 is "0.1", so any time left above zero never reads "0.0". Zero or less reads "0.0".
 static func seconds(ms: int) -> String:
+	var tenths: int = 0
+	if ms > 0:
+		@warning_ignore("integer_division")
+		tenths = (ms + 99) / 100
 	@warning_ignore("integer_division")
-	return "%d.%d" % [ms / 1000, (ms % 1000) / 100]
+	return "%d.%d" % [tenths / 10, tenths % 10]
 
 
 ## Speed in hundredths of a tile a second as tiles a second with two decimals.

@@ -172,7 +172,7 @@ func test_a_card_owed_during_a_wave_says_pick_it_after_the_wave() -> void:
 				break
 		if found:
 			screen.frame(0.0)
-			assert_eq(screen.hud.call_button.text, "Card due after this wave")
+			assert_eq(screen.hud.call_button.text, "Card due next")
 			var started: int = session.battle.waves_started
 			screen.hud.call_button.tapped.emit()
 			assert_eq(session.battle.waves_started, started, "no wave is called")
