@@ -257,6 +257,17 @@ Report: `region5-8-2026-10-30.md`. Raw numbers: `raw/2026-10-30-e58/` (git-ignor
 
 A job list file is rewritten each time a phase starts. A copy already running has read its list, so starting another phase with other `VARS` or `KINDS` is safe, but do not start the same phase twice with different arguments while the first still reads.
 
+## The final pass of version 1 (task B7)
+
+Report: `final-2026-10-30.md`. Raw numbers: `raw/2026-10-30-b7/` (git-ignored). Measured on a clean `git archive` of 5b960f2, with the bots of that commit: no bot, `run.gd`, `runs.gd` or `run_bot.gd` file changed for this pass. Nothing in the bots is new; what is new is how the jobs are queued.
+
+- `run_b7.sh PHASE` writes the jobs of one phase and appends them to a queue file (`OUT=docs/balance/raw/2026-10-30-b7`, queue `$OUT/queue.txt`; `DRY=1` prints them). Phases: `NEED` (the need files of all 48 levels), `CA` (campaign, folder `a`: cheap jobs of all 48 levels on the seeds of the 2026-10-25 pass, `SEED_SHIFT=100000`, plus every long search of the levels changed since the last pass), `CB` (folder `b`: any-tower and lone searches of regions 1 to 4 and of the changed levels on new seeds, `SEED_SHIFT=300000`), `R` (the 16 strategies on run seeds 1 to 200 at tiers 0 to 4: base cards, Relaxed at tiers 0 and 4, every card, the second reading at tiers 2 to 4, the three newer tower cards one at a time at tier 4, same-seed checks), `D` (400 days at each tier), `POST` (a lone search played in full, Twist searches of 6000 builds, three-star hunts, determinism again in a new process), `RPOST` (the random search for run seeds no named strategy won), `X` (every card at tiers 1 to 3), `NB` (the Bramble Cottage watch item). It uses `run_pass.sh DRY=1` for the campaign seeds, so the seeds are those of every earlier pass. The run lines carry `SCRIPT=runs.gd`; a run line without it goes to `run.gd` and gives "unknown mode".
+- `run_queue.sh QUEUEFILE CAP` plays a queue file that can grow while it runs. CAP is a limit on all `Godot_v` processes on the machine, not a worker count: one worker at a time checks the count and starts its process, so the limit holds exactly (two copies on two queue files in one folder share the limit and the lock). It never ends by itself: end it by the PID in `QUEUEFILE.sentinel`.
+- Raw folders under `raw/2026-10-30-b7/`: `a` (campaign, seeds of the 2026-10-25 pass), `b` (campaign long searches, new seeds), `c` (the reproduction of B4b's region 3 files on its own seeds), `p` (replays: 8-6 under the Twist, the 3-5 lone build), `r/tN` (runs and dailies at tier N; `tN_nocards` is the second reading; `t4_out_*` and `t4_only_*` are the three newer tower cards one at a time), `x` (a third seed on the open levels, and the 3-5 star 3 what-ifs), `final` (what `assemble_b7.sh` builds). `queue*.txt` are the job queues as they ran.
+- `assemble_b7.sh` builds `raw/2026-10-30-b7/final/`, the folder `summary.gd pass=1` reads for all 48 levels, and `reused.txt`, which names the source folder of every file copied from an earlier pass. `summary.gd` does not read the three-star hunts (`hunt/*_search_any_h0.json`, `_h1.json`): add them up from the files, as the report does.
+- Checking the bots against an earlier pass: `jq -S 'del(.. | .seconds?, .digest?, .chain_hash?, .search_hash?)'` on both files, then compare. Digests and chain hashes differ from files made before S11 because the save format changed. The report's section 1 lists every comparison.
+- `variants/r8_l6_*.json` were deleted: they were copies of the old 8-6 (strength 50, gap 1000), and the level changed in E8.3. `run_e58.sh W86` needs them; take them from `git show f31b761:tools/balance/variants/...` to play it. `variants/r6_l4_*.json` (copies of 6-4 before E6.3) and `variants/towers_*.json` (copies of the tower stats before E8.1) are stale in the same way; I left them, and the DM may delete them.
+
 ## Files
 
 - `tools/balance/bot.gd`: strategies, the generator and mutator, the plain recipe, the player.
@@ -273,6 +284,7 @@ A job list file is rewritten each time a phase starts. A copy already running ha
 - `tools/balance/perf_cases.gd`, `perf_peak.gd`, `run_perf.sh`: the benchmark's largest wave (above).
 - `tools/balance/fixtures.gd`, `run_b6.sh`: the fixtures and job lists of task B6 (above).
 - `tools/balance/run_region1.sh`, `run_whatif.sh`, `run_stats.sh`: the exact job lists and seeds.
+- `tools/balance/run_b7.sh`, `run_queue.sh`, `assemble_b7.sh`: the job lists, the queue runner and the folder builder of the final pass (above).
 - `tools/balance/run_pass.sh`, `run_pass_post.sh`, `run_special.sh`, `run_whatif_b3.sh`: the job lists and seeds of the 2026-10-25
   campaign pass (raw folder `raw/2026-10-25-b3/`, report `campaign-2026-10-25.md`, `SEED_SHIFT=100000`).
 - `tools/balance/run_pass.sh` and `run_whatif_b1.sh`: the job lists of the B1 pass (2026-10-24, raw folder
