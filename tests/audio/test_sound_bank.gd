@@ -105,21 +105,54 @@ func test_music_loops_and_is_audible_but_not_hot() -> void:
 		assert_false(wav.stereo, track)
 		assert_eq(wav.loop_mode, AudioStreamWAV.LOOP_FORWARD, track)
 		assert_eq(wav.loop_begin, 0, track)
-		assert_eq(wav.loop_end, wav.data.size() / 2, track)
+		assert_eq(wav.loop_end, wav.data.size() / 2 - 1, track)
 		assert_true(wav.get_length() >= 12.0 and wav.get_length() <= 30.0, "%s length %s" % [track, wav.get_length()])
 		var peak: int = _peak(wav)
 		assert_true(peak > 6000 and peak <= limit, "%s peak %d" % [track, peak])
 
 
 func test_music_loop_seam_is_smooth() -> void:
-	# The jump from the last sample to the first is no bigger than a typical step.
+	# The jump from the last sample of the period to the first is no bigger
+	# than a typical step. The guard frame after the period is left out.
 	for track: StringName in SoundBank.TRACKS:
-		var samples: PackedInt32Array = _samples(_track(track))
-		var seam: int = absi(samples[0] - samples[samples.size() - 1])
+		var wav: AudioStreamWAV = _track(track)
+		var samples: PackedInt32Array = _samples(wav)
+		var seam: int = absi(samples[0] - samples[wav.loop_end - 1])
 		var biggest_step: int = 0
-		for i: int in range(1, samples.size()):
+		for i: int in range(1, wav.loop_end):
 			biggest_step = maxi(biggest_step, absi(samples[i] - samples[i - 1]))
 		assert_true(seam <= biggest_step, "%s seam %d, biggest step %d" % [track, seam, biggest_step])
+
+
+func test_a_loop_holds_a_guard_frame_equal_to_its_first() -> void:
+	# The mixer plays frame loop_end before it wraps, so that frame must exist
+	# and must sound like frame 0, or the loop reads past its data.
+	var raw: PackedFloat32Array = PackedFloat32Array([0.25, -0.5, 0.75, 0.1, -0.3])
+	var made: AudioStreamWAV = AudioSynth.to_stream(raw, AudioSynth.MUSIC_RATE, true)
+	var streams: Array[AudioStreamWAV] = [made]
+	for track: StringName in SoundBank.TRACKS:
+		streams.append(_track(track))
+	for wav: AudioStreamWAV in streams:
+		assert_eq(wav.loop_mode, AudioStreamWAV.LOOP_FORWARD)
+		assert_eq(wav.loop_begin, 0)
+		assert_eq(wav.data.size(), (wav.loop_end + 1) * 2)
+		var samples: PackedInt32Array = _samples(wav)
+		assert_eq(samples[samples.size() - 1], samples[0])
+	assert_eq(made.loop_end, raw.size())
+	var samples_made: PackedInt32Array = _samples(made)
+	for i: int in raw.size():
+		assert_eq(samples_made[i], int(raw[i] * float(FULL_SCALE)), "frame %d" % i)
+
+
+func test_a_one_shot_has_no_extra_frame() -> void:
+	var raw: PackedFloat32Array = AudioSynth.buffer(0.1, AudioSynth.EFFECT_RATE)
+	raw.fill(0.2)
+	var wav: AudioStreamWAV = AudioSynth.to_stream(raw, AudioSynth.EFFECT_RATE, false)
+	assert_eq(wav.loop_mode, AudioStreamWAV.LOOP_DISABLED)
+	assert_eq(wav.data.size(), raw.size() * 2)
+	for sound: StringName in SoundBank.EFFECTS:
+		var effect: AudioStreamWAV = SoundBank.render_effect(sound)
+		assert_eq(effect.loop_mode, AudioStreamWAV.LOOP_DISABLED, sound)
 
 
 func test_the_two_tracks_differ() -> void:

@@ -143,17 +143,20 @@ static func peak_of(samples: PackedFloat32Array) -> float:
 
 ## Turns samples into a mono 16 bit stream. A peak above CEILING is scaled down
 ## so nothing clips. One shots get a 3 ms fade at the end so they never click.
-## A loop covers the whole buffer.
+## A loop covers the whole buffer. Godot's mixer plays the loop_end frame too
+## before it wraps, so a loop gets one extra frame, a copy of frame 0, and
+## never reads past the end of its data.
 static func to_stream(samples: PackedFloat32Array, rate: int, loop: bool) -> AudioStreamWAV:
 	var n: int = samples.size()
 	var peak: float = peak_of(samples)
 	var gain: float = CEILING / peak if peak > CEILING else 1.0
 	var fade: int = 0 if loop else mini(n, int(0.003 * float(rate)))
+	var frames: int = n + 1 if loop and n > 0 else n
 	var bytes: PackedByteArray = PackedByteArray()
-	bytes.resize(n * 2)
-	for i: int in n:
-		var v: float = samples[i] * gain
-		if i >= n - fade:
+	bytes.resize(frames * 2)
+	for i: int in frames:
+		var v: float = samples[i % n] * gain
+		if fade > 0 and i >= n - fade:
 			v *= float(n - i) / float(fade)
 		bytes.encode_s16(i * 2, int(clampf(v, -1.0, 1.0) * 32767.0))
 	var wav: AudioStreamWAV = AudioStreamWAV.new()
