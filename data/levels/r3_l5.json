@@ -34,7 +34,7 @@
     {"strength": 90, "groups": [{"enemy": "pip", "count": 28, "entrance": 2, "at_ms": 0, "every_ms": 100}, {"enemy": "bubbler", "count": 6, "entrance": 1, "at_ms": 3000, "every_ms": 1200}, {"enemy": "dusk_moth", "count": 2, "entrance": 2, "at_ms": 8000, "every_ms": 3000}]},
     {"strength": 130, "groups": [{"enemy": "skitter", "count": 10, "entrance": 1, "at_ms": 0, "every_ms": 700}, {"enemy": "puffball", "count": 6, "entrance": 2, "at_ms": 3000, "every_ms": 1300}, {"enemy": "flitter", "count": 12, "entrance": 2, "at_ms": 8000, "every_ms": 250}]},
     {"strength": 100, "groups": [{"enemy": "shellback", "count": 6, "entrance": 2, "at_ms": 0, "every_ms": 1400}, {"enemy": "bubbler", "count": 8, "entrance": 1, "at_ms": 3000, "every_ms": 1100}, {"enemy": "dusk_moth", "count": 3, "entrance": 1, "at_ms": 8000, "every_ms": 2500}]},
-    {"strength": 120, "groups": [{"enemy": "pip", "count": 32, "entrance": 2, "at_ms": 0, "every_ms": 50}, {"enemy": "skitter", "count": 10, "entrance": 1, "at_ms": 3000, "every_ms": 700}, {"enemy": "dusk_moth", "count": 2, "entrance": 2, "at_ms": 7000, "every_ms": 3000}, {"enemy": "flitter", "count": 12, "entrance": 1, "at_ms": 10000, "every_ms": 250}]}
+    {"strength": 120, "groups": [{"enemy": "pip", "count": 33, "entrance": 2, "at_ms": 0, "every_ms": 50}, {"enemy": "skitter", "count": 10, "entrance": 1, "at_ms": 3000, "every_ms": 700}, {"enemy": "dusk_moth", "count": 2, "entrance": 2, "at_ms": 7000, "every_ms": 3000}, {"enemy": "flitter", "count": 12, "entrance": 1, "at_ms": 10000, "every_ms": 250}]}
   ],
   "twist": {"name": "Tier 2 Cap", "text": "No tower can go above tier 2.",
             "effects": [{"type": "tier_cap", "tier": 2}]}
