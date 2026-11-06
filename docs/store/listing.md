@@ -1,6 +1,6 @@
 # Forkline Play Store listing (draft)
 
-Text for the Google Play listing, ready to paste into Play Console. Google's limits are in brackets. Graphics are in docs/store/graphics/. Nothing here has been entered in Play Console yet. Bart reviews and decides everything marked "Bart decides".
+Text for the Google Play listing, ready to paste into Play Console. Google's limits are in brackets. Graphics are in docs/store/graphics/. Bart approved the first upload to Internal testing; the listing is entered in Play Console only when Bart says so. Bart reviews and decides everything marked "Bart decides".
 
 The character counts below are checked by `bash tools/store/check_store.sh`, which fails if a count is wrong, a limit is passed, or the text has a character outside plain ASCII (no em dashes, no curly quotes).
 
@@ -28,26 +28,30 @@ Forkline is a tower defense game for Android phones. Night creatures come down t
 HOW IT PLAYS
 Each level has a build phase and then waves of creatures. In the build phase you place and upgrade towers, place gates, and see the route the next wave will take. A line on the map shows it, and a preview shows what is coming. Then you start the wave and watch your defense work. You can pause at any time, play at 2x or 3x, and call the next wave early for a bonus.
 
-SIX TOWERS
-Sling Post: quick hits on one target.
-Pumpkin Catapult: splash damage on crowds of walkers.
+TEN TOWERS
+Sling Post: quick pebbles at one target, walkers and flyers.
+Pumpkin Catapult: splash on crowds of walkers.
 Lullaby Bell: slows walkers in its ring.
 Longbow Loft: long range arrows that ignore armor.
-Firework Tower: hits flyers.
-Bakery: helps the towers around it attack faster.
+Firework Tower: bursts that hit flyers.
+Bakery: makes the towers around it attack faster.
+Bramble Cottage: thorns scratch every walker in its ring.
+Scarecrow: walkers in its ring take more damage from every hit.
+Snow Fort: rolls a snowball down a straight line.
+Moth Lantern: lures flyers low so every tower can hit them.
 Towers upgrade, and at the top tier each one picks one of two paths.
 
 NIGHT CREATURES
-Scamps, crowds of Pips, fast Skitters, flying Flitters, armored Shellbacks, Bubblers whose bubbles block a hit, Puffballs that split, Menders that heal, and Gatecrashers that break your gates. Each region ends with a boss. When a creature is beaten it puffs into sparkles. There is no blood.
+Scamps, crowds of Pips, fast Skitters, flying Flitters, armored Shellbacks, Bubblers whose bubbles block a hit, Puffballs that split, Menders that heal, Gatecrashers that break your gates, and more. Mossbuds regrow, Mistwisps hide their friends, Yawners make towers doze, and Blinkers jump ahead. Each region ends with a boss, eight in all. When a creature is beaten it puffs into sparkles. There is no blood.
 
 CAMPAIGN
-24 levels in four regions: Lantern Hill, Millbrook, Willow Fen and Moonspire Keep. Every level teaches one idea. Each has three stars to earn: win the level, keep 15 lives, and meet a challenge that changes from level to level. Three stars on a level open its Twist, the same map with one rule changed.
+48 levels in eight regions: Lantern Hill, Millbrook, Willow Fen, Moonspire Keep, Hollow Lanes, Russet Orchards, Frostpine Ridge and Starglen. Every level teaches one idea, and later regions add tunnels, bridges, ice slides and hollow stumps to the roads. Each level has three stars to earn: win it, keep 15 lives, and meet a challenge that changes from level to level. Three stars on a level open its Twist, the same map with one rule changed.
 
 ROGUELITE RUNS
-One run is 18 waves on a map built from pieces. After each wave you pick a card: new towers, tower perks or risks that pay more. A run takes about 15 to 20 minutes.
+One run is 18 waves on a map built from pieces. After each wave you pick a card: new towers, tower perks or risks that pay more. A run takes about 12 to 16 minutes at 1x, or 15 to 20 minutes with card picks.
 
 DAILY CHALLENGE
-One run a day, the same for everyone on the same date. Your best result and your streak stay on your phone.
+One run a day, the same for every player at the same stage of the campaign. Your best result and your streak stay on your phone.
 
 Roguelite runs and the daily challenge open once you have earned 12 stars in the campaign.
 
@@ -61,7 +65,7 @@ FREE, PRIVATE AND OFFLINE: free, and it always will be. No ads, no in-app purcha
 Forkline is free software under the GNU GPL version 3. The source code is at github.com/bartbasi/forkline.
 ```
 
-Characters: 2748 of 4000.
+Characters: 3330 of 4000.
 
 ## Category and tags (up to five)
 
@@ -72,10 +76,14 @@ Characters: 2748 of 4000.
 ## Contact details
 
 - Email (shown publicly): bartbasi@gmail.com
-- Website: https://github.com/bartbasi/forkline
+- Website: https://bartbasi.github.io/forkline/
 - Privacy policy URL: https://bartbasi.github.io/forkline/privacy-policy/
 
-The website and privacy policy addresses work only after the repo is public and GitHub Pages is on. Both need Bart's go ahead first (hard stop C, and Pages is ask first).
+The website and the privacy policy are live on GitHub Pages (approved by Bart on 2026-10-26). The source code is at https://github.com/bartbasi/forkline.
+
+## Upload
+
+First upload, to Internal testing: versionCode 1, versionName 0.1 (set in export_presets.cfg). What's new: "First release." Production waits for the last QA pass.
 
 ## What's new (500 characters at most)
 
@@ -99,7 +107,7 @@ All made by code. Rerun the tools to change them (see docs/release.md).
 | Phone screenshot 4 | docs/store/graphics/screen_2_modes.png | 1080 x 2160 |
 | Phone screenshot 5 | docs/store/graphics/screen_1_front_door.png | 1080 x 2160 |
 
-The order puts the fork and the gate first, because that is what is new: the build phase with its route line (steer them with gates), the wave (watch it play out), the campaign (24 levels, three stars each), the mode screen (campaign, roguelite and daily), and the front door.
+The order puts the fork and the gate first, because that is what is new: the build phase with its route line (steer them with gates), the wave (watch it play out), the campaign (48 levels, three stars each), the mode screen (campaign, roguelite and daily), and the front door.
 
 The screenshots are the real app, run in a window at phone size with its real data and the sound off. The gold on the build and wave screens was topped up so the picture shows a full defense. Screenshot 5 shows the Buy me a coffee row on the front door. Bart decided on 2026-10-27 to keep it there (see the known risk below). The build picture (slot 1) is level 1-2, The Fork, before wave 5. The wave picture (slot 2) is level 3-2, Puffball Pond, in wave 6, with five tower kinds built. It is the best frame of the wave, picked by the tool: creatures spread along the road, a Pumpkin Catapult shot with its dashed splash ring, at least two other kinds of shot in the air, and sparkles from beaten creatures.
 
